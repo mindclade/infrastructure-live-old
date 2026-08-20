@@ -92,7 +92,8 @@ check "managed_constraints_use_managed_resource" {
 check "domain_restricted_sharing_customer" {
   assert {
     condition = try(
-      var.list_policies["iam.allowedPolicyMemberDomains"].allowed_values == [var.cloud_identity_customer_id] &&
+      length(var.list_policies["iam.allowedPolicyMemberDomains"].allowed_values) == 1 &&
+      var.list_policies["iam.allowedPolicyMemberDomains"].allowed_values[0] == var.cloud_identity_customer_id &&
       length(var.list_policies["iam.allowedPolicyMemberDomains"].denied_values) == 0,
       false,
     )
