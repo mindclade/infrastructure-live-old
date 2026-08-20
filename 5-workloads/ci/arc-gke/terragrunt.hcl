@@ -35,7 +35,6 @@ dependency "automation" {
 }
 
 locals {
-  # The source exists in the monorepo; activation is blocked until this immutable tag exists.
   module_version = "v0.2.0"
 }
 

@@ -16,8 +16,9 @@ dependency "common_projects" {
 }
 
 locals {
-  # This reference is intentionally blocked until the reviewed monorepo v0.2.0 tag is cut.
-  module_version = "v0.2.0"
+  # Immutable source-qualified ARC module commit. Promote to a release tag only by reviewed
+  # ref-only change after the module release pipeline publishes the same tree.
+  module_version = "164f2998f9540243a0df769dc78c96677134c70a"
 }
 
 terraform {

@@ -55,6 +55,11 @@ dependency "vpc" {
 locals {
   environment = include.root.locals.environment
   cfg         = include.envcommon.locals.environments[local.environment]
+  module_version = "v0.2.0"
+}
+
+terraform {
+  source = "${include.root.locals.module_source_base}//cloud_nat?ref=${local.module_version}"
 }
 
 inputs = {

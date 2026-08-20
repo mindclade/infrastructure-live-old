@@ -32,7 +32,7 @@ output "secret_resource_names" {
 output "github_config_arc_secret_handoff" {
   description = "Non-secret promoter Secret Manager identifiers for GitHub variables."
   value = {
-    ARC_PROMOTER_SECRET_PROJECT          = var.security_project_id
-    ARC_PROMOTER_PRIVATE_KEY_SECRET      = google_secret_manager_secret.github_app_promoter_pem.secret_id
+    ARC_PROMOTER_SECRET_PROJECT     = var.security_project_id
+    ARC_PROMOTER_PRIVATE_KEY_SECRET = google_secret_manager_secret.github_app_promoter_pem.secret_id
   }
 }

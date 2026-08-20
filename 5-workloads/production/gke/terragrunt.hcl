@@ -104,6 +104,6 @@ inputs = {
   max_node_count     = 5
   machine_type       = "e2-standard-4"
 
-  # Release-channel policy is inherited from _envcommon: production uses STABLE after
-  # development RAPID and staging REGULAR have exercised the upgrade path.
+  # Release-channel policy is inherited from _envcommon: development exposes RAPID first,
+  # while staging and production share the REGULAR qualified channel.
 }

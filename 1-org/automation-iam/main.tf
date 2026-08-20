@@ -97,6 +97,18 @@ resource "google_service_account_iam_member" "supply_chain_github_wif" {
   member             = var.artifact_release_identities[each.value.capability].principal
 }
 
+resource "google_project_iam_member" "arc_builder_registry_writer" {
+  project = var.ci_project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${google_service_account.supply_chain["builder"].email}"
+}
+
+resource "google_project_iam_member" "arc_qualification_registry_reader" {
+  project = var.ci_project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.supply_chain["qualification_reader"].email}"
+}
+
 check "artifact_release_trust_contract" {
   assert {
     condition = alltrue([

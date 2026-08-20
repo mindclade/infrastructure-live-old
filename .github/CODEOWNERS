@@ -21,6 +21,9 @@
 # Admission control and perimeter enforcement.
 **/binary-authorization/ @mindclade/security
 **/vpc-sc-perimeter/     @mindclade/security
+/contracts/argocd-image-exceptions.json @mindclade/platform @mindclade/security
+/scripts/validate-argocd-image-exceptions.py @mindclade/platform @mindclade/security
+/5-workloads/shared/control-plane-identities/ @mindclade/platform @mindclade/security
 
 # Partner tenancy — isolation boundaries.
 /4-projects/partners/ @mindclade/platform @mindclade/security

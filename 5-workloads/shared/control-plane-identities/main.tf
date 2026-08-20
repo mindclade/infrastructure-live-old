@@ -185,7 +185,7 @@ locals {
         google_secret_manager_secret.github_app_arc_pem.secret_id,
       ]),
       local.arc_secret_sync_principals,
-    ) : "${pair[0]}:${pair[1]}" => {
+      ) : "${pair[0]}:${pair[1]}" => {
       secret_id = pair[0]
       member    = pair[1]
     }

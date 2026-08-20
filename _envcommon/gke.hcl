@@ -49,7 +49,10 @@ inputs = {
   # makes the cluster consult it at admission time.
   enable_binary_authorization = true
 
-  release_channel = local.environment == "development" ? "RAPID" : local.environment == "staging" ? "REGULAR" : "STABLE"
+  # Development receives upgrades first. Staging and production remain on the same qualified
+  # channel so staging is a faithful rehearsal instead of a different lifecycle policy.
+  release_channel = local.environment == "development" ? "RAPID" : "REGULAR"
+  channel_policy  = local.environment == "development" ? "CANARY" : "QUALIFIED"
 
   # Deletion protection on production. Terraform will otherwise delete and recreate a
   # cluster to resolve certain diffs, and the first anyone knows is that the workloads are

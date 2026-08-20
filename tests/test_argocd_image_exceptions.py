@@ -93,6 +93,17 @@ class ArgoImageExceptionContractTest(unittest.TestCase):
         for wildcard in ("/*", "/**"):
             self.assertNotIn(wildcard, defaults)
 
+    def test_cross_repository_digest_mismatch_fails(self) -> None:
+        gitops = ROOT.parent / "gitops"
+        if not gitops.is_dir():
+            self.skipTest("sibling GitOps checkout is not available")
+        images = {item["image"] for item in self.contract["exceptions"]}
+        original = next(iter(images))
+        mismatched = set(images)
+        mismatched.remove(original)
+        mismatched.add(original[:-1] + ("0" if original[-1] != "0" else "1"))
+        self.assertTrue(VALIDATE.gitops_contract_errors(mismatched, gitops))
+
 
 if __name__ == "__main__":
     unittest.main()

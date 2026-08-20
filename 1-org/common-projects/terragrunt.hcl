@@ -77,6 +77,7 @@ inputs = {
         "compute.googleapis.com",
         "container.googleapis.com",
         "containeranalysis.googleapis.com",
+        "containerscanning.googleapis.com",
         "iam.googleapis.com",
         "iamcredentials.googleapis.com",
         "logging.googleapis.com",

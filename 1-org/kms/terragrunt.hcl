@@ -46,6 +46,10 @@ inputs = {
       rotation_period_seconds = 7776000 # 90 days
       protection_level        = "HSM"
     }
+    ci_artifacts = {
+      rotation_period_seconds = 7776000 # 90 days
+      protection_level        = "HSM"
+    }
   }
 
   labels = include.root.locals.common_labels

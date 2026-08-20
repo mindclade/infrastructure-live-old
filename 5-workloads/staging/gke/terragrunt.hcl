@@ -104,6 +104,6 @@ inputs = {
   max_node_count     = 5
   machine_type       = "e2-standard-4"
 
-  # Release-channel policy is inherited from _envcommon: staging uses REGULAR so upgrades
-  # are rehearsed before production's STABLE channel.
+  # Release-channel policy is inherited from _envcommon: staging and production both use
+  # REGULAR, after development has exposed the upgrade through the RAPID canary.
 }
