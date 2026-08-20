@@ -39,11 +39,6 @@ run; urgency does not justify deleting lock or state objects.
 4. Immediately run a read-only refresh/plan for that unit and investigate any drift before
    another apply.
 
-## Prevention
-
-Retain apply concurrency groups, bounded provider timeouts, GCS audit logs, and periodic
-state-lock recovery drills.
-
 ## Verify recovery
 
 - Audit and workflow evidence proves no prior operation remains active.
@@ -59,3 +54,8 @@ and audit timestamps. Stop and escalate rather than retrying force-unlock agains
 Hand off the incident ID, unit/prefix, lock ID, owning operation and source SHA, workflow status,
 audit timestamps, state generations, reviewers, release action, and fresh-plan result. Escalate when
 any evidence suggests the operation is still active or state integrity is uncertain.
+
+## Prevention
+
+Retain apply concurrency groups, bounded provider timeouts, GCS audit logs, and periodic
+state-lock recovery drills.

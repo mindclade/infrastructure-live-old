@@ -42,11 +42,6 @@ weaken admission merely to make the rollout progress.
    immediate removal after containment.
 4. Confirm GKE admits the exact digest and preserve the resulting audit linkage.
 
-## Prevention
-
-Keep builder negative-authorization tests and a staging end-to-end attestation test in the
-release qualification suite.
-
 ## Verify recovery
 
 - GKE admits the exact qualified digest without a policy exception.
@@ -63,3 +58,8 @@ policy decision, key version, timestamps, and relevant audit events to security.
 Escalate unverifiable evidence or key/policy drift to security with the exact digest, environment,
 attestor note, KMS key version, policy decision, source/release commits, signer run, timestamps, and
 audit events. Do not attach secret values or grant an admission exception for diagnosis.
+
+## Prevention
+
+Keep builder negative-authorization tests and a staging end-to-end attestation test in the
+release qualification suite.

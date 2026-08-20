@@ -42,11 +42,6 @@ Never disable a perimeter or add a wildcard as an incident shortcut. An emergenc
 requires the production incident/change record, expiry, independent approval, and immediate
 Git reconciliation.
 
-## Prevention
-
-Add the approved path to the VPC-SC integration fixtures and retain the negative test that
-would detect a broader grant.
-
 ## Verify recovery
 
 - The intended request succeeds through the exact approved identity, service, method, and resource.
@@ -63,3 +58,8 @@ change the perimeter. Preserve evidence and hand the incident to security.
 Provide the incident ID, troubleshooting token, timestamp, caller, source network, target resource,
 service/method, audit event, current policy, dry-run result, mutations, and negative tests. Escalate
 an unexpected identity or resource to security without broadening the perimeter.
+
+## Prevention
+
+Add the approved path to the VPC-SC integration fixtures and retain the negative test that
+would detect a broader grant.

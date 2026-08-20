@@ -5,7 +5,8 @@
 > **Use when:** a protected foundation, partner, or production plan/apply workflow fails.
 > **Impact:** one or more state units may be partially changed while other units remain isolated.
 > **Primary owner:** incident commander and qualified infrastructure operator.
-> **Escalate:** when mutation, lock ownership, account context, target unit, or plan provenance is unclear.
+> **Escalate:** when mutation, lock ownership, account context, target unit, or plan provenance is
+> unclear.
 
 ## Symptoms
 

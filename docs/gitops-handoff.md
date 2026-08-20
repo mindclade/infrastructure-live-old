@@ -5,7 +5,8 @@
 > **Audience:** platform operators activating a new or reconstructed GKE environment.
 > **Outcome:** transfer control from provisioned cloud infrastructure to the pinned GitOps root
 > without creating overlapping ownership.
-> **Risk:** critical—an incorrect handoff can create overlapping owners or reconcile the wrong cluster.
+> **Risk:** critical—an incorrect handoff can create overlapping owners or reconcile the wrong
+> cluster.
 
 Terraform does not install Argo CD or apply workload manifests. `infrastructure-live` creates the
 cloud prerequisites; the `gitops` repository performs the one-time Argo CD bootstrap, after which
@@ -43,7 +44,7 @@ Do not proceed while any prerequisite is represented only by a planned resource 
 4. Allow the root Application to create the environment ApplicationSet and child Applications.
 5. Do not manually create workload resources or force-sync around a failed gate.
 
-## Verify the handoff
+## Verify
 
 - Argo CD reports the root and generated Applications as healthy and synchronized.
 - The running Argo CD version/profile matches the pinned GitOps source.

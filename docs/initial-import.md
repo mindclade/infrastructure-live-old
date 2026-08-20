@@ -5,7 +5,8 @@
 > **Audience:** Infrastructure bootstrap operators  
 > **Outcome:** Import the live tree, prove its account and module contracts, and activate
 > protected scopes without recreating existing cloud resources.
-> **Risk:** critical—incorrect imports or scope selection can replace organization and production resources.
+> **Risk:** critical—incorrect imports or scope selection can replace organization and production
+> resources.
 
 ## Prerequisites
 
