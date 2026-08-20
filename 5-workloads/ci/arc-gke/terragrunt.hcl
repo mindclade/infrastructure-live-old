@@ -35,7 +35,7 @@ dependency "automation" {
 }
 
 locals {
-  module_version = "v0.2.0"
+  module_version = "c4097ad6a7a93c98b4962cbcfb461f88fc885593"
 }
 
 terraform {

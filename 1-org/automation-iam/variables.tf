@@ -67,6 +67,27 @@ variable "artifact_release_identities" {
   }
 }
 
+variable "dr_evidence_identity" {
+  description = "Bootstrap-exported WIF provider and exact scratch/staging principals for DR evidence publication."
+  type = object({
+    workload_identity_provider = string
+    job_workflow_ref           = string
+    principals                 = map(string)
+  })
+
+  validation {
+    condition = (
+      can(regex("^projects/[0-9]+/locations/global/workloadIdentityPools/github/providers/gh-dr-evidence$", var.dr_evidence_identity.workload_identity_provider)) &&
+      var.dr_evidence_identity.job_workflow_ref == "mindclade/.github/.github/workflows/reusable-dr-evidence.yml@refs/tags/v4.0.0" &&
+      toset(keys(var.dr_evidence_identity.principals)) == toset([
+        "bootstrap:scratch", "bootstrap:staging", "github-config:scratch", "github-config:staging",
+        "infrastructure-live:scratch", "infrastructure-live:staging", "gitops:scratch", "gitops:staging",
+      ])
+    )
+    error_message = "dr_evidence_identity must match bootstrap contract 1.4.0 and contain exactly eight protected caller principals."
+  }
+}
+
 variable "github_org" {
   type        = string
   description = "GitHub organization whose protected monorepo release workflow may sign."

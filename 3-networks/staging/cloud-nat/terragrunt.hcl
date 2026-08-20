@@ -53,9 +53,9 @@ dependency "vpc" {
 }
 
 locals {
-  environment = include.root.locals.environment
-  cfg         = include.envcommon.locals.environments[local.environment]
-  module_version = "v0.2.0"
+  environment    = include.root.locals.environment
+  cfg            = include.envcommon.locals.environments[local.environment]
+  module_version = "c4097ad6a7a93c98b4962cbcfb461f88fc885593"
 }
 
 terraform {

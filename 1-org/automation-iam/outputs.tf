@@ -57,3 +57,13 @@ output "github_config_arc_identity_handoff" {
     SA_ARTIFACT_PROMOTER             = google_service_account.supply_chain["promoter"].email
   }
 }
+
+output "dr_evidence_identity_contract" {
+  description = "Protected GitHub environment variables and exact trust contract for DR evidence callers."
+  value = {
+    WIF_PROVIDER_DR_EVIDENCE = var.dr_evidence_identity.workload_identity_provider
+    SA_DR_EVIDENCE_WRITER    = google_service_account.dr_evidence_writer.email
+    principals               = var.dr_evidence_identity.principals
+    job_workflow_ref         = var.dr_evidence_identity.job_workflow_ref
+  }
+}

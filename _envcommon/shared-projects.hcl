@@ -15,11 +15,11 @@ locals {
 
   environment    = local.env_vars.locals.environment
   prefix         = local.account_vars.locals.prefix
-  module_version = "v0.1.1"
+  module_version = "v0.2.0"
 }
 
 terraform {
-  source = "${local.root.locals.module_source_base}//project?ref=${local.module_version}"
+  source = "${local.root.locals.module_source_base}//project_factory?ref=${local.module_version}"
 }
 
 inputs = {

@@ -139,6 +139,27 @@ resource "google_service_account" "arc_system_nodes" {
   }
 }
 
+resource "google_service_account" "dr_evidence_writer" {
+  project         = var.ci_project_id
+  account_id      = "sa-dr-evidence-writer"
+  display_name    = "Mindclade DR evidence writer"
+  description     = "Keyless create-only writer for protected scratch and staging DR evidence."
+  disabled        = false
+  deletion_policy = "PREVENT"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_service_account_iam_member" "dr_evidence_github_wif" {
+  for_each = var.dr_evidence_identity.principals
+
+  service_account_id = google_service_account.dr_evidence_writer.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = each.value
+}
+
 resource "google_project_iam_member" "arc_system_nodes" {
   for_each = toset(["roles/container.defaultNodeServiceAccount"])
   project  = var.ci_project_id

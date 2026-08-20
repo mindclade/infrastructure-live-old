@@ -35,6 +35,7 @@ inputs = {
   github_wif_pool_name        = include.root.locals.account_vars.locals.github_wif_pool_name
   github_org                  = include.root.locals.account_vars.locals.github_org
   artifact_release_identities = include.root.locals.account_vars.locals.artifact_release_identities
+  dr_evidence_identity        = include.root.locals.account_vars.locals.dr_evidence_identity
 
   environment_folder_ids = {
     development = dependency.folders.outputs.folder_ids["development"]

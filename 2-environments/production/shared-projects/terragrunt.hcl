@@ -30,13 +30,4 @@ inputs = {
   # event that someone should be told about, not a mistake to be caught — which is why the
   # threshold rules in bootstrap include a forecast alert rather than only current spend.
   budget_amount = 30000
-
-  # Production alone gets an availability SLO on the shared monitoring scope. Development and
-  # staging would page on their own instability, which is what those environments are for.
-  monitoring_alerts = {
-    metrics_scope_ingestion_stalled = {
-      description = "No metrics ingested for 10 minutes. Usually the metrics scope, not the workload."
-      severity    = "CRITICAL"
-    }
-  }
 }

@@ -64,9 +64,9 @@ inputs = {
     "ghcr.io/actions/gha-runner-scale-set-controller:0.14.2@sha256:1b4c7f62e971ab259a4b8798e48e2adaad4af747f45990f474ea5feefa03531d",
   ]
 
-  attestors            = {}
-  attestor_signers     = {}
-  attestor_verifiers   = {}
+  attestors               = {}
+  attestor_signers        = {}
+  attestor_verifiers      = {}
   cluster_admission_rules = {}
   labels = merge(include.root.locals.common_labels, {
     environment = "ci"

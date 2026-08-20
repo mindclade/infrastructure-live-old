@@ -540,15 +540,24 @@ elif REPOSITORY == "infrastructure-live":
         if "ANY_IDENTITY" in text:
             error(f"VPC-SC ANY_IDENTITY escape in {p.relative_to(ROOT)}")
 
-    # Network egress must fail closed while retaining the default-internet-gateway route
-    # required by Public Cloud NAT and the restricted Google API VIP.
-    vpc_defaults = (ROOT / "_envcommon/vpc.hcl").read_text("utf-8", errors="ignore")
+    # The pinned network module deletes Google's implicit route and recreates a protected,
+    # explicit route when create_default_internet_route is true (its default). No caller may
+    # disable that contract for a VPC that uses Public Cloud NAT.
+    for environment in ("development", "staging", "production"):
+        vpc = (
+            ROOT / f"3-networks/{environment}/shared-vpc-host/terragrunt.hcl"
+        ).read_text("utf-8", errors="ignore")
+        if re.search(
+            r"(?m)^\s*create_default_internet_route\s*=\s*false\s*$", vpc
+        ):
+            error(f"{environment} VPC disables the protected default internet route")
+    ci_vpc = (ROOT / "3-networks/ci/arc-vpc/terragrunt.hcl").read_text(
+        "utf-8", errors="ignore"
+    )
     if not re.search(
-        r"(?m)^\s*delete_default_routes_on_create\s*=\s*false\s*$", vpc_defaults
+        r"(?m)^\s*create_default_internet_route\s*=\s*true\s*$", ci_vpc
     ):
-        error(
-            "VPC defaults remove the route required by Cloud NAT/private Google API routing"
-        )
+        error("ARC CI VPC omits the protected route required by Cloud NAT")
     for env in ("development", "staging", "production"):
         firewall_path = ROOT / f"3-networks/{env}/firewall-baseline/terragrunt.hcl"
         firewall = firewall_path.read_text("utf-8", errors="ignore")

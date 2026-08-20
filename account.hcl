@@ -23,6 +23,7 @@ locals {
   # Bootstrap owns provider conditions. This repository creates the six normal-plane service
   # accounts and binds each only to the matching exact principal in this contract.
   artifact_release_identities = jsondecode(get_env("ARTIFACT_RELEASE_IDENTITIES_JSON"))
+  dr_evidence_identity        = jsondecode(get_env("DR_EVIDENCE_IDENTITY_JSON"))
 
   infrastructure_live_service_accounts = {
     plan        = get_env("SA_TF_LIVE_PLAN")

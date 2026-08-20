@@ -27,7 +27,7 @@ dependency "kms" {
 }
 
 locals {
-  module_version = "v0.2.0"
+  module_version = "c4097ad6a7a93c98b4962cbcfb461f88fc885593"
 }
 
 terraform {
@@ -45,8 +45,8 @@ inputs = {
   data_classification = "internal"
   kms_key_name        = dependency.kms.outputs.crypto_key_ids["ci_artifacts"]
 
-  cleanup_policy_dry_run  = true
-  untagged_retention_days = 30
+  cleanup_policy_dry_run   = true
+  untagged_retention_days  = 30
   minimum_versions_to_keep = 30
 
   labels = merge(include.root.locals.common_labels, {
