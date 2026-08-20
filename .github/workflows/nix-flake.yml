@@ -71,7 +71,9 @@ jobs:
           set -euo pipefail
           want_tf="$(tr -d '[:space:]' < .terraform-version)"
           want_tg="$(tr -d '[:space:]' < .terragrunt-version)"
-          have_tf="$(nix develop --command terraform version -json | jq -r .terraform_version)"
+          # The interactive development shell prints its operator banner before running the
+          # command. Select the JSON object so the banner cannot be parsed as Terraform JSON.
+          have_tf="$(nix develop --command terraform version -json | sed -n '/^{/,$p' | jq -r .terraform_version)"
           have_tg="$(nix develop .#ci --command terragrunt --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
           [[ "$have_tf" == "$want_tf" ]]
           [[ "$have_tg" == "$want_tg" ]]

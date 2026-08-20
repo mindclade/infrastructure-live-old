@@ -135,6 +135,7 @@
             # this repository with nothing running either of them — and only `default` carried
             # the binaries, which is a shell no workflow resolves.
             actionlint
+            bind # dig for the read-only DNS cutover evidence workflow
             shellcheck # actionlint shells out to it for `run:` blocks
             yamllint
           ]);
@@ -154,6 +155,7 @@
             shellcheck
             yamllint
             actionlint
+            bind
 
             terraform-pinned
 

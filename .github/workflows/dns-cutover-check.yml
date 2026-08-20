@@ -1,0 +1,117 @@
+---
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+
+name: DNS cutover check
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: Domain whose delegation is being checked.
+        type: choice
+        required: true
+        options:
+          - mindclade.studio
+          - mindclade.dev
+          - mindclade.ai
+          - mindclade.com
+      phase:
+        description: Preflight compares incumbent and Cloud DNS; postcutover checks public delegation.
+        type: choice
+        required: true
+        options:
+          - preflight
+          - postcutover
+      incumbent_nameservers:
+        description: Comma- or space-separated current nameservers; required for preflight.
+        type: string
+        required: false
+      cloud_nameservers:
+        description: Comma- or space-separated nameservers from the Cloud DNS zone output.
+        type: string
+        required: true
+      expect_dnssec:
+        description: Require public DS and authoritative DNSKEY records after DS publication.
+        type: boolean
+        required: true
+        default: false
+      change_reference:
+        description: Approved CHG-, INC-, SEC-, or DR- reference recorded in the evidence.
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dns-cutover-check-${{ inputs.domain }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Read-only DNS evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: plan
+    steps:
+      - name: Require the protected main branch
+        env:
+          ACTUAL_REF: ${{ github.ref }}
+        run: |
+          if [[ "$ACTUAL_REF" != "refs/heads/main" ]]; then
+            echo "::error::DNS cutover evidence must run from refs/heads/main"
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342  # v31.11.0
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = false
+
+      - id: dns
+        name: Collect DNS evidence
+        continue-on-error: true
+        env:
+          DOMAIN_NAME: ${{ inputs.domain }}
+          PHASE: ${{ inputs.phase }}
+          INCUMBENT_NAMESERVERS: ${{ inputs.incumbent_nameservers }}
+          CLOUD_NAMESERVERS: ${{ inputs.cloud_nameservers }}
+          EXPECT_DNSSEC: ${{ inputs.expect_dnssec }}
+          CHANGE_REFERENCE: ${{ inputs.change_reference }}
+          EVIDENCE_PATH: ${{ runner.temp }}/dns-evidence.json
+        run: |
+          set -euo pipefail
+          args=(
+            --domain "$DOMAIN_NAME"
+            --phase "$PHASE"
+            --incumbent-nameservers "$INCUMBENT_NAMESERVERS"
+            --cloud-nameservers "$CLOUD_NAMESERVERS"
+            --change-reference "$CHANGE_REFERENCE"
+            --output "$EVIDENCE_PATH"
+          )
+          if [[ "$EXPECT_DNSSEC" == "true" ]]; then
+            args+=(--expect-dnssec)
+          fi
+          nix develop .#ci --command python3 scripts/check_dns_delegation.py "${args[@]}"
+
+      - name: Upload DNS evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5
+        with:
+          name: dns-evidence-${{ inputs.domain }}-${{ inputs.phase }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dns-evidence.json
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Enforce DNS check result
+        if: steps.dns.outcome != 'success'
+        run: |
+          echo "::error::DNS evidence contains a failed readiness or resolution check"
+          exit 1

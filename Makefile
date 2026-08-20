@@ -1,8 +1,8 @@
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := validate
 
-.PHONY: validate test format plan-development plan-staging plan-production
-validate: validate-production-contract test
+.PHONY: validate validate-dns-portfolio test format plan-development plan-staging plan-production
+validate: validate-production-contract validate-dns-portfolio test
 	python3 scripts/verify-provider-locks.py
 	./scripts/validate-live-tree.py
 	./scripts/validate-dependency-order.py
@@ -10,6 +10,9 @@ validate: validate-production-contract test
 
 test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py'
+
+validate-dns-portfolio:
+	python3 scripts/validate_dns_portfolio.py
 
 format:
 	terragrunt hcl fmt
