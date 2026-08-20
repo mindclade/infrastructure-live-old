@@ -137,5 +137,37 @@ class PlanSafetyTest(unittest.TestCase):
                     STATE_PREFIX.classify(status, stderr)
 
 
+class ImportRuntimeContractTest(unittest.TestCase):
+    def test_every_provider_lock_uses_terraform_115_normalized_constraints(self) -> None:
+        locks = sorted(ROOT.rglob(".terraform.lock.hcl"))
+        self.assertEqual(len(locks), 103)
+        for lock in locks:
+            text = lock.read_text(encoding="utf-8")
+            self.assertEqual(text.count('constraints = "7.41.0"'), 2, lock)
+            self.assertNotIn('constraints = "= 7.41.0"', text, lock)
+
+    def test_both_nix_shells_pin_terragrunt_to_terraform(self) -> None:
+        flake = (ROOT / "flake.nix").read_text(encoding="utf-8")
+        self.assertEqual(
+            flake.count('TG_TF_PATH = "${terraform-pinned}/bin/terraform";'), 2
+        )
+
+    def test_baseline_only_skips_the_folders_state_dependency(self) -> None:
+        policy = (ROOT / "1-org/org-policies/terragrunt.hcl").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'baseline_org_policy_adoption = get_env("ORG_POLICY_ACTIVATION_PHASE", "") == "baseline"',
+            policy,
+        )
+        self.assertIn(
+            "skip_outputs = local.baseline_org_policy_adoption", policy
+        )
+        self.assertIn(
+            "mock_outputs = local.baseline_org_policy_adoption ? {", policy
+        )
+        self.assertNotIn("skip_outputs = true", policy)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -21,13 +21,15 @@ EXPECTED_PROVIDERS = {
     "registry.terraform.io/hashicorp/google-beta",
 }
 
-locks: list[Path] = []
+locks = sorted(
+    path
+    for path in ROOT.rglob(".terraform.lock.hcl")
+    if not any(part in {".git", ".terraform", ".terragrunt-cache"} for part in path.parts)
+)
 missing: list[str] = []
 for config in ROOT.rglob("terragrunt.hcl"):
     lock = config.parent / ".terraform.lock.hcl"
-    if lock.is_file():
-        locks.append(lock)
-    else:
+    if not lock.is_file():
         missing.append(str(lock.relative_to(ROOT)))
 if missing:
     print("missing provider locks:\n" + "\n".join(sorted(missing)), file=sys.stderr)
@@ -56,8 +58,11 @@ for address, body in entries:
     if not version or version.group(1) != EXPECTED_VERSION:
         print(f"{address}: lock version is not {EXPECTED_VERSION}", file=sys.stderr)
         raise SystemExit(1)
-    if not constraints or constraints.group(1) != f"= {EXPECTED_VERSION}":
-        print(f"{address}: provider constraint is not exact", file=sys.stderr)
+    if not constraints or constraints.group(1) != EXPECTED_VERSION:
+        print(
+            f"{address}: provider constraint is not normalized {EXPECTED_VERSION}",
+            file=sys.stderr,
+        )
         raise SystemExit(1)
     if len(set(hashes)) < 10:
         print(f"{address}: incomplete multi-platform zip checksum set", file=sys.stderr)

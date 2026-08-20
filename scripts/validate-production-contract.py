@@ -418,6 +418,13 @@ elif REPOSITORY == "infrastructure-live":
     ):
         if required not in initial_import:
             error(f"initial import fresh-prefix guard omits: {required}")
+    flake = (ROOT / "flake.nix").read_text("utf-8", errors="ignore")
+    pinned_tf_path = 'TG_TF_PATH = "${terraform-pinned}/bin/terraform";'
+    if flake.count(pinned_tf_path) != 2:
+        error("both Nix dev shells must pin Terragrunt to the exact Terraform derivation")
+    for required in ("TG_TF_PATH", "skip_outputs", "baseline"):
+        if required not in initial_import:
+            error(f"initial import runtime guard omits: {required}")
     if (
         '"platform_contract"' not in bootstrap_account
         or '"output"' not in bootstrap_account
@@ -504,6 +511,16 @@ elif REPOSITORY == "infrastructure-live":
     org_policy = (ROOT / "1-org/org-policies/terragrunt.hcl").read_text(
         "utf-8", errors="ignore"
     )
+    for required in (
+        'baseline_org_policy_adoption = get_env("ORG_POLICY_ACTIVATION_PHASE", "") == "baseline"',
+        "skip_outputs = local.baseline_org_policy_adoption",
+        "mock_outputs = local.baseline_org_policy_adoption ? {",
+        "mock_outputs_allowed_terraform_commands = local.baseline_org_policy_adoption ? [",
+    ):
+        if required not in org_policy:
+            error(f"organization-policy baseline dependency guard omits: {required}")
+    if "skip_outputs = true" in org_policy:
+        error("organization-policy folders dependency bypass is not phase-scoped")
     if "https://agent.buildkite.com" not in org_policy:
         error(
             "organization WIF issuer policy omits the bootstrap-managed Buildkite issuer"
