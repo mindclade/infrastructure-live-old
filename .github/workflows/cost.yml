@@ -1,0 +1,144 @@
+---
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+#
+# Cost diff on every PR. The cloud-facing estimator cannot mutate the pull request; a
+# separate job publishes the already-produced diff.
+name: cost
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cost-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.15.9"
+  TF_IN_AUTOMATION: "true"
+  TG_NON_INTERACTIVE: "true"
+  TG_STRICT_MODE: "true"
+  GCP_ORG_ID: ${{ vars.GCP_ORG_ID }}
+  BILLING_ACCOUNT: ${{ vars.BILLING_ACCOUNT }}
+  BOOTSTRAP_SEED_PROJECT_ID: ${{ vars.BOOTSTRAP_SEED_PROJECT_ID }}
+  BOOTSTRAP_CICD_PROJECT_ID: ${{ vars.BOOTSTRAP_CICD_PROJECT_ID }}
+  BOOTSTRAP_CICD_PROJECT_NUMBER: ${{ vars.BOOTSTRAP_CICD_PROJECT_NUMBER }}
+  GITHUB_WIF_POOL_NAME: ${{ vars.GITHUB_WIF_POOL_NAME }}
+  BUILDKITE_WIF_POOL_NAME: ${{ vars.BUILDKITE_WIF_POOL_NAME }}
+  TFSTATE_BUCKET_DEVELOPMENT: ${{ vars.TFSTATE_BUCKET_DEVELOPMENT }}
+  TFSTATE_BUCKET_STAGING: ${{ vars.TFSTATE_BUCKET_STAGING }}
+  TFSTATE_BUCKET_PRODUCTION: ${{ vars.TFSTATE_BUCKET_PRODUCTION }}
+  RESOURCE_PREFIX: ${{ vars.RESOURCE_PREFIX }}
+  PRIMARY_REGION: ${{ vars.PRIMARY_REGION }}
+  STATE_LOCATION: ${{ vars.STATE_LOCATION }}
+  DOMAIN: ${{ vars.DOMAIN }}
+  MONOREPO_ORG: ${{ vars.MONOREPO_ORG }}
+  SA_TF_LIVE_PLAN: ${{ vars.SA_TF_LIVE_PLAN }}
+
+jobs:
+  infracost:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate bootstrap-derived account contract
+        run: python3 scripts/validate-account.py --runtime
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_PLAN }}
+          service_account: ${{ vars.SA_TF_LIVE_PLAN }}
+      - id: pem
+        uses: google-github-actions/get-secretmanager-secrets@2b5f97c5a4b9c105e64646762ad4fc3f5128e6f5  # v2
+        with:
+          secrets: app_pem:${{ vars.SECRETS_PROJECT_ID }}/github-app-terraform-pem
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2
+        with:
+          app-id: ${{ vars.TF_APP_ID }}
+          private-key: ${{ steps.pem.outputs.app_pem }}
+          owner: ${{ vars.MONOREPO_ORG }}
+          repositories: mindclade-internal-monorepo
+      - name: Authorize immutable module fetches
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd  # v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342  # v31.11.0
+        with:
+          extra_nix_config: experimental-features = nix-command flakes
+      - uses: infracost/actions/setup@e9d6e6cd65e168e76b0de50ff9957d2fe8bb1832  # v3
+        with:
+          # Third-party pricing-only credential, scoped as a repository secret. This job has
+          # read-only cloud identity and no GitHub mutation permission.
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+      - name: Baseline from the merge base
+        run: |
+          set -euo pipefail
+          git checkout "origin/${{ github.base_ref }}" --quiet
+          nix develop .#ci --command infracost breakdown --path=. --format=json --out-file=/tmp/base.json || \
+            echo '{"projects":[]}' > /tmp/base.json
+          git checkout - --quiet
+      - name: Calculate cost diff
+        run: |
+          set -euo pipefail
+          nix develop .#ci --command infracost diff \
+            --path=. \
+            --compare-to=/tmp/base.json \
+            --format=json \
+            --out-file=/tmp/diff.json
+          jq . /tmp/diff.json >/dev/null
+      - name: Flag a large increase
+        run: |
+          set -euo pipefail
+          delta="$(jq -r '.diffTotalMonthlyCost // "0"' /tmp/diff.json)"
+          echo "Monthly delta: ${delta}"
+          if awk -v d="$delta" 'BEGIN { exit !(d+0 > 5000) }'; then
+            echo "::warning::This PR increases estimated monthly cost by \$${delta}. Confirm this is intended."
+          fi
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5
+        with:
+          name: infracost-diff-${{ github.run_id }}
+          path: /tmp/diff.json
+          retention-days: 14
+          if-no-files-found: error
+
+  comment:
+    needs: [infracost]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Download cost evidence
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5
+        with:
+          name: infracost-diff-${{ github.run_id }}
+          path: artifacts
+      - uses: infracost/actions/setup@e9d6e6cd65e168e76b0de50ff9957d2fe8bb1832  # v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+      - name: Publish cost comment
+        run: |
+          set -euo pipefail
+          infracost comment github \
+            --path=artifacts/diff.json \
+            --repo="${{ github.repository }}" \
+            --pull-request="${{ github.event.pull_request.number }}" \
+            --github-token="${{ github.token }}" \
+            --behavior=update

@@ -1,0 +1,283 @@
+---
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+#
+name: apply
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: Privilege and state scope to apply.
+        type: choice
+        required: true
+        default: development
+        options: [foundation, development, staging, production, partners]
+      unit:
+        description: Optional Terragrunt unit inside the selected scope.
+        type: string
+        required: false
+      allow_destroy:
+        description: Explicitly authorize destructive changes in the newly generated saved plan.
+        type: boolean
+        required: true
+        default: false
+      change_reference:
+        description: Required for destructive changes (CHG-, INC-, SEC-, or DR- identifier).
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apply-infrastructure-live
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: "1.15.9"
+  TF_IN_AUTOMATION: "true"
+  TG_NON_INTERACTIVE: "true"
+  TG_STRICT_MODE: "true"
+  GCP_ORG_ID: ${{ vars.GCP_ORG_ID }}
+  BILLING_ACCOUNT: ${{ vars.BILLING_ACCOUNT }}
+  BOOTSTRAP_SEED_PROJECT_ID: ${{ vars.BOOTSTRAP_SEED_PROJECT_ID }}
+  BOOTSTRAP_CICD_PROJECT_ID: ${{ vars.BOOTSTRAP_CICD_PROJECT_ID }}
+  BOOTSTRAP_CICD_PROJECT_NUMBER: ${{ vars.BOOTSTRAP_CICD_PROJECT_NUMBER }}
+  GITHUB_WIF_POOL_NAME: ${{ vars.GITHUB_WIF_POOL_NAME }}
+  BUILDKITE_WIF_POOL_NAME: ${{ vars.BUILDKITE_WIF_POOL_NAME }}
+  TFSTATE_BUCKET_DEVELOPMENT: ${{ vars.TFSTATE_BUCKET_DEVELOPMENT }}
+  TFSTATE_BUCKET_STAGING: ${{ vars.TFSTATE_BUCKET_STAGING }}
+  TFSTATE_BUCKET_PRODUCTION: ${{ vars.TFSTATE_BUCKET_PRODUCTION }}
+  RESOURCE_PREFIX: ${{ vars.RESOURCE_PREFIX }}
+  PRIMARY_REGION: ${{ vars.PRIMARY_REGION }}
+  STATE_LOCATION: ${{ vars.STATE_LOCATION }}
+  DOMAIN: ${{ vars.DOMAIN }}
+  MONOREPO_ORG: ${{ vars.MONOREPO_ORG }}
+  SA_TF_LIVE_PLAN: ${{ vars.SA_TF_LIVE_PLAN }}
+  SA_TF_LIVE_APPLY_FOUNDATION: ${{ vars.SA_TF_LIVE_APPLY_FOUNDATION }}
+  SA_TF_LIVE_APPLY_DEVELOPMENT: ${{ vars.SA_TF_LIVE_APPLY_DEVELOPMENT }}
+  SA_TF_LIVE_APPLY_STAGING: ${{ vars.SA_TF_LIVE_APPLY_STAGING }}
+  SA_TF_LIVE_APPLY_PRODUCTION: ${{ vars.SA_TF_LIVE_APPLY_PRODUCTION }}
+
+jobs:
+  scope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+      count: ${{ steps.select.outputs.count }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          MANUAL_SCOPE: ${{ inputs.scope }}
+          UNIT: ${{ inputs.unit }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+            matrix="$(./scripts/select-apply-scopes.py --manual-scope "$MANUAL_SCOPE" --unit "$UNIT")"
+          else
+            matrix="$(./scripts/select-apply-scopes.py --before "$BEFORE" --after "$AFTER")"
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "count=$(jq '.include | length' <<<"$matrix")" >> "$GITHUB_OUTPUT"
+          jq . <<<"$matrix"
+
+  plan-exact-main:
+    needs: scope
+    if: needs.scope.outputs.count != '0'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.scope.outputs.matrix) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate bootstrap-derived account contract
+        run: python3 scripts/validate-account.py --runtime
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_PLAN }}
+          service_account: ${{ vars.SA_TF_LIVE_PLAN }}
+      - id: pem
+        uses: google-github-actions/get-secretmanager-secrets@2b5f97c5a4b9c105e64646762ad4fc3f5128e6f5 # v2
+        with:
+          secrets: app_pem:${{ vars.SECRETS_PROJECT_ID }}/github-app-terraform-pem
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.TF_APP_ID }}
+          private-key: ${{ steps.pem.outputs.app_pem }}
+          owner: ${{ vars.MONOREPO_ORG }}
+          repositories: mindclade-internal-monorepo
+      - name: Check out module source for interface preflight
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Mindclade/mindclade-internal-monorepo
+          token: ${{ steps.app-token.outputs.token }}
+          path: .module-source
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - name: Validate exact module interfaces
+        run: python3 scripts/validate-module-interfaces.py --monorepo .module-source
+      - name: Authorize immutable module fetches
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+        with:
+          extra_nix_config: experimental-features = nix-command flakes
+      - name: Save exact plans for merged SHA
+        env:
+          SCOPE: ${{ matrix.scope }}
+          UNIT: ${{ matrix.unit }}
+          PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
+        run: ./scripts/terragrunt-scope.sh plan "$SCOPE" "$PLAN_DIR" "$UNIT"
+      - name: Summarize classified changes
+        env:
+          PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
+        run: jq . "$PLAN_DIR/PLAN_CLASSIFICATION.json" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: tfplan-${{ github.sha }}-${{ matrix.scope }}
+          path: ${{ runner.temp }}/plans/${{ matrix.scope }}
+          retention-days: 1
+          if-no-files-found: error
+
+  apply:
+    needs: [scope, plan-exact-main]
+    if: needs.scope.outputs.count != '0'
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.scope.outputs.matrix) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    environment: ${{ matrix.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate bootstrap-derived account contract
+        run: python3 scripts/validate-account.py --runtime
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: tfplan-${{ github.sha }}-${{ matrix.scope }}
+          path: ${{ runner.temp }}/plans/${{ matrix.scope }}
+      - name: Enforce destructive-change authorization
+        env:
+          PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
+          EVENT_NAME: ${{ github.event_name }}
+          ALLOW_DESTROY: ${{ inputs.allow_destroy }}
+          CHANGE_REFERENCE: ${{ inputs.change_reference }}
+        run: |
+          python3 scripts/authorize-destructive-plan.py \
+            "$PLAN_DIR/PLAN_CLASSIFICATION.json" \
+            --event-name "$EVENT_NAME" \
+            --allow-destroy "${ALLOW_DESTROY:-false}" \
+            --change-reference "${CHANGE_REFERENCE:-}"
+      - id: identity
+        env:
+          SCOPE: ${{ matrix.scope }}
+          FOUNDATION: ${{ vars.SA_TF_LIVE_APPLY_FOUNDATION }}
+          DEVELOPMENT: ${{ vars.SA_TF_LIVE_APPLY_DEVELOPMENT }}
+          STAGING: ${{ vars.SA_TF_LIVE_APPLY_STAGING }}
+          PRODUCTION: ${{ vars.SA_TF_LIVE_APPLY_PRODUCTION }}
+        run: |
+          set -euo pipefail
+          case "$SCOPE" in
+            foundation) value="$FOUNDATION" ;;
+            development) value="$DEVELOPMENT" ;;
+            staging) value="$STAGING" ;;
+            production|partners) value="$PRODUCTION" ;;
+            *) exit 2 ;;
+          esac
+          [[ -n "$value" ]] || { echo "::error::apply service account for $SCOPE is unset"; exit 1; }
+          echo "service-account=$value" >> "$GITHUB_OUTPUT"
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_APPLY }}
+          service_account: ${{ steps.identity.outputs.service-account }}
+      - id: pem
+        uses: google-github-actions/get-secretmanager-secrets@2b5f97c5a4b9c105e64646762ad4fc3f5128e6f5 # v2
+        with:
+          secrets: app_pem:${{ vars.SECRETS_PROJECT_ID }}/github-app-terraform-pem
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.TF_APP_ID }}
+          private-key: ${{ steps.pem.outputs.app_pem }}
+          owner: ${{ vars.MONOREPO_ORG }}
+          repositories: mindclade-internal-monorepo
+      - name: Authorize immutable module fetches
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+        with:
+          extra_nix_config: experimental-features = nix-command flakes
+      - name: Verify and apply exact plans
+        env:
+          SCOPE: ${{ matrix.scope }}
+          UNIT: ${{ matrix.unit }}
+          PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
+        run: ./scripts/terragrunt-scope.sh apply "$SCOPE" "$PLAN_DIR" "$UNIT"
+
+  report-failure:
+    needs: [scope, plan-exact-main, apply]
+    if: ${{ always() && needs.scope.outputs.count != '0' && (needs.plan-exact-main.result == 'failure' || needs.apply.result == 'failure') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update infrastructure incident
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MATRIX: ${{ needs.scope.outputs.matrix }}
+          PLAN_RESULT: ${{ needs.plan-exact-main.result }}
+          APPLY_RESULT: ${{ needs.apply.result }}
+        run: |
+          set -euo pipefail
+          marker='infrastructure apply pipeline failed'
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          body="Plan result: ${PLAN_RESULT}\nApply result: ${APPLY_RESULT}\nScopes: ${MATRIX}\nRun: ${run_url}"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$marker in:title" --json number --jq '.[0].number' --limit 1)"
+          if [[ -n "$existing" && "$existing" != null ]]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$marker" \
+              --label incident --label infrastructure \
+              --body "$body"
+          fi

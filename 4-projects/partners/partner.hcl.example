@@ -1,0 +1,10 @@
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+#
+# Copy into an approved partner directory only after review.
+locals {
+  partner_id         = "approved-partner-id"
+  owner_team         = "partner-engineering"
+  data_classification = "confidential"
+}

@@ -1,0 +1,49 @@
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+#
+# MINDCLADE CONFIDENTIAL - PROPRIETARY AND TRADE SECRET
+# Copyright (c) 2026 Mindclade. All rights reserved.
+schema_version: 1
+repository: infrastructure-live
+repository_class: production-control
+visibility: private
+authority:
+    - normal-gcp-organization-infrastructure
+    - folders
+    - org-policy
+    - environments
+    - networks
+    - projects
+    - gke
+    - managed-cloud-services
+forbidden_authority:
+    - ring0-state-foundation
+    - argocd-installation
+    - kubernetes-desired-state
+    - application-source
+required_paths:
+    - 1-org
+    - 2-environments/development
+    - 2-environments/staging
+    - 2-environments/production
+    - 3-networks
+    - 4-projects
+    - 5-workloads/development
+    - 5-workloads/staging
+    - 5-workloads/production
+    - root.hcl
+forbidden_paths:
+    - .terraform
+    - .terragrunt-cache
+    - 5-workloads/development/argocd
+    - 5-workloads/staging/argocd
+    - 5-workloads/production/argocd
+default_branch: main
+change_model: pull-request
+production_controls:
+  required_reviews: true
+  codeowners: true
+  merge_queue: true
+  immutable_actions: true
+  oidc_only_cloud_authentication: true

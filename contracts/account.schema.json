@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Mindclade infrastructure account contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "organization_id",
+    "billing_account_id",
+    "state_bucket",
+    "primary_region",
+    "environments"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0"
+    },
+    "organization_id": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "billing_account_id": {
+      "type": "string",
+      "minLength": 6
+    },
+    "state_bucket": {
+      "type": "string",
+      "minLength": 3
+    },
+    "primary_region": {
+      "type": "string",
+      "pattern": "^[a-z]+-[a-z]+[0-9]$"
+    },
+    "environments": {
+      "type": "object",
+      "required": [
+        "development",
+        "staging",
+        "production"
+      ],
+      "properties": {
+        "development": {
+          "type": "object",
+          "required": [
+            "folder_id",
+            "network_project_id"
+          ],
+          "properties": {
+            "folder_id": {
+              "type": "string"
+            },
+            "network_project_id": {
+              "type": "string"
+            },
+            "gke_project_id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "staging": {
+          "type": "object",
+          "required": [
+            "folder_id",
+            "network_project_id"
+          ],
+          "properties": {
+            "folder_id": {
+              "type": "string"
+            },
+            "network_project_id": {
+              "type": "string"
+            },
+            "gke_project_id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "production": {
+          "type": "object",
+          "required": [
+            "folder_id",
+            "network_project_id"
+          ],
+          "properties": {
+            "folder_id": {
+              "type": "string"
+            },
+            "network_project_id": {
+              "type": "string"
+            },
+            "gke_project_id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

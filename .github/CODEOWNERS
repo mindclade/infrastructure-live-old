@@ -1,0 +1,36 @@
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+#
+# Production and shared configuration need platform and security together.
+
+*                       @Mindclade/platform
+
+# Anything under a production path. The ruleset in github-config additionally requires two
+# approvals for tier=foundation repositories, so this is the "who", not the "how many".
+/5-workloads/production/ @Mindclade/platform @Mindclade/security
+/2-environments/production/ @Mindclade/platform @Mindclade/security
+
+# Organization-wide: policies, log sinks, KMS, Security Command Center.
+/1-org/                 @Mindclade/platform @Mindclade/security
+
+# Network perimeter. A firewall or VPC-SC change is a security change regardless of which
+# environment it lands in.
+/3-networks/            @Mindclade/platform @Mindclade/security
+
+# Admission control and perimeter enforcement.
+**/binary-authorization/ @Mindclade/security
+**/vpc-sc-perimeter/     @Mindclade/security
+
+# Partner tenancy — isolation boundaries.
+/4-projects/partners/ @Mindclade/platform @Mindclade/security
+
+# Shared config reaches every unit, so a change here is effectively a change everywhere.
+/root.hcl               @Mindclade/platform @Mindclade/security
+/account.hcl            @Mindclade/platform @Mindclade/security
+/_envcommon/            @Mindclade/platform @Mindclade/security
+
+/.github/workflows/     @Mindclade/platform @Mindclade/security
+
+# Browser access controls and activation handoffs
+/5-workloads/**/iap-access/ @Mindclade/platform @Mindclade/security

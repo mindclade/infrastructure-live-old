@@ -1,0 +1,31 @@
+# MINDCLADE CONFIDENTIAL - PROPRIETARY AND TRADE SECRET
+# Copyright (c) 2026 Mindclade. All rights reserved.
+name: Production contract
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-contract-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Production contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate production contract
+        shell: bash
+        run: python3 scripts/validate-production-contract.py

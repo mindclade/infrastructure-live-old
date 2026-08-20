@@ -1,0 +1,448 @@
+---
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+#
+# Three jobs, not one. Job ids here ARE the required-check contexts in
+# github-config/rulesets/required-checks-tf.tf — renaming one is a breaking change to that
+# ruleset, and the symptom is every merge blocking on a check that never reports.
+#
+# Only `plan` reaches GCP. fmt and validate run with no cloud identity.
+#
+# DO NOT add `paths:` or `paths-ignore:` filters to this workflow.
+#
+# Only the Terraform-context jobs above (`fmt`, `validate`, `plan`) are required checks.
+# Additional security jobs below are optional hardening and may be required by repo policy
+# outside this workflow if desired.
+#
+# If PR latency becomes a problem, make the jobs faster (the provider cache below is most of
+# it). Do not make them conditional.
+name: plan
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plan-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.15.9"
+  TF_IN_AUTOMATION: "true"
+  # Shared provider cache. Terragrunt runs `terraform init` once per unit, so without this a
+  # multi-unit plan re-downloads the same providers dozens of times in a single run.
+  TG_NON_INTERACTIVE: "true"
+  TG_STRICT_MODE: "true"
+  GCP_ORG_ID: ${{ vars.GCP_ORG_ID }}
+  BILLING_ACCOUNT: ${{ vars.BILLING_ACCOUNT }}
+  BOOTSTRAP_SEED_PROJECT_ID: ${{ vars.BOOTSTRAP_SEED_PROJECT_ID }}
+  BOOTSTRAP_CICD_PROJECT_ID: ${{ vars.BOOTSTRAP_CICD_PROJECT_ID }}
+  BOOTSTRAP_CICD_PROJECT_NUMBER: ${{ vars.BOOTSTRAP_CICD_PROJECT_NUMBER }}
+  GITHUB_WIF_POOL_NAME: ${{ vars.GITHUB_WIF_POOL_NAME }}
+  BUILDKITE_WIF_POOL_NAME: ${{ vars.BUILDKITE_WIF_POOL_NAME }}
+  TFSTATE_BUCKET_DEVELOPMENT: ${{ vars.TFSTATE_BUCKET_DEVELOPMENT }}
+  TFSTATE_BUCKET_STAGING: ${{ vars.TFSTATE_BUCKET_STAGING }}
+  TFSTATE_BUCKET_PRODUCTION: ${{ vars.TFSTATE_BUCKET_PRODUCTION }}
+  RESOURCE_PREFIX: ${{ vars.RESOURCE_PREFIX }}
+  PRIMARY_REGION: ${{ vars.PRIMARY_REGION }}
+  STATE_LOCATION: ${{ vars.STATE_LOCATION }}
+  DOMAIN: ${{ vars.DOMAIN }}
+  MONOREPO_ORG: ${{ vars.MONOREPO_ORG }}
+  SA_TF_LIVE_PLAN: ${{ vars.SA_TF_LIVE_PLAN }}
+  SA_TF_LIVE_APPLY_FOUNDATION: ${{ vars.SA_TF_LIVE_APPLY_FOUNDATION }}
+  SA_TF_LIVE_APPLY_DEVELOPMENT: ${{ vars.SA_TF_LIVE_APPLY_DEVELOPMENT }}
+  SA_TF_LIVE_APPLY_STAGING: ${{ vars.SA_TF_LIVE_APPLY_STAGING }}
+  SA_TF_LIVE_APPLY_PRODUCTION: ${{ vars.SA_TF_LIVE_APPLY_PRODUCTION }}
+
+jobs:
+  # ---------------------------------------------------------------------------------------
+  # Lint
+  # ---------------------------------------------------------------------------------------
+  # .github/actionlint.yaml and .yamllint.yaml were in this repository with nothing running
+  # either of them. A config with no runner is a description of a standard, not a gate — it
+  # reports nothing, blocks nothing, and reads in review exactly like enforcement.
+  #
+  # The binaries come from `.#ci`, not from a release download. actionlint shells out to
+  # shellcheck, and versions disagree: 0.10.0, which flake.lock pins, reports SC2153 and
+  # SC2015 findings that 0.11.0 does not. A locally installed actionlint can therefore pass
+  # on a change this job fails.
+  lint:
+    name: actionlint + yamllint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342  # v31.11.0
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = false
+
+      - name: actionlint
+        run: nix develop .#ci --command actionlint -color
+
+      - name: yamllint
+        run: nix develop .#ci --command yamllint --strict .
+
+  fmt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342  # v31.11.0
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - run: nix develop .#ci --command terragrunt hcl fmt --check --diff
+
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate bootstrap-derived account contract
+        run: python3 scripts/validate-account.py --runtime
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342  # v31.11.0
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Validate every unit's HCL
+        # hcl validate parses configuration and resolves includes and dependencies. It does
+        # not touch remote state or the cloud, which is why this needs no credentials.
+        run: |
+          set -euo pipefail
+          status=0
+          while IFS= read -r d; do
+            if ! out=$(cd "$d" && nix develop "$GITHUB_WORKSPACE#ci" --command terragrunt hcl validate 2>&1); then
+              echo "::error file=$d/terragrunt.hcl::HCL validation failed"
+              printf '%s\n' "$out" | head -20
+              status=1
+            fi
+          done < <(find . -name terragrunt.hcl -not -path './.terragrunt-cache/*' -exec dirname {} \;)
+          exit "$status"
+
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cache pre-commit environment
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: /home/runner/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-
+
+      - name: Run Mindclade proprietary license header checks
+        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd
+        with:
+          extra_args: --hook-stage pre-commit --all-files
+
+  tflint:
+    name: tflint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: scan
+        name: Check for Terraform sources
+        run: |
+          if find . -name '*.tf' -print -quit | grep -q .; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No Terraform files found; skipping tflint."
+          fi
+
+      - uses: terraform-linters/setup-tflint@6e1e0642c0289bd619021bf6b34e3c08ed1e005a  # v6
+        if: steps.scan.outputs.run == 'true'
+        with:
+          tflint_version: v0.59.1
+
+      - name: Run tflint
+        if: steps.scan.outputs.run == 'true'
+        run: |
+          tflint --init
+          tflint --format=compact --recursive
+
+  checkov:
+    name: checkov
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check for Terraform files
+        id: scan
+        run: |
+          if find . -name '*.tf' -print -quit | grep -q .; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No Terraform files found; skipping Checkov."
+          fi
+
+      - uses: bridgecrewio/checkov-action@1246d92f57abae29d5db5f9aeeed2a9813e52d7d  # v12
+        if: steps.scan.outputs.run == 'true'
+        with:
+          directory: .
+          framework: terraform
+          output_format: cli
+          output_file_path: console
+          soft_fail: false
+
+  dependency-review:
+    name: dependency-review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      - name: Review dependency graph changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
+        with:
+          fail-on-severity: high
+
+  trivy:
+    name: trivy fs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+  osv:
+    name: osv-scanner
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@06b2ab4348248b456ee06c9e953637f55e03504f
+
+  plan:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    # No `environment:`, so the apply identity is unreachable from a pull request.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          # plan-changed.sh diffs against origin/main, which needs real history.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate bootstrap-derived account contract
+        run: python3 scripts/validate-account.py --runtime
+
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_PLAN }}
+          service_account: ${{ vars.SA_TF_LIVE_PLAN }}
+
+      - id: pem
+        # The App key comes from Secret Manager, reached with the GCP credentials obtained
+        # above. It used to be a GitHub repository secret — a standing credential holding the
+        # same bytes already sitting in Secret Manager, rotatable only in two places at once.
+        #
+        # This is the pattern github-config/.github/workflows/drift.yml already uses. No
+        # GitHub secret is involved at any point; the only thing this job holds is an OIDC
+        # token GitHub minted for this repository and ref.
+        uses: google-github-actions/get-secretmanager-secrets@2b5f97c5a4b9c105e64646762ad4fc3f5128e6f5  # v2
+        with:
+          secrets: |-
+            app_pem:${{ vars.SECRETS_PROJECT_ID }}/github-app-terraform-pem
+
+      - id: app-token
+        # Modules live in Mindclade/mindclade-internal-monorepo — the same organization, but a separate repository
+        # from this one. The App must be installed on both. See the README.
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2
+        with:
+          app-id: ${{ vars.TF_APP_ID }}
+          private-key: ${{ steps.pem.outputs.app_pem }}
+          owner: ${{ vars.MONOREPO_ORG }}
+          repositories: mindclade-internal-monorepo
+
+      - name: Check out module source for interface preflight
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: Mindclade/mindclade-internal-monorepo
+          token: ${{ steps.app-token.outputs.token }}
+          path: .module-source
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Validate exact module interfaces
+        run: python3 scripts/validate-module-interfaces.py --monorepo .module-source
+
+      - name: Authorise module fetches over HTTPS
+        # insteadOf rewriting, rather than an SSH deploy key. A deploy key is a standing
+        # credential somebody has to rotate; this token expires in an hour and is scoped to
+        # one repository in one org.
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd  # v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342  # v31.11.0
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Plan changed units
+        id: plan
+        run: |
+          set -euo pipefail
+          nix develop .#ci --command ./scripts/plan-changed.sh origin/${{ github.base_ref || 'main' }} 2>&1 | tee plan-output.txt
+
+      - name: Flag destructive changes
+        run: |
+          set -euo pipefail
+          if grep -qE 'will be destroyed|must be replaced' plan-output.txt; then
+            echo "::warning::This plan destroys or replaces resources. Read it line by line before approving."
+            grep -nE 'will be destroyed|must be replaced' plan-output.txt | head -40
+          fi
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5
+        if: always()
+        with:
+          name: plan-output-${{ github.run_id }}
+          path: plan-output.txt
+          retention-days: 14
+
+  plan-comment:
+    name: publish plan comment
+    needs: [plan]
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Download plan output
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5
+        continue-on-error: true
+        with:
+          name: plan-output-${{ github.run_id }}
+          path: .
+      - name: Comment on PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.number }}
+        run: |
+          # shellcheck disable=SC2016
+          # Intentional: the literal $ belongs to the text being built (a markdown body or a jq program), not to the shell.
+          set -euo pipefail
+
+          owner="${GITHUB_REPOSITORY%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          # ISSUE_NUMBER is used directly; the lowercase alias put both spellings in one
+          # script, which shellcheck reads as SC2153 without sight of the `env:` block.
+          marker='<!-- infra-live-plan -->'
+          # Exported so jq can read it as $ENV.MARKER. Passing it by interpolating into
+          # the --jq expression needed three levels of escaping through YAML, the shell,
+          # and jq — and the version that did produced a bare `"` the shell then read as
+          # the start of a new word, turning jq's `|` into a shell pipe. The step failed
+          # with a syntax error rather than posting a comment.
+          export MARKER="$marker"
+
+          if [ -f plan-output.txt ]; then
+            body="$(cat plan-output.txt)"
+          else
+            body='(no plan output produced)'
+          fi
+          LIMIT=58000
+          if [ "${#body}" -gt "$LIMIT" ]; then
+            body="$(printf '%s' "$body" | tail -c "$LIMIT")"
+            truncated_note='> Output truncated. Full plan is in the run artifacts.'
+          else
+            truncated_note=''
+          fi
+
+          comment="$marker"
+          comment+='\n### Terragrunt plan — changed units'
+          comment+='\n'
+          comment+='\nUnits whose own files changed, plus every unit that depends on one of them.'
+          if [ -n "$truncated_note" ]; then
+            comment+="\n$truncated_note"
+          fi
+          comment+='\n```terraform'
+          comment+="\n$body"
+          comment+='\n```'
+
+          prior="$(gh api \
+            "repos/$owner/$repo/issues/${ISSUE_NUMBER}/comments" \
+            --jq '.[] | select(.body | contains($ENV.MARKER)) | .id' \
+            --paginate \
+            | head -n 1)"
+
+          if [ -n "$prior" ]; then
+            gh api "repos/$owner/$repo/issues/comments/$prior" --method PATCH --field body="$comment"
+          else
+            gh api "repos/$owner/$repo/issues/${ISSUE_NUMBER}/comments" --method POST --field body="$comment"
+          fi
+
+
+  plan-artifact-verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [plan]
+    if: always()
+    steps:
+      - name: Download plan artifacts for audit
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5
+        with:
+          name: plan-output-${{ github.run_id }}
+          path: artifacts
+
+      - name: Verify plan artifact
+        run: |
+          if [ -f artifacts/plan-output.txt ]; then
+            echo "Plan output artifact present."
+          else
+            echo "Plan output artifact missing."
+          fi

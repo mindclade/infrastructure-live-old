@@ -1,0 +1,35 @@
+# Gitleaks configuration.
+#
+# The estate holds no secrets in git by design — every credential lives in Secret Manager and
+# is reached through WIF, and the push-blocklist ruleset in github-config rejects
+# credential-shaped paths before the object lands. So the useful state for this scanner is
+# ZERO findings, and the only thing that degrades it is a false positive nobody clears.
+#
+# Three of those exist here, all the same shape: a KMS ALGORITHM NAME. Strings like
+# `RSA_SIGN_PKCS1_4096_SHA512` are high-entropy, look like a key, and are public constants
+# from Google's API. A scanner that reports them on every run is one people stop reading —
+# which is how the finding that matters gets scrolled past.
+
+[extend]
+useDefault = true
+
+# Global allowlist, matched against the LINE a finding sits on. Scoped that way rather than
+# by file, so an actual credential pasted into the same file is still reported.
+[allowlist]
+description = "KMS algorithm constants and non-live example files."
+regexTarget = "line"
+
+regexes = [
+  # Cloud KMS algorithm and protection-level enums — public API constants, printed verbatim
+  # in Google's own documentation. See _envcommon/binauthz.hcl.
+  "kms_key_algorithm\\s*=\\s*\"[A-Z0-9_]+\"",
+  "algorithm\\s*=\\s*\"GOOGLE_SYMMETRIC_ENCRYPTION\"",
+]
+
+paths = [
+  # Every *.example file is non-live documentation of a configuration shape.
+  # Production validators exclude these files from the Terragrunt run queue.
+  "\\.example$",
+  # Provider checksums, not credentials.
+  "\\.terraform\\.lock\\.hcl$",
+]

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Mindclade infrastructure to GitOps handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "environment",
+    "cluster",
+    "artifact_registry",
+    "secret_backend",
+    "workload_identity",
+    "binary_authorization"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0"
+    },
+    "environment": {
+      "enum": [
+        "development",
+        "staging",
+        "production"
+      ]
+    },
+    "cluster": {
+      "type": "object",
+      "required": [
+        "name",
+        "location",
+        "project_id"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifact_registry": {
+      "type": "string"
+    },
+    "secret_backend": {
+      "type": "string"
+    },
+    "workload_identity": {
+      "type": "string"
+    },
+    "binary_authorization": {
+      "type": "string"
+    },
+    "dns_zones": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

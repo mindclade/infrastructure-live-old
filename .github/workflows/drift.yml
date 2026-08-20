@@ -1,0 +1,174 @@
+---
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+#
+name: drift
+
+on:
+  schedule:
+    - cron: "19 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: drift-infrastructure-live
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.15.9"
+  TF_IN_AUTOMATION: "true"
+  TG_NON_INTERACTIVE: "true"
+  TG_STRICT_MODE: "true"
+  GCP_ORG_ID: ${{ vars.GCP_ORG_ID }}
+  BILLING_ACCOUNT: ${{ vars.BILLING_ACCOUNT }}
+  BOOTSTRAP_SEED_PROJECT_ID: ${{ vars.BOOTSTRAP_SEED_PROJECT_ID }}
+  BOOTSTRAP_CICD_PROJECT_ID: ${{ vars.BOOTSTRAP_CICD_PROJECT_ID }}
+  BOOTSTRAP_CICD_PROJECT_NUMBER: ${{ vars.BOOTSTRAP_CICD_PROJECT_NUMBER }}
+  GITHUB_WIF_POOL_NAME: ${{ vars.GITHUB_WIF_POOL_NAME }}
+  BUILDKITE_WIF_POOL_NAME: ${{ vars.BUILDKITE_WIF_POOL_NAME }}
+  TFSTATE_BUCKET_DEVELOPMENT: ${{ vars.TFSTATE_BUCKET_DEVELOPMENT }}
+  TFSTATE_BUCKET_STAGING: ${{ vars.TFSTATE_BUCKET_STAGING }}
+  TFSTATE_BUCKET_PRODUCTION: ${{ vars.TFSTATE_BUCKET_PRODUCTION }}
+  RESOURCE_PREFIX: ${{ vars.RESOURCE_PREFIX }}
+  PRIMARY_REGION: ${{ vars.PRIMARY_REGION }}
+  STATE_LOCATION: ${{ vars.STATE_LOCATION }}
+  DOMAIN: ${{ vars.DOMAIN }}
+  MONOREPO_ORG: ${{ vars.MONOREPO_ORG }}
+  SA_TF_LIVE_PLAN: ${{ vars.SA_TF_LIVE_PLAN }}
+
+jobs:
+  drift:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      detected: ${{ steps.plan.outputs.drift }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate bootstrap-derived account contract
+        run: python3 scripts/validate-account.py --runtime
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_PLAN }}
+          service_account: ${{ vars.SA_TF_LIVE_PLAN }}
+      - id: pem
+        uses: google-github-actions/get-secretmanager-secrets@2b5f97c5a4b9c105e64646762ad4fc3f5128e6f5  # v2
+        with:
+          secrets: app_pem:${{ vars.SECRETS_PROJECT_ID }}/github-app-terraform-pem
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2
+        with:
+          app-id: ${{ vars.TF_APP_ID }}
+          private-key: ${{ steps.pem.outputs.app_pem }}
+          owner: ${{ vars.MONOREPO_ORG }}
+          repositories: mindclade-internal-monorepo
+      - name: Authorize immutable module fetches
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd  # v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342  # v31.11.0
+        with:
+          extra_nix_config: experimental-features = nix-command flakes
+      - id: plan
+        name: Plan every unit without acquiring state locks
+        run: |
+          set -euo pipefail
+          : > drift.txt
+          set +e
+          nix develop .#ci --command terragrunt run --all \
+            --provider-cache \
+            --non-interactive \
+            --queue-exclude-external \
+            -- plan -input=false -no-color -lock=false -detailed-exitcode 2>&1 | tee drift.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          if grep -qE 'Plan: [0-9]+ to add|[0-9]+ to change|[0-9]+ to destroy|must be replaced' drift.txt; then
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "$code" -ne 0 && "$code" -ne 2 ]]; then
+            echo "::error::drift plan failed with exit code $code"
+            exit "$code"
+          fi
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5
+        if: always()
+        with:
+          name: drift-output-${{ github.run_id }}
+          path: drift.txt
+          retention-days: 30
+          if-no-files-found: error
+
+  report:
+    needs: [drift]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Download drift evidence
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5
+        continue-on-error: true
+        with:
+          name: drift-output-${{ github.run_id }}
+          path: artifacts
+      - name: Reconcile drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRIFT_RESULT: ${{ needs.drift.result }}
+          DRIFT_DETECTED: ${{ needs.drift.outputs.detected }}
+        run: |
+          set -euo pipefail
+          title='Infrastructure drift detected'
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --label drift --state open --json number --jq '.[0].number' --limit 1)"
+
+          if [[ "$DRIFT_RESULT" != success ]]; then
+            body="## Infrastructure drift scan failed\n\nThe read-only scan did not complete. Run: ${run_url}"
+          elif [[ "$DRIFT_DETECTED" == true ]]; then
+            plan='(drift output artifact unavailable)'
+            if [[ -s artifacts/drift.txt ]]; then
+              plan="$(tail -c 45000 artifacts/drift.txt)"
+            fi
+            body="## Infrastructure drift detected\n\nThe live estate no longer matches Git. Review cloud audit logs before reconciling.\n\n\`\`\`terraform\n${plan}\n\`\`\`\n\nRun: ${run_url}"
+          else
+            if [[ -n "$existing" && "$existing" != null ]]; then
+              gh issue close "$existing" --repo "$GITHUB_REPOSITORY" --reason completed
+            fi
+            exit 0
+          fi
+
+          if [[ -n "$existing" && "$existing" != null ]]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --label drift --label infrastructure --body "$body"
+          fi
+
+  drift-artifact-verify:
+    needs: [drift]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Download drift artifact for audit
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5
+        with:
+          name: drift-output-${{ github.run_id }}
+          path: artifacts
+      - name: Verify artifact integrity
+        run: test -f artifacts/drift.txt

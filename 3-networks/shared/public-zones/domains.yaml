@@ -1,0 +1,28 @@
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+#
+# MINDCLADE CONFIDENTIAL - PROPRIETARY AND TRADE SECRET
+schema_version: 1
+registrar: squarespace
+authoritative_dns: google-cloud-dns
+zones:
+  - domain: mindclade.com
+    role: corporate-identity-email-trust
+    dnssec: required
+  - domain: mindclade.ai
+    role: production-product-api-auth
+    dnssec: required
+  - domain: mindclade.dev
+    role: developer-documentation-sdks
+    dnssec: required
+  - domain: mindclade.studio
+    role: isolated-demos-experiments
+    dnssec: required
+mail_policy:
+  mail_enabled: [mindclade.com]
+  no_mail_by_default: [mindclade.ai, mindclade.dev, mindclade.studio]
+change_policy:
+  apex_records: terraform-reviewed
+  wildcard_dns: forbidden
+  external_dns_scope: delegated-subzones-only

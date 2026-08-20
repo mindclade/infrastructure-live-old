@@ -1,0 +1,25 @@
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+#
+# MINDCLADE CONFIDENTIAL - PROPRIETARY AND TRADE SECRET
+# Copyright (c) 2026 Mindclade. All rights reserved.
+schema_version: 1
+profiles:
+  development:
+    gke_release_channel: RAPID
+    regional_control_plane: false
+    vpc_sc_mode: enforce
+  staging:
+    gke_release_channel: REGULAR
+    regional_control_plane: true
+    vpc_sc_mode: dry-run
+  production:
+    gke_release_channel: STABLE
+    regional_control_plane: true
+    vpc_sc_mode: dry-run
+constraints:
+  public_control_plane_cidr: forbidden
+  default_network: forbidden
+  static_service_account_keys: forbidden
+  workload_identity: required

@@ -1,0 +1,87 @@
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+#
+# NON-LIVE EXAMPLE — partner tenancy. Own perimeter, own VPC-SC ingress rules.
+#
+# Not a project factory over three environments like its siblings. A partner tenancy exists
+# once, in production, and the reasoning is worth being explicit about: a development copy of
+# a partner's data is a copy of a partner's data, held to development's controls. If the
+# tenancy needs a rehearsal environment, it gets its own contract clause and its own unit —
+# not a `for` loop over `local.environments`.
+#
+# Everything here is written so that the partner's blast radius is one project:
+#   - Its own folder (1-org/folders → `partners`), so no org policy scoped to `production`
+#     reaches it and none of its exceptions reach production.
+#   - Its own VPC-SC perimeter (5-workloads/<env>/vpc-sc-perimeter), with ingress rules that
+#     name this project rather than a range.
+#   - No Shared VPC attachment. Partner traffic arrives through the PSC service attachment in
+#     3-networks/shared/private-service-connect, which is a one-way door: they reach a named service
+#     and nothing reaches them.
+
+include "root" {
+  path   = find_in_parent_folders("root.hcl")
+  expose = true
+}
+
+include "envcommon" {
+  path           = "${dirname(find_in_parent_folders("root.hcl"))}/_envcommon/workload-project.hcl"
+  expose         = true
+  merge_strategy = "deep"
+}
+
+dependency "folders" {
+  config_path = "../../../1-org/folders"
+
+  mock_outputs = {
+    folder_ids = {
+      partners = "folders/000000000000"
+      sandbox  = "folders/000000000001"
+    }
+  }
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+}
+
+inputs = {
+  project_id   = "${include.root.locals.prefix}-partner-example"
+  project_name = "Partner — Example (replace before activation)"
+
+  # The partners folder, NOT the production folder. This is the line that keeps a policy
+  # exception written for a partner from applying to our own production estate.
+  folder_id = dependency.folders.outputs.folder_ids["partners"]
+
+  # `environment` is a label, and this tenancy sits outside the three-environment ladder — it
+  # exists once, under its own folder, with its own perimeter. Labelling it `production` would
+  # sweep it into every query and every policy scoped to our own production estate, which is
+  # the opposite of what the folder separation buys.
+  environment         = "partner"
+  owner               = "partnerships"
+  data_classification = "restricted"
+
+  # No Shared VPC. See the header — the only network path in is the PSC attachment.
+  shared_vpc_host_project_id = null
+
+  # No default compute service account, no automatic IAM grants, and no editor-equivalent
+  # anywhere. Set on every project in 4-projects, and repeated here only because this is the
+  # project where somebody would be tempted to relax it to unblock an onboarding.
+  remove_default_service_account = true
+
+  activate_apis = concat(include.envcommon.locals.base_services, [
+    # Partner-facing API surface and its Cloud Armor policy.
+    "compute.googleapis.com",
+    "networksecurity.googleapis.com",
+    # Access Context Manager for the perimeter's ingress rules.
+    "accesscontextmanager.googleapis.com",
+  ])
+
+  # Access Transparency and the audit trail matter more here than anywhere else: "who touched
+  # the partner's data" is a question with a contract behind it. Both are on org-wide, and
+  # these labels are what make the finding filterable.
+  labels = {
+    tenancy     = "partner"
+    partner     = "example"
+    contractual = "false"
+  }
+
+  monthly_budget_usd = 0
+}
