@@ -31,10 +31,12 @@ SERVICE_ACCOUNT = re.compile(
 PROJECT_ID = re.compile(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$")
 KEY_VERSION = re.compile(
     r"^projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/locations/[a-z0-9-]+/"
-    r"keyRings/[A-Za-z0-9_-]+/cryptoKeys/[A-Za-z0-9_-]+/cryptoKeyVersions/[1-9][0-9]*$"
+    r"keyRings/[A-Za-z0-9_-]+/cryptoKeys/attestor-deployment-attestor/"
+    r"cryptoKeyVersions/[1-9][0-9]*$"
 )
 MOCK_VALUE = re.compile(
-    r"(?i)(?:^|[-_/.])(mock|unknown)(?:$|[-_/.])|\(known after apply\)"
+    r"(?i)(?:^|[-_/.])(mock|unknown|placeholder|example|changeme)(?:$|[-_/.])|"
+    r"\(known after apply\)"
 )
 
 
@@ -122,10 +124,19 @@ def require_string(value: Any, label: str) -> str:
     return value
 
 
-def require_service_account(value: Any, label: str) -> str:
+def require_service_account(
+    value: Any, label: str, *, expected_account: str, project_suffix: str
+) -> str:
     account = require_string(value, label)
-    if SERVICE_ACCOUNT.fullmatch(account) is None:
+    match = SERVICE_ACCOUNT.fullmatch(account)
+    if match is None:
         raise ValueError(f"{label} is not an exact service-account email")
+    local_part, _, project_domain = account.partition("@")
+    project = project_domain.removesuffix(".iam.gserviceaccount.com")
+    if local_part != expected_account:
+        raise ValueError(f"{label} names the wrong service account")
+    if not project.endswith(project_suffix):
+        raise ValueError(f"{label} belongs to the wrong project trust domain")
     return account
 
 
@@ -135,6 +146,8 @@ def compile_contract(
     binauthz_outputs: dict[str, Any],
     source_commit: str,
 ) -> dict[str, Any]:
+    if re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
+        raise ValueError("source commit must be an immutable full SHA")
     signer = require_mapping(
         output_value(
             automation_outputs, "artifact_signer_identity_contract", "automation_iam"
@@ -165,6 +178,10 @@ def compile_contract(
     )
     if PROJECT_ID.fullmatch(project_id) is None:
         raise ValueError("binary_authorization.project_id is not a valid project ID")
+    if not project_id.endswith("-production-platform"):
+        raise ValueError(
+            "binary_authorization.project_id belongs to the wrong environment"
+        )
     attestor_names = require_mapping(
         output_value(binauthz_outputs, "attestor_names", "binary_authorization"),
         "binary_authorization.attestor_names",
@@ -177,7 +194,7 @@ def compile_contract(
         output_value(binauthz_outputs, "enforcement_mode", "binary_authorization"),
         "binary_authorization.enforcement_mode",
     )
-    if enforcement != "BLOCK_AND_AUDIT_LOG":
+    if enforcement != "ENFORCED_BLOCK_AND_AUDIT_LOG":
         raise ValueError("production Binary Authorization is not blocking")
 
     exact_attestors: dict[str, str] = {}
@@ -195,13 +212,22 @@ def compile_contract(
 
     variables = {
         "SA_ARTIFACT_SIGNER": require_service_account(
-            signer.get("SA_ARTIFACT_SIGNER"), "SA_ARTIFACT_SIGNER"
+            signer.get("SA_ARTIFACT_SIGNER"),
+            "SA_ARTIFACT_SIGNER",
+            expected_account="sa-artifact-signer",
+            project_suffix="-common-ci",
         ),
         "SA_GITOPS_RENDER": require_service_account(
-            identities.get("SA_GITOPS_RENDER"), "SA_GITOPS_RENDER"
+            identities.get("SA_GITOPS_RENDER"),
+            "SA_GITOPS_RENDER",
+            expected_account="sa-gitops-render",
+            project_suffix="-common-security",
         ),
         "SA_GITOPS_VERIFIER": require_service_account(
-            identities.get("SA_GITOPS_VERIFIER"), "SA_GITOPS_VERIFIER"
+            identities.get("SA_GITOPS_VERIFIER"),
+            "SA_GITOPS_VERIFIER",
+            expected_account="sa-gitops-verifier",
+            project_suffix="-common-security",
         ),
         "BINAUTHZ_BUILD_ATTESTOR_PROJECT": project_id,
         "BINAUTHZ_BUILD_ATTESTOR": exact_attestors["build-attestor"],
@@ -220,6 +246,7 @@ def compile_contract(
             name: str(path.relative_to(ROOT)) for name, path in UNITS.items()
         },
         "variables": variables,
+        "credential_material_included": False,
     }
 
 
@@ -229,6 +256,8 @@ def write_contract(target: Path, contract: dict[str, Any]) -> None:
         raise ValueError(
             "applied handoff evidence must be written outside the repository"
         )
+    if target.exists():
+        raise ValueError("refusing to overwrite existing applied handoff evidence")
     target.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{target.name}.", dir=target.parent

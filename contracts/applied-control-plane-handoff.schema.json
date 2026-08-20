@@ -9,7 +9,8 @@
     "source_commit",
     "environment",
     "source_units",
-    "variables"
+    "variables",
+    "credential_material_included"
   ],
   "properties": {
     "contract_version": { "const": "1.0.0" },
@@ -46,30 +47,38 @@
         "BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION"
       ],
       "properties": {
-        "SA_ARTIFACT_SIGNER": { "$ref": "#/$defs/serviceAccount" },
-        "SA_GITOPS_RENDER": { "$ref": "#/$defs/serviceAccount" },
-        "SA_GITOPS_VERIFIER": { "$ref": "#/$defs/serviceAccount" },
-        "BINAUTHZ_BUILD_ATTESTOR_PROJECT": { "$ref": "#/$defs/projectId" },
+        "SA_ARTIFACT_SIGNER": {
+          "type": "string",
+          "pattern": "^sa-artifact-signer@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
+        "SA_GITOPS_RENDER": {
+          "type": "string",
+          "pattern": "^sa-gitops-render@[a-z][a-z0-9-]*-common-security\\.iam\\.gserviceaccount\\.com$"
+        },
+        "SA_GITOPS_VERIFIER": {
+          "type": "string",
+          "pattern": "^sa-gitops-verifier@[a-z][a-z0-9-]*-common-security\\.iam\\.gserviceaccount\\.com$"
+        },
+        "BINAUTHZ_BUILD_ATTESTOR_PROJECT": { "$ref": "#/$defs/productionProjectId" },
         "BINAUTHZ_BUILD_ATTESTOR": { "const": "build-attestor" },
-        "BINAUTHZ_QUALIFICATION_ATTESTOR_PROJECT": { "$ref": "#/$defs/projectId" },
+        "BINAUTHZ_QUALIFICATION_ATTESTOR_PROJECT": { "$ref": "#/$defs/productionProjectId" },
         "BINAUTHZ_QUALIFICATION_ATTESTOR": { "const": "qualification-attestor" },
-        "BINAUTHZ_DEPLOYMENT_ATTESTOR_PROJECT": { "$ref": "#/$defs/projectId" },
+        "BINAUTHZ_DEPLOYMENT_ATTESTOR_PROJECT": { "$ref": "#/$defs/productionProjectId" },
         "BINAUTHZ_DEPLOYMENT_ATTESTOR": { "const": "deployment-attestor" },
         "BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION": {
           "type": "string",
-          "pattern": "^projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/locations/[a-z0-9-]+/keyRings/[A-Za-z0-9_-]+/cryptoKeys/[A-Za-z0-9_-]+/cryptoKeyVersions/[1-9][0-9]*$"
+          "pattern": "^projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/locations/[a-z0-9-]+/keyRings/[A-Za-z0-9_-]+/cryptoKeys/attestor-deployment-attestor/cryptoKeyVersions/[1-9][0-9]*$"
         }
       }
+    },
+    "credential_material_included": {
+      "const": false
     }
   },
   "$defs": {
-    "serviceAccount": {
+    "productionProjectId": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\\.iam\\.gserviceaccount\\.com$"
-    },
-    "projectId": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$"
+      "pattern": "^[a-z][a-z0-9-]*-production-platform$"
     }
   }
 }

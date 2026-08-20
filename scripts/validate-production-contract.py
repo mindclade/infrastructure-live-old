@@ -323,7 +323,7 @@ elif REPOSITORY == "infrastructure-live":
             '"project_id"',
             '"attestor_names"',
             '"attestor_key_versions"',
-            '"BLOCK_AND_AUDIT_LOG"',
+            '"ENFORCED_BLOCK_AND_AUDIT_LOG"',
             '"deployment-attestor"',
             "infrastructure-live source tree must be clean before export",
             "source commit differs from --expected-source-commit",

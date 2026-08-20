@@ -281,10 +281,10 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
             "github_config_identity_handoff": self.output(
                 {
                     "SA_GITOPS_RENDER": (
-                        "sa-gitops-render@mc-common-ci.iam.gserviceaccount.com"
+                        "sa-gitops-render@mc-common-security.iam.gserviceaccount.com"
                     ),
                     "SA_GITOPS_VERIFIER": (
-                        "sa-gitops-verifier@mc-common-ci.iam.gserviceaccount.com"
+                        "sa-gitops-verifier@mc-common-security.iam.gserviceaccount.com"
                     ),
                 }
             )
@@ -296,11 +296,12 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
                 {
                     "deployment-attestor": (
                         "projects/mc-common-security/locations/us-central1/keyRings/"
-                        "binauthz/cryptoKeys/deployment/cryptoKeyVersions/1"
+                        "binauthz/cryptoKeys/attestor-deployment-attestor/"
+                        "cryptoKeyVersions/1"
                     )
                 }
             ),
-            "enforcement_mode": self.output("BLOCK_AND_AUDIT_LOG"),
+            "enforcement_mode": self.output("ENFORCED_BLOCK_AND_AUDIT_LOG"),
         }
         return automation, gitops, binauthz
 
@@ -313,6 +314,7 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
             "deployment-attestor",
         )
         self.assertEqual(len(contract["variables"]), 10)
+        self.assertFalse(contract["credential_material_included"])
 
     def test_sensitive_output_is_rejected(self) -> None:
         automation, gitops, binauthz = self.fixtures()
@@ -329,6 +331,24 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
         binauthz["enforcement_mode"]["value"] = "DRYRUN_AUDIT_LOG_ONLY"
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+        automation, gitops, binauthz = self.fixtures()
+        binauthz["project_id"]["value"] = "mc-staging-platform"
+        with self.assertRaises(ValueError):
+            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+
+    def test_identity_names_and_project_trust_domains_are_exact(self) -> None:
+        automation, gitops, binauthz = self.fixtures()
+        automation["artifact_signer_identity_contract"]["value"][
+            "SA_ARTIFACT_SIGNER"
+        ] = "sa-artifact-builder@mc-common-ci.iam.gserviceaccount.com"
+        with self.assertRaises(ValueError):
+            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+        automation, gitops, binauthz = self.fixtures()
+        gitops["github_config_identity_handoff"]["value"]["SA_GITOPS_RENDER"] = (
+            "sa-gitops-render@mc-production-platform.iam.gserviceaccount.com"
+        )
+        with self.assertRaises(ValueError):
+            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
 
     def test_mutable_key_and_bootstrap_identity_drift_are_rejected(self) -> None:
         automation, gitops, binauthz = self.fixtures()
@@ -338,11 +358,26 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
         automation, gitops, binauthz = self.fixtures()
+        binauthz["attestor_key_versions"]["value"]["deployment-attestor"] = (
+            "projects/mc-common-security/locations/us/keyRings/r/cryptoKeys/"
+            "attestor-build-attestor/cryptoKeyVersions/1"
+        )
+        with self.assertRaises(ValueError):
+            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+        automation, gitops, binauthz = self.fixtures()
         automation["artifact_signer_identity_contract"]["value"][
             "ARTIFACT_SIGNER_JOB_WORKFLOW_REF"
         ] = "mindclade/.github/.github/workflows/reusable-binauthz-sign.yml@main"
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+
+    def test_write_is_private_outside_repo_and_never_overwrites(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "handoff.json"
+            HANDOFF.write_contract(target, {"contract_version": "test"})
+            self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+            with self.assertRaises(ValueError):
+                HANDOFF.write_contract(target, {"contract_version": "replacement"})
 
 
 if __name__ == "__main__":
