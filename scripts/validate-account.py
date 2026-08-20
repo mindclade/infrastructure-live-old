@@ -19,6 +19,7 @@ SOURCE = ROOT / "account.hcl"
 REQUIRED = {
     "GCP_ORG_ID": r"^[0-9]+$",
     "BILLING_ACCOUNT": r"^[0-9A-Fa-f]{6}-[0-9A-Fa-f]{6}-[0-9A-Fa-f]{6}$",
+    "CLOUD_IDENTITY_CUSTOMER_ID": r"^C[0-9A-Za-z]+$",
     "BOOTSTRAP_SEED_PROJECT_ID": r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$",
     "BOOTSTRAP_CICD_PROJECT_ID": r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$",
     "BOOTSTRAP_CICD_PROJECT_NUMBER": r"^[0-9]+$",
@@ -43,6 +44,7 @@ OPTIONAL = {
     "GPU_ZONE": "us-central1-b",
     "DOMAIN": "mindclade.com",
     "MONOREPO_ORG": "mindclade",
+    "ORG_POLICY_ACTIVATION_PHASE": "baseline",
 }
 
 
@@ -83,6 +85,8 @@ def runtime_values() -> tuple[dict[str, str], list[str]]:
         errors.append("invalid DOMAIN")
     if not re.fullmatch(r"^[A-Za-z0-9_.-]+$", values["MONOREPO_ORG"]):
         errors.append("invalid MONOREPO_ORG")
+    if values["ORG_POLICY_ACTIVATION_PHASE"] not in {"baseline", "extended"}:
+        errors.append("ORG_POLICY_ACTIVATION_PHASE must be baseline or extended")
     return dict(sorted(values.items())), errors
 
 

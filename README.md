@@ -91,7 +91,14 @@ python3 scripts/bootstrap-account.py ../bootstrap
 ```
 
 Do not hand-edit state bucket, GitHub/Buildkite WIF, project-number, or bootstrap project
-values.
+values. `CLOUD_IDENTITY_CUSTOMER_ID` is the one operator-verified normal-plane identifier:
+obtain it from the existing `iam.allowedPolicyMemberDomains` organization policy and supply it
+to the account exporter. The organization-policy unit uses a repository-local API v2
+implementation because Google's parameterized managed baselines cannot be represented by the
+legacy private module contract; all other reusable modules remain immutable-pinned. The
+catalog starts `ORG_POLICY_ACTIVATION_PHASE` at `baseline` so the seven existing policies can
+be imported and proven no-op before the additional Mindclade constraints are enabled in a
+separate reviewed change.
 
 ## Exact apply model
 

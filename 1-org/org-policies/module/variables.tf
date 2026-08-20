@@ -28,7 +28,7 @@ variable "cloud_identity_customer_id" {
   sensitive   = false
 
   validation {
-    condition     = can(regex("^C[0-9a-z]+$", var.cloud_identity_customer_id))
+    condition     = can(regex("^C[0-9A-Za-z]+$", var.cloud_identity_customer_id))
     error_message = "cloud_identity_customer_id must be a Cloud Identity customer ID beginning with C."
   }
 }
@@ -48,9 +48,9 @@ variable "list_policies" {
   validation {
     condition = alltrue([
       for policy in values(var.list_policies) :
-      !(length(policy.allowed_values) > 0 && length(policy.denied_values) > 0)
+      (length(policy.allowed_values) > 0) != (length(policy.denied_values) > 0)
     ])
-    error_message = "a list policy may allow values or deny values, but not both."
+    error_message = "a list policy must have exactly one non-empty allowed or denied value set."
   }
 }
 
@@ -66,4 +66,36 @@ variable "sandbox_external_ip_reset" {
   description = "Reset only compute.vmExternalIpAccess in the isolated sandbox folder."
   type        = bool
   default     = false
+}
+
+check "policy_kinds_are_disjoint" {
+  assert {
+    condition = length(setunion(
+      setintersection(toset(keys(var.boolean_policies)), toset(keys(var.list_policies))),
+      setintersection(toset(keys(var.boolean_policies)), toset(keys(var.managed_policies))),
+      setintersection(toset(keys(var.list_policies)), toset(keys(var.managed_policies))),
+    )) == 0
+    error_message = "a constraint may be declared in exactly one policy kind."
+  }
+}
+
+check "managed_constraints_use_managed_resource" {
+  assert {
+    condition = (
+      alltrue([for name in keys(var.managed_policies) : strcontains(name, ".managed.")]) &&
+      alltrue([for name in concat(keys(var.boolean_policies), keys(var.list_policies)) : !strcontains(name, ".managed.")])
+    )
+    error_message = "managed constraints must occur only in managed_policies."
+  }
+}
+
+check "domain_restricted_sharing_customer" {
+  assert {
+    condition = try(
+      var.list_policies["iam.allowedPolicyMemberDomains"].allowed_values == [var.cloud_identity_customer_id] &&
+      length(var.list_policies["iam.allowedPolicyMemberDomains"].denied_values) == 0,
+      false,
+    )
+    error_message = "iam.allowedPolicyMemberDomains must allow only the reviewed Cloud Identity customer."
+  }
 }

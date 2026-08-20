@@ -26,6 +26,7 @@ def load(name: str, path: str):
 
 CHANGED = load("plan_changed", "scripts/plan-changed.py")
 SCOPE = load("terragrunt_scope", "scripts/terragrunt-scope.py")
+ACCOUNT = load("bootstrap_account", "scripts/bootstrap-account.py")
 
 
 class PlanSafetyTest(unittest.TestCase):
@@ -59,6 +60,11 @@ class PlanSafetyTest(unittest.TestCase):
             SCOPE.validate_unit(
                 "development", "../outside", SCOPE.SCOPES["development"]
             )
+
+    def test_customer_id_must_be_explicit_and_well_formed(self) -> None:
+        with self.assertRaises(ValueError):
+            ACCOUNT.validated_customer_id("")
+        self.assertEqual(ACCOUNT.validated_customer_id("C01234567"), "C01234567")
 
 
 if __name__ == "__main__":

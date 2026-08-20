@@ -47,7 +47,7 @@ jobs:
       #
       # This step used to pipe a remote script straight into a shell. In a repository whose
       # entire subject is supply-chain control — SHA-pinned actions, cosign-verified images,
-      # sha256-locked remote bases in gitops/scripts/render.sh — an unpinned installer fetched
+      # sha256-locked remote bases in gitops/scripts/render.py — an unpinned installer fetched
       # over the network and executed was the one place that rule was not applied.
       #
       # It also had to hand-source profile scripts afterwards because the installer's PATH

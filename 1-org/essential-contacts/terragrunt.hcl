@@ -9,7 +9,7 @@
 # notice on `production` arrive in the same inbox with the same weight, and within a month
 # the filter rule someone wrote to cope means neither is read.
 #
-# The essentialcontacts.allowedContactDomains policy in the adjacent org-policies unit
+# The essentialcontacts.managed.allowedContactDomains policy in the adjacent org-policies unit
 # restricts every address here to @mindclade.com, so a personal address cannot be subscribed.
 
 include "root" {

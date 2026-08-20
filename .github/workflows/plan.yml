@@ -40,6 +40,8 @@ env:
   TG_STRICT_MODE: "true"
   GCP_ORG_ID: ${{ vars.GCP_ORG_ID }}
   BILLING_ACCOUNT: ${{ vars.BILLING_ACCOUNT }}
+  CLOUD_IDENTITY_CUSTOMER_ID: ${{ vars.CLOUD_IDENTITY_CUSTOMER_ID }}
+  ORG_POLICY_ACTIVATION_PHASE: ${{ vars.ORG_POLICY_ACTIVATION_PHASE }}
   BOOTSTRAP_SEED_PROJECT_ID: ${{ vars.BOOTSTRAP_SEED_PROJECT_ID }}
   BOOTSTRAP_CICD_PROJECT_ID: ${{ vars.BOOTSTRAP_CICD_PROJECT_ID }}
   BOOTSTRAP_CICD_PROJECT_NUMBER: ${{ vars.BOOTSTRAP_CICD_PROJECT_NUMBER }}
@@ -117,6 +119,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Test operational script safety
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py'
       - name: Validate bootstrap-derived account contract
         run: python3 scripts/validate-account.py --runtime
       - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342  # v31.11.0

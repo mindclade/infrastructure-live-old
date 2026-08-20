@@ -22,6 +22,14 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def validated_customer_id(value: str) -> str:
+    if not re.fullmatch(r"C[0-9A-Za-z]+", value):
+        raise ValueError(
+            "CLOUD_IDENTITY_CUSTOMER_ID must be the existing immutable directory customer ID"
+        )
+    return value
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -52,6 +60,9 @@ def main() -> int:
         print(f"error: bootstrap repo not found: {bootstrap}", file=sys.stderr)
         return 2
     try:
+        cloud_identity_customer_id = validated_customer_id(
+            os.environ.get("CLOUD_IDENTITY_CUSTOMER_ID", "")
+        )
         output = subprocess.run(
             [
                 "terraform",
@@ -81,6 +92,8 @@ def main() -> int:
         values = {
             "GCP_ORG_ID": need(contract, "organization_id", "platform_contract"),
             "BILLING_ACCOUNT": need(contract, "billing_account", "platform_contract"),
+            "CLOUD_IDENTITY_CUSTOMER_ID": cloud_identity_customer_id,
+            "ORG_POLICY_ACTIVATION_PHASE": "baseline",
             "BOOTSTRAP_SEED_PROJECT_ID": need(
                 contract, "state_project_id", "platform_contract"
             ),

@@ -387,6 +387,12 @@ elif REPOSITORY == "infrastructure-live":
         error(
             "account contract does not require the bootstrap-managed Buildkite WIF pool"
         )
+    if 'get_env("CLOUD_IDENTITY_CUSTOMER_ID")' not in account_text:
+        error("account contract omits the immutable Cloud Identity customer ID")
+    if 'get_env("ORG_POLICY_ACTIVATION_PHASE", "baseline")' not in account_text:
+        error(
+            "account contract does not fail safe to baseline-only org-policy adoption"
+        )
     bootstrap_account = (ROOT / "scripts/bootstrap-account.py").read_text(
         "utf-8", errors="ignore"
     )
@@ -398,11 +404,20 @@ elif REPOSITORY == "infrastructure-live":
             "bootstrap account exporter omits the bootstrap-managed Buildkite WIF pool"
         )
     if (
-        '"output", "-json", "platform_contract"' not in bootstrap_account
+        '"platform_contract"' not in bootstrap_account
+        or '"output"' not in bootstrap_account
         or 'contract.get("contract_version") != "1.2.0"' not in bootstrap_account
     ):
         error(
             "bootstrap account exporter bypasses the versioned Ring-0 platform contract"
+        )
+    if '"CLOUD_IDENTITY_CUSTOMER_ID"' not in bootstrap_account:
+        error(
+            "bootstrap account exporter omits the operator-verified Cloud Identity customer ID"
+        )
+    if '"ORG_POLICY_ACTIVATION_PHASE": "baseline"' not in bootstrap_account:
+        error(
+            "bootstrap account exporter does not preserve baseline-only policy adoption"
         )
     for signer_field in (
         "artifact_signer_wif_provider",
@@ -479,14 +494,61 @@ elif REPOSITORY == "infrastructure-live":
             "organization WIF issuer policy omits the bootstrap-managed Buildkite issuer"
         )
     for constraint in (
-        "iam.disableServiceAccountKeyCreation",
+        "iam.managed.disableServiceAccountKeyCreation",
         "iam.disableServiceAccountKeyUpload",
+        "iam.automaticIamGrantsForDefaultServiceAccounts",
+        "iam.allowedPolicyMemberDomains",
+        "storage.uniformBucketLevelAccess",
         "storage.publicAccessPrevention",
         "compute.vmExternalIpAccess",
-        "essentialcontacts.allowedContactDomains",
+        "essentialcontacts.managed.allowedContactDomains",
+        "compute.managed.restrictProtocolForwardingCreationForTypes",
     ):
         if constraint not in org_policy:
             error(f"normal-plane organization-policy baseline omits {constraint}")
+    for legacy_constraint in (
+        '"iam.disableServiceAccountKeyCreation"',
+        '"essentialcontacts.allowedContactDomains"',
+        '"compute.restrictProtocolForwardingCreationForTypes"',
+    ):
+        if legacy_constraint in org_policy:
+            error(
+                "organization policy uses a legacy equivalent instead of the live managed "
+                f"constraint: {legacy_constraint}"
+            )
+    policy_module = (ROOT / "1-org/org-policies/module/main.tf").read_text(
+        "utf-8", errors="ignore"
+    )
+    for required in (
+        'resource "google_org_policy_policy" "managed"',
+        "parameters =",
+        "length(each.value.allowed_values) == 0 ? null",
+        "length(each.value.denied_values) == 0 ? null",
+        "prevent_destroy = true",
+    ):
+        if required not in policy_module:
+            error(f"organization-policy v2 adoption module omits: {required}")
+    for required in (
+        'allowedDomains = ["@${include.root.locals.domain}"]',
+        'allowedSchemes = ["INTERNAL"]',
+        'include.root.locals.org_policy_activation_phase == "extended"',
+        'sandbox_external_ip_reset = include.root.locals.org_policy_activation_phase == "extended"',
+    ):
+        if required not in org_policy:
+            error(f"organization-policy staged-adoption contract omits: {required}")
+    for workflow_name in ("plan.yml", "apply.yml", "drift.yml", "cost.yml"):
+        workflow = (ROOT / ".github/workflows" / workflow_name).read_text(
+            "utf-8", errors="ignore"
+        )
+        for required_variable in (
+            "CLOUD_IDENTITY_CUSTOMER_ID",
+            "ORG_POLICY_ACTIVATION_PHASE",
+        ):
+            if (
+                f"{required_variable}: ${{{{ vars.{required_variable} }}}}"
+                not in workflow
+            ):
+                error(f"{workflow_name} omits governed variable: {required_variable}")
     if not re.search(r'"compute\.vmCanIpForward"\s*=\s*true', org_policy):
         error(
             "organization-policy baseline does not enforce the IP-forwarding prohibition"

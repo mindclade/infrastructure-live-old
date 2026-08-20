@@ -15,15 +15,17 @@ locals {
     local.account_vars.locals.region,
   )
 
-  org_id              = local.account_vars.locals.org_id
-  billing_account     = local.account_vars.locals.billing_account
-  domain              = local.account_vars.locals.domain
-  prefix              = local.account_vars.locals.prefix
-  seed_project_id     = local.account_vars.locals.seed_project_id
-  cicd_project_id     = local.account_vars.locals.cicd_project_id
-  cicd_project_number = local.account_vars.locals.cicd_project_number
-  state_location      = local.account_vars.locals.state_location
-  github_org          = local.account_vars.locals.github_org
+  org_id                      = local.account_vars.locals.org_id
+  billing_account             = local.account_vars.locals.billing_account
+  cloud_identity_customer_id  = local.account_vars.locals.cloud_identity_customer_id
+  org_policy_activation_phase = local.account_vars.locals.org_policy_activation_phase
+  domain                      = local.account_vars.locals.domain
+  prefix                      = local.account_vars.locals.prefix
+  seed_project_id             = local.account_vars.locals.seed_project_id
+  cicd_project_id             = local.account_vars.locals.cicd_project_id
+  cicd_project_number         = local.account_vars.locals.cicd_project_number
+  state_location              = local.account_vars.locals.state_location
+  github_org                  = local.account_vars.locals.github_org
 
   module_source_org  = "mindclade"
   module_source_repo = "mindclade-internal-monorepo"

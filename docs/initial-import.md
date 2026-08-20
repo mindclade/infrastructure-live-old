@@ -24,10 +24,13 @@ bootstrap outputs and the target estate has been reconciled with Terraform state
 2. Copy this tree into the existing checkout while preserving `.git`. Exclude `.account.env`,
    Terraform or Terragrunt caches, plans, state, credentials, and local overrides.
 3. Generate the ignored account contract from the verified bootstrap checkout. The exporter
-   fails closed unless the Ring-0 `platform_contract` version is exactly supported:
+   fails closed unless the Ring-0 `platform_contract` version is exactly supported. Supply
+   the immutable Cloud Identity customer ID that is already present in the organization-level
+   `iam.allowedPolicyMemberDomains` policy; do not guess it from the domain name:
 
    ```sh
-   python3 scripts/bootstrap-account.py ../bootstrap
+   CLOUD_IDENTITY_CUSTOMER_ID='<existing-customer-id>' \
+     python3 scripts/bootstrap-account.py ../bootstrap
    ```
 
 4. Enter the pinned shell and run structural validation:
@@ -39,10 +42,37 @@ bootstrap outputs and the target estate has been reconciled with Terraform state
 
 5. Validate immutable module interfaces against the approved internal monorepo checkout using
    the repository's module-interface script and contract.
-6. Inventory existing resources one state unit at a time. Import approved existing resources
+6. Inventory existing resources one state unit at a time. Google automatically provisions a
+   security baseline in newer organizations. In `1-org/org-policies`, import every existing
+   baseline policy into its exact v2 address before planning; never create a similarly named
+   legacy policy as a substitute:
+
+   ```sh
+   terragrunt import 'google_org_policy_policy.list["iam.allowedPolicyMemberDomains"]' \
+     "organizations/${GCP_ORG_ID}/policies/iam.allowedPolicyMemberDomains"
+   terragrunt import 'google_org_policy_policy.boolean["storage.uniformBucketLevelAccess"]' \
+     "organizations/${GCP_ORG_ID}/policies/storage.uniformBucketLevelAccess"
+   terragrunt import 'google_org_policy_policy.managed["essentialcontacts.managed.allowedContactDomains"]' \
+     "organizations/${GCP_ORG_ID}/policies/essentialcontacts.managed.allowedContactDomains"
+   terragrunt import 'google_org_policy_policy.managed["iam.managed.disableServiceAccountKeyCreation"]' \
+     "organizations/${GCP_ORG_ID}/policies/iam.managed.disableServiceAccountKeyCreation"
+   terragrunt import 'google_org_policy_policy.managed["compute.managed.restrictProtocolForwardingCreationForTypes"]' \
+     "organizations/${GCP_ORG_ID}/policies/compute.managed.restrictProtocolForwardingCreationForTypes"
+   terragrunt import 'google_org_policy_policy.boolean["iam.automaticIamGrantsForDefaultServiceAccounts"]' \
+     "organizations/${GCP_ORG_ID}/policies/iam.automaticIamGrantsForDefaultServiceAccounts"
+   terragrunt import 'google_org_policy_policy.boolean["iam.disableServiceAccountKeyUpload"]' \
+     "organizations/${GCP_ORG_ID}/policies/iam.disableServiceAccountKeyUpload"
+   ```
+
+   Inventory first: a fresh organization might not contain every policy. Review each import
+   and require a zero-change saved plan for the seven adopted baselines before adding the
+   remaining Mindclade policies. `ORG_POLICY_ACTIVATION_PHASE=baseline` is deliberately
+   cataloged for this first plan. Change it to `extended` only in a later reviewed governance
+   change after every additional constraint passes Policy Simulator and lockout rehearsal.
+7. Import other approved existing resources
    into the matching unit; never accept a plan that recreates or deletes them merely to make
    the import fast.
-7. Open a pull request and review affected plans in dependency order. Unexpected project,
+8. Open a pull request and review affected plans in dependency order. Unexpected project,
    network, KMS, stateful storage, or production-cluster replacement is a stop condition.
 
 ## Activate by scope

@@ -41,7 +41,7 @@ inputs = {
   # ---------------------------------------------------------------------------------------
   # Boolean constraints
   # ---------------------------------------------------------------------------------------
-  boolean_policies = {
+  boolean_policies = merge({
     # Static service-account credentials are incompatible with Mindclade's keyless identity
     # invariant. The managed key-creation constraint is declared separately below; upload is
     # the legacy boolean policy that Google provisioned in this organization.
@@ -50,7 +50,8 @@ inputs = {
     # Google-provisioned security baselines. These exact constraint names must be imported
     # before the first apply; a second policy with a similar name is not reconciliation.
     "iam.automaticIamGrantsForDefaultServiceAccounts" = true
-    "storage.uniformBucketLevelAccess"                 = true
+    "storage.uniformBucketLevelAccess"                = true
+    }, include.root.locals.org_policy_activation_phase == "extended" ? {
 
     # Uniform bucket policy is necessary but not sufficient: PAP blocks public principals
     # even if a later IAM edit attempts to add allUsers or allAuthenticatedUsers.
@@ -97,18 +98,19 @@ inputs = {
     # A Cloud Run or Cloud Functions workload with no VPC connector egresses straight to the
     # internet, outside the NAT in 3-networks and outside every VPC-SC perimeter.
     "cloudfunctions.requireVPCConnector" = true
-  }
+  } : {})
 
   # ---------------------------------------------------------------------------------------
   # List constraints
   # ---------------------------------------------------------------------------------------
-  list_policies = {
+  list_policies = merge({
     # Only identities from Mindclade's immutable Cloud Identity customer may be added to IAM.
     # The customer ID is a governed runtime account value, never a committed identifier.
     "iam.allowedPolicyMemberDomains" = {
       allowed_values = [include.root.locals.cloud_identity_customer_id]
       denied_values  = []
     }
+    }, include.root.locals.org_policy_activation_phase == "extended" ? {
 
     # No VM receives a public address by default. The isolated sandbox override below is the
     # only exception; GKE nodes, CI runners, and every environment remain private.
@@ -184,7 +186,7 @@ inputs = {
       allowed_values = []
       denied_values  = ["TLS_VERSION_1", "TLS_VERSION_1_1"]
     }
-  }
+  } : {})
 
   # Managed constraints are boolean policies with typed JSON parameters. They must use the
   # Org Policy API v2 resource; treating them as legacy list constraints changes semantics.
@@ -217,5 +219,5 @@ inputs = {
   # Nothing else is loosened, and nothing in sandbox is reachable from a production network:
   # it has its own folder, and 3-networks peers no VPC into it.
   # The local module resets only compute.vmExternalIpAccess at this exact folder.
-  sandbox_external_ip_reset = true
+  sandbox_external_ip_reset = include.root.locals.org_policy_activation_phase == "extended"
 }

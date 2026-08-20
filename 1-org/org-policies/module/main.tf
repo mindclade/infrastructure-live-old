@@ -28,8 +28,8 @@ resource "google_org_policy_policy" "list" {
   spec {
     rules {
       values {
-        allowed_values = each.value.allowed_values
-        denied_values  = each.value.denied_values
+        allowed_values = length(each.value.allowed_values) == 0 ? null : each.value.allowed_values
+        denied_values  = length(each.value.denied_values) == 0 ? null : each.value.denied_values
       }
     }
   }

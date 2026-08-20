@@ -6,12 +6,14 @@
 # environment by protected CI or by sourcing .account.env locally. No company identifiers,
 # credentials, or generated state are committed here.
 locals {
-  org_id          = get_env("GCP_ORG_ID")
-  billing_account = upper(get_env("BILLING_ACCOUNT"))
-  domain          = get_env("DOMAIN", "mindclade.com")
-  prefix          = get_env("RESOURCE_PREFIX", "mc")
-  region          = get_env("PRIMARY_REGION", "us-central1")
-  gpu_zone        = get_env("GPU_ZONE", "${local.region}-b")
+  org_id                      = get_env("GCP_ORG_ID")
+  billing_account             = upper(get_env("BILLING_ACCOUNT"))
+  cloud_identity_customer_id  = get_env("CLOUD_IDENTITY_CUSTOMER_ID")
+  org_policy_activation_phase = get_env("ORG_POLICY_ACTIVATION_PHASE", "baseline")
+  domain                      = get_env("DOMAIN", "mindclade.com")
+  prefix                      = get_env("RESOURCE_PREFIX", "mc")
+  region                      = get_env("PRIMARY_REGION", "us-central1")
+  gpu_zone                    = get_env("GPU_ZONE", "${local.region}-b")
 
   seed_project_id         = get_env("BOOTSTRAP_SEED_PROJECT_ID")
   cicd_project_id         = get_env("BOOTSTRAP_CICD_PROJECT_ID")
