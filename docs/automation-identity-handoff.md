@@ -48,11 +48,23 @@ SA_GITOPS_VERIFIER
 ```
 
 These values are outputs, not naming conventions. `github-config` must not construct or
-hardcode either email. Initial activation is deliberately staged: apply this live unit, export
-the two non-secret output values into the `github-config` catalog, review its resulting plan,
-then reapply `github-config` so the GitOps repository receives the authoritative values. Repeat
-that re-export and reviewed governance apply after any identity replacement. Until this handoff
-has completed, the GitOps render and provenance workflows are not activation-ready.
+hardcode either email. Initial activation is deliberately staged: apply this live unit and the
+production Binary Authorization unit, then run the applied-output exporter from the exact clean
+merged commit:
+
+```bash
+python3 scripts/export-applied-control-plane-handoff.py \
+  --expected-source-commit "$MERGED_INFRASTRUCTURE_SHA" \
+  --output /protected/evidence/infrastructure-control-plane-handoff.json
+```
+
+The destination must be outside the repository. The generated file is mode 0600 and carries
+the exact signer, GitOps, attestor, project, and immutable key-version values. Feed that file to
+the `github-config` exporter, review its resulting plan, then reapply `github-config` so the
+GitOps and monorepo repositories receive the authoritative values. Repeat the export and
+reviewed governance apply after any identity, attestor, or key-version replacement. Until this
+handoff has completed, GitOps render/provenance and production artifact signing are not
+activation-ready.
 
 `account.hcl` is a stable `get_env()` contract. In CI, `github-config` exports verified
 bootstrap outputs as repository variables; local operators generate the ignored `.account.env` file

@@ -307,6 +307,35 @@ elif REPOSITORY == "infrastructure-live":
         error(
             "GitOps identity handoff does not require github-config re-export/reapply"
         )
+    handoff_exporter_path = ROOT / "scripts/export-applied-control-plane-handoff.py"
+    handoff_schema_path = ROOT / "contracts/applied-control-plane-handoff.schema.json"
+    if not handoff_exporter_path.is_file():
+        error("missing applied control-plane handoff exporter")
+    if not handoff_schema_path.is_file():
+        error("missing applied control-plane handoff schema")
+    if handoff_exporter_path.is_file():
+        handoff_exporter = handoff_exporter_path.read_text(
+            "utf-8", errors="ignore"
+        )
+        for required_handoff_gate in (
+            "artifact_signer_identity_contract",
+            "github_config_identity_handoff",
+            '"project_id"',
+            '"attestor_names"',
+            '"attestor_key_versions"',
+            '"BLOCK_AND_AUDIT_LOG"',
+            '"deployment-attestor"',
+            "infrastructure-live source tree must be clean before export",
+            "source commit differs from --expected-source-commit",
+            "applied handoff evidence must be written outside the repository",
+        ):
+            if required_handoff_gate not in handoff_exporter:
+                error(
+                    "applied control-plane handoff exporter omits: "
+                    f"{required_handoff_gate}"
+                )
+    if "export-applied-control-plane-handoff.py" not in identity_handoff_docs:
+        error("GitOps identity handoff does not invoke the applied-output exporter")
     control_plane_iam = (
         ROOT / "5-workloads/shared/control-plane-identities/main.tf"
     ).read_text("utf-8", errors="ignore")

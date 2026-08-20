@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Mindclade applied infrastructure control-plane handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "producer",
+    "source_commit",
+    "environment",
+    "source_units",
+    "variables"
+  ],
+  "properties": {
+    "contract_version": { "const": "1.0.0" },
+    "producer": { "const": "mindclade/infrastructure-live" },
+    "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "environment": { "const": "production" },
+    "source_units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "automation_iam",
+        "gitops_identities",
+        "binary_authorization"
+      ],
+      "properties": {
+        "automation_iam": { "const": "1-org/automation-iam" },
+        "gitops_identities": { "const": "5-workloads/shared/control-plane-identities" },
+        "binary_authorization": { "const": "5-workloads/production/binary-authorization" }
+      }
+    },
+    "variables": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "SA_ARTIFACT_SIGNER",
+        "SA_GITOPS_RENDER",
+        "SA_GITOPS_VERIFIER",
+        "BINAUTHZ_BUILD_ATTESTOR_PROJECT",
+        "BINAUTHZ_BUILD_ATTESTOR",
+        "BINAUTHZ_QUALIFICATION_ATTESTOR_PROJECT",
+        "BINAUTHZ_QUALIFICATION_ATTESTOR",
+        "BINAUTHZ_DEPLOYMENT_ATTESTOR_PROJECT",
+        "BINAUTHZ_DEPLOYMENT_ATTESTOR",
+        "BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION"
+      ],
+      "properties": {
+        "SA_ARTIFACT_SIGNER": { "$ref": "#/$defs/serviceAccount" },
+        "SA_GITOPS_RENDER": { "$ref": "#/$defs/serviceAccount" },
+        "SA_GITOPS_VERIFIER": { "$ref": "#/$defs/serviceAccount" },
+        "BINAUTHZ_BUILD_ATTESTOR_PROJECT": { "$ref": "#/$defs/projectId" },
+        "BINAUTHZ_BUILD_ATTESTOR": { "const": "build-attestor" },
+        "BINAUTHZ_QUALIFICATION_ATTESTOR_PROJECT": { "$ref": "#/$defs/projectId" },
+        "BINAUTHZ_QUALIFICATION_ATTESTOR": { "const": "qualification-attestor" },
+        "BINAUTHZ_DEPLOYMENT_ATTESTOR_PROJECT": { "$ref": "#/$defs/projectId" },
+        "BINAUTHZ_DEPLOYMENT_ATTESTOR": { "const": "deployment-attestor" },
+        "BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION": {
+          "type": "string",
+          "pattern": "^projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/locations/[a-z0-9-]+/keyRings/[A-Za-z0-9_-]+/cryptoKeys/[A-Za-z0-9_-]+/cryptoKeyVersions/[1-9][0-9]*$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "serviceAccount": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\\.iam\\.gserviceaccount\\.com$"
+    },
+    "projectId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$"
+    }
+  }
+}

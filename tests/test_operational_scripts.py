@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import tempfile
 import unittest
@@ -30,6 +31,10 @@ SCOPE = load("terragrunt_scope", "scripts/terragrunt-scope.py")
 ACCOUNT = load("bootstrap_account", "scripts/bootstrap-account.py")
 ACCOUNT_VALIDATOR = load("validate_account", "scripts/validate-account.py")
 STATE_PREFIX = load("classify_state_prefix", "scripts/classify-state-prefix.py")
+HANDOFF = load(
+    "export_applied_control_plane_handoff",
+    "scripts/export-applied-control-plane-handoff.py",
+)
 
 
 class PlanSafetyTest(unittest.TestCase):
@@ -139,7 +144,9 @@ class PlanSafetyTest(unittest.TestCase):
 
 
 class ImportRuntimeContractTest(unittest.TestCase):
-    def test_every_provider_lock_uses_terraform_115_normalized_constraints(self) -> None:
+    def test_every_provider_lock_uses_terraform_115_normalized_constraints(
+        self,
+    ) -> None:
         locks = sorted(ROOT.rglob(".terraform.lock.hcl"))
         self.assertEqual(len(locks), 103)
         for lock in locks:
@@ -162,15 +169,13 @@ class ImportRuntimeContractTest(unittest.TestCase):
             'baseline_org_policy_adoption = get_env("ORG_POLICY_ACTIVATION_PHASE", "") == "baseline"',
             policy,
         )
-        self.assertIn(
-            "skip_outputs = local.baseline_org_policy_adoption", policy
-        )
-        self.assertIn(
-            "mock_outputs = local.baseline_org_policy_adoption ? {", policy
-        )
+        self.assertIn("skip_outputs = local.baseline_org_policy_adoption", policy)
+        self.assertIn("mock_outputs = local.baseline_org_policy_adoption ? {", policy)
         self.assertNotIn("skip_outputs = true", policy)
 
-    def test_baseline_mock_commands_are_minimal_and_support_plan_rendering(self) -> None:
+    def test_baseline_mock_commands_are_minimal_and_support_plan_rendering(
+        self,
+    ) -> None:
         policy = (ROOT / "1-org/org-policies/terragrunt.hcl").read_text(
             encoding="utf-8"
         )
@@ -188,9 +193,9 @@ class ImportRuntimeContractTest(unittest.TestCase):
         )
 
     def test_domain_restricted_sharing_requires_one_exact_customer_id(self) -> None:
-        variables = (
-            ROOT / "1-org/org-policies/module/variables.tf"
-        ).read_text(encoding="utf-8")
+        variables = (ROOT / "1-org/org-policies/module/variables.tf").read_text(
+            encoding="utf-8"
+        )
         self.assertIn(
             'length(var.list_policies["iam.allowedPolicyMemberDomains"].allowed_values) == 1',
             variables,
@@ -204,7 +209,7 @@ class ImportRuntimeContractTest(unittest.TestCase):
             variables,
         )
         self.assertNotIn(
-            'allowed_values == [var.cloud_identity_customer_id]', variables
+            "allowed_values == [var.cloud_identity_customer_id]", variables
         )
 
     def test_import_runbook_has_fail_closed_resume_path(self) -> None:
@@ -218,6 +223,126 @@ class ImportRuntimeContractTest(unittest.TestCase):
             'previous_generation="${current_generation}"',
         ):
             self.assertIn(required, runbook)
+
+
+class AppliedControlPlaneHandoffTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.previous = {
+            name: os.environ.get(name)
+            for name in (
+                "WIF_PROVIDER_SIGNER",
+                "ARTIFACT_SIGNER_PRINCIPAL",
+                "ARTIFACT_SIGNER_JOB_WORKFLOW_REF",
+            )
+        }
+        os.environ["WIF_PROVIDER_SIGNER"] = (
+            "projects/123456789/locations/global/workloadIdentityPools/github/"
+            "providers/mindclade-internal-monorepo"
+        )
+        os.environ["ARTIFACT_SIGNER_PRINCIPAL"] = (
+            "principal://iam.googleapis.com/projects/123456789/locations/global/"
+            "workloadIdentityPools/github/subject/repo:mindclade@316676129/"
+            "mindclade-internal-monorepo@1333792222:environment:release"
+        )
+        os.environ["ARTIFACT_SIGNER_JOB_WORKFLOW_REF"] = (
+            "mindclade/.github/.github/workflows/reusable-binauthz-sign.yml@"
+            "refs/tags/v3.0.0"
+        )
+
+    def tearDown(self) -> None:
+        for name, value in self.previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+    @staticmethod
+    def output(value, sensitive: bool = False):
+        return {"sensitive": sensitive, "type": "dynamic", "value": value}
+
+    def fixtures(self):
+        automation = {
+            "artifact_signer_identity_contract": self.output(
+                {
+                    "WIF_PROVIDER_SIGNER": os.environ["WIF_PROVIDER_SIGNER"],
+                    "SA_ARTIFACT_SIGNER": (
+                        "sa-artifact-signer@mc-common-ci.iam.gserviceaccount.com"
+                    ),
+                    "ARTIFACT_SIGNER_PRINCIPAL": os.environ[
+                        "ARTIFACT_SIGNER_PRINCIPAL"
+                    ],
+                    "ARTIFACT_SIGNER_JOB_WORKFLOW_REF": os.environ[
+                        "ARTIFACT_SIGNER_JOB_WORKFLOW_REF"
+                    ],
+                }
+            )
+        }
+        gitops = {
+            "github_config_identity_handoff": self.output(
+                {
+                    "SA_GITOPS_RENDER": (
+                        "sa-gitops-render@mc-common-ci.iam.gserviceaccount.com"
+                    ),
+                    "SA_GITOPS_VERIFIER": (
+                        "sa-gitops-verifier@mc-common-ci.iam.gserviceaccount.com"
+                    ),
+                }
+            )
+        }
+        binauthz = {
+            "project_id": self.output("mc-production-platform"),
+            "attestor_names": self.output({name: name for name in HANDOFF.ATTESTORS}),
+            "attestor_key_versions": self.output(
+                {
+                    "deployment-attestor": (
+                        "projects/mc-common-security/locations/us-central1/keyRings/"
+                        "binauthz/cryptoKeys/deployment/cryptoKeyVersions/1"
+                    )
+                }
+            ),
+            "enforcement_mode": self.output("BLOCK_AND_AUDIT_LOG"),
+        }
+        return automation, gitops, binauthz
+
+    def test_compiles_only_exact_applied_values(self) -> None:
+        automation, gitops, binauthz = self.fixtures()
+        contract = HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+        self.assertEqual(contract["environment"], "production")
+        self.assertEqual(
+            contract["variables"]["BINAUTHZ_DEPLOYMENT_ATTESTOR"],
+            "deployment-attestor",
+        )
+        self.assertEqual(len(contract["variables"]), 10)
+
+    def test_sensitive_output_is_rejected(self) -> None:
+        automation, gitops, binauthz = self.fixtures()
+        binauthz["project_id"]["sensitive"] = True
+        with self.assertRaises(ValueError):
+            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+
+    def test_mock_and_wrong_environment_outputs_are_rejected(self) -> None:
+        automation, gitops, binauthz = self.fixtures()
+        binauthz["project_id"]["value"] = "mock-production-platform"
+        with self.assertRaises(ValueError):
+            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+        automation, gitops, binauthz = self.fixtures()
+        binauthz["enforcement_mode"]["value"] = "DRYRUN_AUDIT_LOG_ONLY"
+        with self.assertRaises(ValueError):
+            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+
+    def test_mutable_key_and_bootstrap_identity_drift_are_rejected(self) -> None:
+        automation, gitops, binauthz = self.fixtures()
+        binauthz["attestor_key_versions"]["value"]["deployment-attestor"] = (
+            "projects/mc-common-security/locations/us/keyRings/r/cryptoKeys/k"
+        )
+        with self.assertRaises(ValueError):
+            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+        automation, gitops, binauthz = self.fixtures()
+        automation["artifact_signer_identity_contract"]["value"][
+            "ARTIFACT_SIGNER_JOB_WORKFLOW_REF"
+        ] = "mindclade/.github/.github/workflows/reusable-binauthz-sign.yml@main"
+        with self.assertRaises(ValueError):
+            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
 
 
 if __name__ == "__main__":

@@ -15,13 +15,13 @@ attestation.
 | `ARTIFACT_SIGNER_PRINCIPAL` | `bootstrap.artifact_signer_principal` |
 | `ARTIFACT_SIGNER_JOB_WORKFLOW_REF` | `bootstrap.artifact_signer_job_workflow_ref` |
 | `SA_ARTIFACT_SIGNER` | `1-org/automation-iam.artifact_signer_identity_contract` |
-| `BINAUTHZ_BUILD_ATTESTOR_PROJECT` | Applied Buildkite build-attestor module output |
-| `BINAUTHZ_BUILD_ATTESTOR` | Applied Buildkite build-attestor module output |
-| `BINAUTHZ_QUALIFICATION_ATTESTOR_PROJECT` | Applied qualification-attestor module output |
-| `BINAUTHZ_QUALIFICATION_ATTESTOR` | Applied qualification-attestor module output |
-| `BINAUTHZ_DEPLOYMENT_ATTESTOR_PROJECT` | Applied production deployment-attestor module output |
-| `BINAUTHZ_DEPLOYMENT_ATTESTOR` | Applied production deployment-attestor module output |
-| `BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION` | Applied production deployment-attestor module output naming one immutable key version |
+| `BINAUTHZ_BUILD_ATTESTOR_PROJECT` | `5-workloads/production/binary-authorization.project_id` |
+| `BINAUTHZ_BUILD_ATTESTOR` | `5-workloads/production/binary-authorization.attestor_names["build-attestor"]` |
+| `BINAUTHZ_QUALIFICATION_ATTESTOR_PROJECT` | `5-workloads/production/binary-authorization.project_id` |
+| `BINAUTHZ_QUALIFICATION_ATTESTOR` | `5-workloads/production/binary-authorization.attestor_names["qualification-attestor"]` |
+| `BINAUTHZ_DEPLOYMENT_ATTESTOR_PROJECT` | `5-workloads/production/binary-authorization.project_id` |
+| `BINAUTHZ_DEPLOYMENT_ATTESTOR` | `5-workloads/production/binary-authorization.attestor_names["deployment-attestor"]` |
+| `BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION` | `5-workloads/production/binary-authorization.attestor_key_versions["deployment-attestor"]` |
 
 `bootstrap` enforces the immutable organization/repository IDs, exact `release` environment
 subject, exact audience, and exact
@@ -29,10 +29,19 @@ subject, exact audience, and exact
 `job_workflow_ref`. `infrastructure-live` binds that one exported principal to the signer
 service account. Do not replace it with a repository-wide principal set.
 
-The private `binauthz` module is not present in this checkout, so its concrete output names
-remain **Unknown**. Do not construct a key-version path, assume version `1`, or publish values
-from comments/mocks. Before activation, the module must publish the seven attestor fields
-above, pass the exact-ref interface preflight, and produce a reviewed credentialed plan.
+The private `binauthz` module publishes `project_id`, `attestor_names`, and
+`attestor_key_versions`. The live pin must reference an immutable released module revision
+containing those outputs and the create/get/list-only occurrence contract. Do not construct a
+project, service-account email, attestor name, or key-version path; do not assume key version
+`1`; and never publish comments, mocks, plan placeholders, or sensitive outputs.
+
+After all three owning units are applied, run
+`scripts/export-applied-control-plane-handoff.py`. The exporter reads only the exact
+`1-org/automation-iam`, `5-workloads/shared/control-plane-identities`, and
+`5-workloads/production/binary-authorization` state outputs. It verifies the bootstrap signer
+tuple, blocking production enforcement, exact attestor names, immutable KMS key version, clean
+source SHA, and non-sensitive/non-mock values, then writes a mode-0600 JSON contract outside
+the repository. `github-config` consumes that file and must not accept free-form replacements.
 
 `qualification-attestor` includes vulnerability/security analysis and numerical/release
 qualification. It replaces the ambiguous `vuln-scan-attestor`; vulnerability is not a fourth
