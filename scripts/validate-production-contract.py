@@ -383,9 +383,12 @@ elif REPOSITORY == "infrastructure-live":
             error("lower environments must rehearse build-attestor in dry-run")
 
     account_text = (ROOT / "account.hcl").read_text("utf-8", errors="ignore")
-    if "buildkite_wif_pool_name" not in account_text:
+    if (
+        'get_env("BUILDKITE_WIF_ENABLED", "false")' not in account_text
+        or 'get_env("BUILDKITE_WIF_POOL_NAME", "")' not in account_text
+    ):
         error(
-            "account contract does not require the bootstrap-managed Buildkite WIF pool"
+            "account contract does not model optional bootstrap-managed Buildkite WIF"
         )
     if 'get_env("CLOUD_IDENTITY_CUSTOMER_ID")' not in account_text:
         error("account contract omits the immutable Cloud Identity customer ID")
@@ -397,12 +400,24 @@ elif REPOSITORY == "infrastructure-live":
         "utf-8", errors="ignore"
     )
     if (
-        '"BUILDKITE_WIF_POOL_NAME"' not in bootstrap_account
-        or '"workload_identity_pool"' not in bootstrap_account
+        '"BUILDKITE_WIF_ENABLED"' not in bootstrap_account
+        or 'values["BUILDKITE_WIF_POOL_NAME"]' not in bootstrap_account
+        or "validated_buildkite" not in bootstrap_account
     ):
         error(
             "bootstrap account exporter omits the bootstrap-managed Buildkite WIF pool"
         )
+    initial_import = (ROOT / "docs/initial-import.md").read_text(
+        "utf-8", errors="ignore"
+    )
+    for required in (
+        "scripts/classify-state-prefix.py",
+        "state_list_status=$?",
+        "One or more URLs matched no objects.",
+        "permission, authentication, network, retention, or metadata-read error",
+    ):
+        if required not in initial_import:
+            error(f"initial import fresh-prefix guard omits: {required}")
     if (
         '"platform_contract"' not in bootstrap_account
         or '"output"' not in bootstrap_account

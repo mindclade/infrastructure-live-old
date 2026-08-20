@@ -20,7 +20,8 @@ locals {
   cicd_project_number     = get_env("BOOTSTRAP_CICD_PROJECT_NUMBER")
   state_location          = get_env("STATE_LOCATION", "US")
   github_wif_pool_name    = get_env("GITHUB_WIF_POOL_NAME")
-  buildkite_wif_pool_name = get_env("BUILDKITE_WIF_POOL_NAME")
+  buildkite_wif_enabled   = lower(get_env("BUILDKITE_WIF_ENABLED", "false")) == "true"
+  buildkite_wif_pool_name = get_env("BUILDKITE_WIF_POOL_NAME", "")
 
   # Bootstrap owns the issuer/provider condition; infrastructure-live owns the normal-plane
   # signer service account and binds only this exact protected-release principal to it.

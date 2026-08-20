@@ -24,7 +24,6 @@ REQUIRED = {
     "BOOTSTRAP_CICD_PROJECT_ID": r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$",
     "BOOTSTRAP_CICD_PROJECT_NUMBER": r"^[0-9]+$",
     "GITHUB_WIF_POOL_NAME": r"^projects/[0-9]+/locations/global/workloadIdentityPools/[a-z0-9-]+$",
-    "BUILDKITE_WIF_POOL_NAME": r"^projects/[0-9]+/locations/global/workloadIdentityPools/buildkite$",
     "WIF_PROVIDER_SIGNER": r"^projects/[0-9]+/locations/global/workloadIdentityPools/github/providers/gh-mindclade-internal-monorepo$",
     "ARTIFACT_SIGNER_PRINCIPAL": r"^principal://iam\.googleapis\.com/projects/[0-9]+/locations/global/workloadIdentityPools/github/subject/repo:mindclade@[0-9]+/mindclade-internal-monorepo@[0-9]+:environment:release$",
     "ARTIFACT_SIGNER_JOB_WORKFLOW_REF": r"^mindclade/\.github/\.github/workflows/reusable-binauthz-sign\.yml@refs/tags/v3\.0\.0$",
@@ -45,7 +44,26 @@ OPTIONAL = {
     "DOMAIN": "mindclade.com",
     "MONOREPO_ORG": "mindclade",
     "ORG_POLICY_ACTIVATION_PHASE": "baseline",
+    "BUILDKITE_WIF_ENABLED": "false",
+    "BUILDKITE_WIF_POOL_NAME": "",
 }
+
+
+def buildkite_errors(enabled: str, pool: str) -> list[str]:
+    errors = []
+    if enabled not in {"true", "false"}:
+        errors.append("BUILDKITE_WIF_ENABLED must be true or false")
+    elif enabled == "true":
+        if not re.fullmatch(
+            r"^projects/[0-9]+/locations/global/workloadIdentityPools/buildkite$",
+            pool,
+        ):
+            errors.append(
+                "enabled Buildkite federation requires its exact bootstrap pool"
+            )
+    elif pool:
+        errors.append("disabled Buildkite federation must not publish a pool")
+    return errors
 
 
 def source_errors() -> list[str]:
@@ -87,6 +105,11 @@ def runtime_values() -> tuple[dict[str, str], list[str]]:
         errors.append("invalid MONOREPO_ORG")
     if values["ORG_POLICY_ACTIVATION_PHASE"] not in {"baseline", "extended"}:
         errors.append("ORG_POLICY_ACTIVATION_PHASE must be baseline or extended")
+    errors.extend(
+        buildkite_errors(
+            values["BUILDKITE_WIF_ENABLED"], values["BUILDKITE_WIF_POOL_NAME"]
+        )
+    )
     return dict(sorted(values.items())), errors
 
 
