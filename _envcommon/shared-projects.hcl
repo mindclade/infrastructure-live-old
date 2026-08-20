@@ -15,7 +15,7 @@ locals {
 
   environment    = local.env_vars.locals.environment
   prefix         = local.account_vars.locals.prefix
-  module_version = "v0.2.0"
+  module_version = "v0.4.0"
 }
 
 terraform {

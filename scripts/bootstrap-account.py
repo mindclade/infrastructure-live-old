@@ -144,6 +144,55 @@ def validated_release_identities(
     return validated
 
 
+def validated_dr_evidence_identity(
+    value: Any, github_pool: str, github_org: str
+) -> dict[str, Any]:
+    required_fields = {
+        "workload_identity_provider",
+        "job_workflow_ref",
+        "principals",
+    }
+    if not isinstance(value, dict) or set(value) != required_fields:
+        raise ValueError("platform_contract DR evidence identity is not exact")
+    if value["workload_identity_provider"] != f"{github_pool}/providers/gh-dr-evidence":
+        raise ValueError("platform_contract DR evidence provider is wrong")
+    expected_job = (
+        f"{github_org}/.github/.github/workflows/"
+        "reusable-dr-evidence.yml@refs/tags/v4.0.0"
+    )
+    if value["job_workflow_ref"] != expected_job:
+        raise ValueError("platform_contract DR evidence reusable workflow is wrong")
+    expected_principals = {
+        f"{repository}:{environment}"
+        for repository in (
+            "bootstrap",
+            "github-config",
+            "infrastructure-live",
+            "gitops",
+        )
+        for environment in ("scratch", "staging")
+    }
+    principals = value["principals"]
+    if not isinstance(principals, dict) or set(principals) != expected_principals:
+        raise ValueError("platform_contract DR evidence principal inventory is not exact")
+    for key, principal in principals.items():
+        repository, environment = key.split(":", maxsplit=1)
+        expected_pattern = (
+            rf"principal://iam\.googleapis\.com/{re.escape(github_pool)}/subject/"
+            rf"dr-evidence:repo:{re.escape(github_org)}@[0-9]+/"
+            rf"{re.escape(repository)}@[0-9]+:environment:{re.escape(environment)}"
+        )
+        if not isinstance(principal, str) or re.fullmatch(
+            expected_pattern, principal
+        ) is None:
+            raise ValueError(f"platform_contract DR evidence principal is wrong: {key}")
+    return {
+        "job_workflow_ref": value["job_workflow_ref"],
+        "principals": {key: principals[key] for key in sorted(principals)},
+        "workload_identity_provider": value["workload_identity_provider"],
+    }
+
+
 def main() -> int:
     args = parse_args()
     bootstrap = args.bootstrap.resolve()
@@ -167,7 +216,7 @@ def main() -> int:
             capture_output=True,
         )
         contract = json.loads(output.stdout)
-        if contract.get("contract_version") != "1.3.0":
+        if contract.get("contract_version") != "1.4.0":
             raise ValueError(
                 f"unsupported bootstrap platform_contract version: {contract.get('contract_version', 'missing')}"
             )
@@ -185,6 +234,9 @@ def main() -> int:
         release_identities = validated_release_identities(
             need(github, "artifact_release_identities", "github"), pool, github_org
         )
+        dr_evidence_identity = validated_dr_evidence_identity(
+            need(github, "dr_evidence_identity", "github"), pool, github_org
+        )
         values = {
             "GCP_ORG_ID": need(contract, "organization_id", "platform_contract"),
             "BILLING_ACCOUNT": need(contract, "billing_account", "platform_contract"),
@@ -200,6 +252,9 @@ def main() -> int:
             "GITHUB_WIF_POOL_NAME": pool,
             "ARTIFACT_RELEASE_IDENTITIES_JSON": json.dumps(
                 release_identities, sort_keys=True, separators=(",", ":")
+            ),
+            "DR_EVIDENCE_IDENTITY_JSON": json.dumps(
+                dr_evidence_identity, sort_keys=True, separators=(",", ":")
             ),
             "WIF_PROVIDER_SIGNER": need(
                 need(github, "artifact_signer", "github"),

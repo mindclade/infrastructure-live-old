@@ -41,7 +41,7 @@ dependency "access_logs" {
 }
 
 locals {
-  module_version = "v0.3.0"
+  module_version = "v0.4.0"
   writer_member  = "serviceAccount:${dependency.automation.outputs.dr_evidence_identity_contract.SA_DR_EVIDENCE_WRITER}"
 }
 

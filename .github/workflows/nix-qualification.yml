@@ -1,0 +1,32 @@
+---
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+
+name: Nix qualification
+
+on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+  schedule:
+    - cron: '11 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-qualification-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nix:
+    name: nix
+    uses: mindclade/.github/.github/workflows/reusable-nix-qualification.yml@v4.1.0
+    with:
+      watch-path-regex: '(^|/)(flake\.nix|flake\.lock|[^/]+\.nix|\.terraform-version|\.terragrunt-version)$|^\.github/workflows/.*nix.*\.ya?ml$'
+      ci-command: make validate
+      enable-aarch64-darwin: true
+      reproducibility-targets: |-
+        .#packages.x86_64-linux.terraform
+        .#packages.x86_64-linux.terragrunt

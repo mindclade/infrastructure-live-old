@@ -39,7 +39,7 @@ dependency "kms" {
 }
 
 locals {
-  module_version = "164f2998f9540243a0df769dc78c96677134c70a"
+  module_version = "v0.4.0"
 }
 
 terraform {

@@ -10,11 +10,11 @@ locals {
   account_vars = read_terragrunt_config("${get_repo_root()}/account.hcl")
 
   environment    = local.env_vars.locals.environment
-  module_version = "v0.1.1"
+  module_version = "v0.4.0"
 }
 
 terraform {
-  source = "${local.root.locals.module_source_base}//storage?ref=${local.module_version}"
+  source = "${local.root.locals.module_source_base}//storage_collection?ref=${local.module_version}"
 }
 
 inputs = {
@@ -26,6 +26,10 @@ inputs = {
   public_access_prevention    = "enforced"
 
   versioning = true
+
+  # Any per-bucket retention_days value becomes an irreversible Bucket Lock. The module
+  # refuses to plan that transition unless the shared contract acknowledges it explicitly.
+  retention_lock_confirmation = "LOCKING A CLOUD STORAGE RETENTION POLICY IS IRREVERSIBLE"
 
   # CMEK from the environment keyring in 1-org/kms.
   encryption_key = "projects/${local.account_vars.locals.seed_project_id}/locations/${local.account_vars.locals.region}/keyRings/${local.account_vars.locals.prefix}-${local.environment}/cryptoKeys/storage"

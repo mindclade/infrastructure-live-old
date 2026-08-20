@@ -7,9 +7,10 @@
 """Validate live Terragrunt module references against an exact monorepo Git checkout.
 
 This script executes no monorepo code. It reads Git trees at each pinned module ref and checks
-that every referenced module exists and that each Terragrunt input name is declared by that
-module. Terraform/Terragrunt planning remains the authoritative semantic validation, but this
-preflight turns missing/scaffolded module interfaces into a small, explicit failure.
+that every referenced module exists, each Terragrunt input name is declared by that module,
+and every variable without a default is supplied by the unit or its shared environment
+configuration. Terraform/Terragrunt planning remains the authoritative semantic validation,
+but this preflight turns missing/scaffolded module interfaces into a small, explicit failure.
 """
 
 from __future__ import annotations
@@ -84,6 +85,29 @@ def top_level_input_keys(text: str) -> set[str]:
     return keys
 
 
+def variable_contract(text: str) -> tuple[set[str], set[str]]:
+    """Return all declared variables and the subset that have no default."""
+    declared: set[str] = set()
+    required: set[str] = set()
+    for match in re.finditer(r'^\s*variable\s+"([^"]+)"\s*\{', text, re.M):
+        name = match.group(1)
+        body = block(text[match.start() :], r'^\s*variable\s+"[^"]+"\s*\{')
+        if body is None:
+            raise ValueError(f"variable {name} has no readable HCL block")
+        declared.add(name)
+
+        depth = 0
+        has_default = False
+        for line in body.splitlines():
+            clean = strip_strings_and_comments(line)
+            if depth == 0 and re.match(r"\s*default\s*=", clean):
+                has_default = True
+            depth += clean.count("{") - clean.count("}")
+        if not has_default:
+            required.add(name)
+    return declared, required
+
+
 def module_contract(text: str) -> tuple[str, str] | None:
     source = re.search(
         r'(?s)terraform\s*\{.*?source\s*=\s*"[^\"]*//([^?\"]+)\?ref=\$\{local\.module_version\}"',
@@ -107,7 +131,47 @@ def envcommon_path(unit_text: str) -> Path | None:
     return ROOT / "_envcommon" / m.group(1) if m else None
 
 
-def module_tf(repo: Path, ref: str, module: str) -> str:
+def validate_candidate_version(repo: Path, candidate_version: str) -> None:
+    """Require the candidate ref to match the monorepo's explicit planned contract."""
+    policy_path = repo / "infra/terraform/governance/version.toml"
+    if not policy_path.is_file():
+        raise RuntimeError(f"candidate contract policy missing: {policy_path}")
+    try:
+        policy_text = policy_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(f"candidate contract policy is unreadable: {exc}") from exc
+
+    policy: dict[str, str] = {}
+    for key in ("contract_version", "status"):
+        matches = re.findall(
+            rf'^\s*{key}\s*=\s*"([^"\r\n]+)"\s*(?:#.*)?$', policy_text, re.M
+        )
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"candidate contract policy must declare exactly one string {key}"
+            )
+        policy[key] = matches[0]
+
+    expected = f"v{policy['contract_version']}"
+    if policy["status"] != "planned" or candidate_version != expected:
+        raise RuntimeError(
+            "candidate ref must equal the monorepo's planned contract version "
+            f"({expected}); found {candidate_version} with status {policy['status']!r}"
+        )
+
+
+def module_tf(
+    repo: Path, ref: str, module: str, candidate_version: str | None = None
+) -> str:
+    if candidate_version is not None and ref == candidate_version:
+        directory = repo / MODULE_PREFIX / module
+        names = sorted(directory.glob("*.tf")) if directory.is_dir() else []
+        if not names:
+            raise RuntimeError(
+                f"planned {ref}:{MODULE_PREFIX}/{module} does not contain Terraform source"
+            )
+        return "\n".join(path.read_text(encoding="utf-8") for path in names)
+
     prefix = f"{MODULE_PREFIX}/{module}/"
     names = [
         n
@@ -126,15 +190,31 @@ def module_tf(repo: Path, ref: str, module: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--monorepo", required=True, type=Path)
+    ap.add_argument(
+        "--candidate-version",
+        help=(
+            "validate only callers pinned to this planned version against the monorepo "
+            "worktree; this source-review mode never proves an immutable release"
+        ),
+    )
     args = ap.parse_args()
     repo = args.monorepo.resolve()
     if not (repo / ".git").exists():
         print(f"ERROR: --monorepo must be a Git checkout: {repo}", file=sys.stderr)
         return 2
+    if args.candidate_version is not None:
+        if not re.fullmatch(r"v\d+\.\d+\.\d+", args.candidate_version):
+            print("ERROR: --candidate-version must be a full vMAJOR.MINOR.PATCH tag", file=sys.stderr)
+            return 2
+        try:
+            validate_candidate_version(repo, args.candidate_version)
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
 
     errors: list[str] = []
     checked = 0
-    cache: dict[tuple[str, str], set[str]] = {}
+    cache: dict[tuple[str, str], tuple[set[str], set[str]]] = {}
 
     for config in sorted(ROOT.rglob("terragrunt.hcl")):
         if any(p in {".terragrunt-cache", ".terraform"} for p in config.parts):
@@ -161,19 +241,26 @@ def main() -> int:
         inputs = top_level_input_keys(contract_text) | top_level_input_keys(unit_text)
         key = (ref, module)
         try:
-            variables = cache.get(key)
-            if variables is None:
-                tf = module_tf(repo, ref, module)
-                variables = set(re.findall(r'variable\s+"([^"]+)"', tf))
+            contract = cache.get(key)
+            if contract is None:
+                tf = module_tf(repo, ref, module, args.candidate_version)
+                variables, required = variable_contract(tf)
                 if not variables:
                     raise RuntimeError(
                         f"{ref}:{MODULE_PREFIX}/{module} declares no Terraform variables (scaffold/incomplete module)"
                     )
-                cache[key] = variables
+                cache[key] = (variables, required)
+            else:
+                variables, required = contract
             extra = sorted(inputs - variables)
             if extra:
                 errors.append(
                     f"{config.relative_to(ROOT)} -> {module}@{ref}: undeclared input(s): {', '.join(extra)}"
+                )
+            missing = sorted(required - inputs)
+            if missing:
+                errors.append(
+                    f"{config.relative_to(ROOT)} -> {module}@{ref}: missing required input(s): {', '.join(missing)}"
                 )
             checked += 1
         except RuntimeError as exc:
@@ -187,8 +274,14 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    suffix = (
+        f"; {args.candidate_version} was read from the planned worktree and is not a released ref"
+        if args.candidate_version is not None
+        else ""
+    )
     print(
-        f"module-interface preflight passed: {checked} unit(s), {len(cache)} module/ref pair(s)"
+        f"module-interface preflight passed: {checked} unit(s), "
+        f"{len(cache)} module/ref pair(s){suffix}"
     )
     return 0
 

@@ -2,18 +2,30 @@ SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := validate
 MONOREPO ?= ../mindclade-internal-monorepo
 GITOPS ?= ../gitops
+CANDIDATE_MODULE_VERSION ?= v0.4.0
 
-.PHONY: validate validate-integration validate-module-interfaces validate-gitops-integration validate-argocd-image-exceptions validate-dns-portfolio validate-repository-home test format plan-development plan-staging plan-production
+.PHONY: validate validate-integration validate-source-integration validate-module-interfaces validate-module-candidate validate-capacity-contract validate-capacity-candidate validate-gitops-integration validate-argocd-image-exceptions validate-dns-portfolio validate-repository-home test format plan-development plan-staging plan-production
 validate: validate-production-contract validate-repository-home validate-argocd-image-exceptions validate-dns-portfolio test
 	python3 scripts/verify-provider-locks.py
 	./scripts/validate-live-tree.py
 	./scripts/validate-dependency-order.py
 	terragrunt hcl fmt --check --diff
 
-validate-integration: validate validate-module-interfaces
+validate-integration: validate validate-module-interfaces validate-capacity-contract
+
+validate-source-integration: validate validate-module-candidate validate-capacity-candidate
 
 validate-module-interfaces:
 	python3 scripts/validate-module-interfaces.py --monorepo "$(MONOREPO)"
+
+validate-module-candidate:
+	python3 scripts/validate-module-interfaces.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"
+
+validate-capacity-contract:
+	python3 scripts/validate-capacity-contract.py --monorepo "$(MONOREPO)"
+
+validate-capacity-candidate:
+	python3 scripts/validate-capacity-contract.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"
 
 validate-argocd-image-exceptions:
 	python3 scripts/validate-argocd-image-exceptions.py

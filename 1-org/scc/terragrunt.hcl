@@ -22,7 +22,7 @@ terraform {
 }
 
 locals {
-  module_version = "v0.1.1"
+  module_version = "v0.4.0"
 }
 
 dependency "common_projects" {
@@ -32,14 +32,19 @@ dependency "common_projects" {
       logging  = "mc-common-logging"
       security = "mc-common-security"
     }
+    project_numbers = {
+      logging  = "000000000001"
+      security = "000000000002"
+    }
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
 inputs = {
-  org_id     = include.root.locals.org_id
-  project_id = dependency.common_projects.outputs.project_ids["security"]
-  location   = include.root.locals.region
+  org_id         = include.root.locals.org_id
+  project_id     = dependency.common_projects.outputs.project_ids["security"]
+  project_number = dependency.common_projects.outputs.project_numbers["security"]
+  location       = include.root.locals.region
 
   # ---------------------------------------------------------------------------------------
   # Built-in services

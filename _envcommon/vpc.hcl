@@ -24,7 +24,7 @@ locals {
 
   prefix         = local.account_vars.locals.prefix
   region         = local.account_vars.locals.region
-  module_version = "v0.1.1"
+  module_version = "v0.4.0"
 
   # ---------------------------------------------------------------------------------------
   # Per-environment settings

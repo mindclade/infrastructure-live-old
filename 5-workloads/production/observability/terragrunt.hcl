@@ -18,11 +18,11 @@ include "root" {
 }
 
 terraform {
-  source = "${include.root.locals.module_source_base}//monitoring?ref=${local.module_version}"
+  source = "${include.root.locals.module_source_base}//environment_alerting?ref=${local.module_version}"
 }
 
 locals {
-  module_version = "v0.1.0"
+  module_version = "v0.4.0"
   env_vars       = read_terragrunt_config(find_in_parent_folders("env.hcl"))
   env            = local.env_vars.locals.environment
 }
@@ -168,16 +168,7 @@ inputs = {
   # This is the production SLO source contract, not evidence that its query or notification
   # route has been exercised. Burn-rate behavior and escalation delivery remain connected
   # activation gates.
-  slos = {
-    runtime-gateway-availability = {
-      display_name = "Runtime gateway availability"
-      goal         = 0.99
-      rolling_days = 28
-      service      = "serving-runtime-gateway"
-      # The two-nines target is provisional until connected production qualification records
-      # representative traffic, validates the query, and obtains service-owner approval.
-    }
-  }
-
+  # SLO creation is blocked until service owners supply explicit project-scoped good and
+  # total metric filters. A goal without those filters is not an enforceable SLO contract.
   labels = include.root.locals.common_labels
 }

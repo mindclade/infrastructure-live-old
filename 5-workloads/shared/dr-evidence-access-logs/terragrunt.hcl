@@ -22,7 +22,7 @@ dependency "kms" {
 }
 
 locals {
-  module_version = "v0.3.0"
+  module_version = "v0.4.0"
 }
 
 terraform {

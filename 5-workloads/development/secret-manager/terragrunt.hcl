@@ -23,7 +23,7 @@ terraform {
 }
 
 locals {
-  module_version = "v0.1.0"
+  module_version = "v0.4.0"
   env_vars       = read_terragrunt_config(find_in_parent_folders("env.hcl"))
   env            = local.env_vars.locals.environment
 }
@@ -54,7 +54,8 @@ dependency "kms" {
 }
 
 inputs = {
-  project_id = dependency.shared.outputs.project_ids["platform"]
+  project_id  = dependency.shared.outputs.project_ids["platform"]
+  environment = local.env
 
   # The NUMBER, not the id. A Workload Identity direct principal addresses the project by
   # number while the pool inside it is addressed by id — the same project named two ways in

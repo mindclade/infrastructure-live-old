@@ -25,6 +25,7 @@ REQUIRED = {
     "BOOTSTRAP_CICD_PROJECT_NUMBER": r"^[0-9]+$",
     "GITHUB_WIF_POOL_NAME": r"^projects/[0-9]+/locations/global/workloadIdentityPools/[a-z0-9-]+$",
     "ARTIFACT_RELEASE_IDENTITIES_JSON": r"^\{.+\}$",
+    "DR_EVIDENCE_IDENTITY_JSON": r"^\{.+\}$",
     "TFSTATE_BUCKET_DEVELOPMENT": r"^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$",
     "TFSTATE_BUCKET_STAGING": r"^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$",
     "TFSTATE_BUCKET_PRODUCTION": r"^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$",
@@ -98,6 +99,55 @@ def release_identity_errors(payload: str, pool: str, organization: str) -> list[
     return errors
 
 
+def dr_evidence_identity_errors(
+    payload: str, pool: str, organization: str
+) -> list[str]:
+    try:
+        identity = json.loads(payload)
+    except json.JSONDecodeError:
+        return ["DR_EVIDENCE_IDENTITY_JSON is not valid JSON"]
+    required_fields = {
+        "workload_identity_provider",
+        "job_workflow_ref",
+        "principals",
+    }
+    if not isinstance(identity, dict) or set(identity) != required_fields:
+        return ["DR evidence identity contract is not exact"]
+    if identity["workload_identity_provider"] != f"{pool}/providers/gh-dr-evidence":
+        return ["DR evidence identity provider differs"]
+    if identity["job_workflow_ref"] != (
+        f"{organization}/.github/.github/workflows/"
+        "reusable-dr-evidence.yml@refs/tags/v4.0.0"
+    ):
+        return ["DR evidence reusable workflow differs"]
+    expected = {
+        f"{repository}:{environment}"
+        for repository in (
+            "bootstrap",
+            "github-config",
+            "infrastructure-live",
+            "gitops",
+        )
+        for environment in ("scratch", "staging")
+    }
+    principals = identity["principals"]
+    if not isinstance(principals, dict) or set(principals) != expected:
+        return ["DR evidence principal inventory is not exact"]
+    errors: list[str] = []
+    for key, principal in principals.items():
+        repository, environment = key.split(":", maxsplit=1)
+        expected_pattern = (
+            rf"principal://iam\.googleapis\.com/{re.escape(pool)}/subject/"
+            rf"dr-evidence:repo:{re.escape(organization)}@[0-9]+/"
+            rf"{re.escape(repository)}@[0-9]+:environment:{re.escape(environment)}"
+        )
+        if not isinstance(principal, str) or re.fullmatch(
+            expected_pattern, principal
+        ) is None:
+            errors.append(f"DR evidence principal differs: {key}")
+    return errors
+
+
 def source_errors() -> list[str]:
     text = SOURCE.read_text(encoding="utf-8")
     errors = []
@@ -140,6 +190,13 @@ def runtime_values() -> tuple[dict[str, str], list[str]]:
     errors.extend(
         release_identity_errors(
             values["ARTIFACT_RELEASE_IDENTITIES_JSON"],
+            values["GITHUB_WIF_POOL_NAME"],
+            values["MONOREPO_ORG"],
+        )
+    )
+    errors.extend(
+        dr_evidence_identity_errors(
+            values["DR_EVIDENCE_IDENTITY_JSON"],
             values["GITHUB_WIF_POOL_NAME"],
             values["MONOREPO_ORG"],
         )

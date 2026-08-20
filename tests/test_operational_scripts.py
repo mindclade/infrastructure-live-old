@@ -36,6 +36,9 @@ HANDOFF = load(
     "export_applied_control_plane_handoff",
     "scripts/export-applied-control-plane-handoff.py",
 )
+MODULE_INTERFACES = load(
+    "validate_module_interfaces", "scripts/validate-module-interfaces.py"
+)
 
 
 def release_identities(
@@ -75,6 +78,33 @@ def release_identities(
             ),
         }
     return result
+
+
+def dr_evidence_identity(
+    pool: str = "projects/123456789/locations/global/workloadIdentityPools/github",
+) -> dict[str, object]:
+    principals = {}
+    for repository in (
+        "bootstrap",
+        "github-config",
+        "infrastructure-live",
+        "gitops",
+    ):
+        for environment in ("scratch", "staging"):
+            key = f"{repository}:{environment}"
+            principals[key] = (
+                f"principal://iam.googleapis.com/{pool}/subject/dr-evidence:"
+                f"repo:mindclade@316676129/{repository}@1333792222:"
+                f"environment:{environment}"
+            )
+    return {
+        "workload_identity_provider": f"{pool}/providers/gh-dr-evidence",
+        "job_workflow_ref": (
+            "mindclade/.github/.github/workflows/"
+            "reusable-dr-evidence.yml@refs/tags/v4.0.0"
+        ),
+        "principals": principals,
+    }
 
 
 class PlanSafetyTest(unittest.TestCase):
@@ -155,6 +185,30 @@ class PlanSafetyTest(unittest.TestCase):
             )
         )
 
+    def test_dr_evidence_identity_contract_is_caller_exact(self) -> None:
+        pool = "projects/123456789/locations/global/workloadIdentityPools/github"
+        identity = dr_evidence_identity(pool)
+        self.assertEqual(
+            ACCOUNT.validated_dr_evidence_identity(identity, pool, "mindclade"),
+            identity,
+        )
+        self.assertEqual(
+            ACCOUNT_VALIDATOR.dr_evidence_identity_errors(
+                json.dumps(identity), pool, "mindclade"
+            ),
+            [],
+        )
+        identity["principals"]["gitops:staging"] = identity["principals"][
+            "bootstrap:staging"
+        ]
+        with self.assertRaisesRegex(ValueError, "gitops:staging"):
+            ACCOUNT.validated_dr_evidence_identity(identity, pool, "mindclade")
+        self.assertTrue(
+            ACCOUNT_VALIDATOR.dr_evidence_identity_errors(
+                json.dumps(identity), pool, "mindclade"
+            )
+        )
+
     def test_state_prefix_accepts_only_exact_no_object_result(self) -> None:
         self.assertEqual(STATE_PREFIX.classify(0, ""), "existing-or-empty")
         self.assertEqual(
@@ -172,6 +226,82 @@ class PlanSafetyTest(unittest.TestCase):
 
 
 class ImportRuntimeContractTest(unittest.TestCase):
+    def test_module_interface_contract_distinguishes_required_variables(self) -> None:
+        declared, required = MODULE_INTERFACES.variable_contract(
+            '''
+            variable "required_string" {
+              type = string
+            }
+            variable "optional_null" {
+              type    = string
+              default = null
+            }
+            variable "optional_object" {
+              type = object({
+                enabled = bool
+              })
+              default = {
+                enabled = false
+              }
+            }
+            '''
+        )
+        self.assertEqual(
+            declared, {"required_string", "optional_null", "optional_object"}
+        )
+        self.assertEqual(required, {"required_string"})
+
+    def test_candidate_module_policy_requires_one_matching_planned_version(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            policy = repo / "infra/terraform/governance/version.toml"
+            policy.parent.mkdir(parents=True)
+            policy.write_text(
+                'contract_version = "0.4.0"\nstatus = "planned"\n',
+                encoding="utf-8",
+            )
+
+            MODULE_INTERFACES.validate_candidate_version(repo, "v0.4.0")
+            with self.assertRaisesRegex(RuntimeError, "planned contract version"):
+                MODULE_INTERFACES.validate_candidate_version(repo, "v0.4.1")
+
+            policy.write_text(
+                'contract_version = "0.4.0"\nstatus = "released"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "planned contract version"):
+                MODULE_INTERFACES.validate_candidate_version(repo, "v0.4.0")
+
+    def test_candidate_module_is_read_only_from_the_planned_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            module = repo / "infra/terraform/modules/example"
+            module.mkdir(parents=True)
+            (module / "variables.tf").write_text(
+                'variable "required" { type = string }\n', encoding="utf-8"
+            )
+
+            source = MODULE_INTERFACES.module_tf(
+                repo, "v0.4.0", "example", "v0.4.0"
+            )
+            self.assertIn('variable "required"', source)
+
+    def test_candidate_policy_rejects_duplicate_control_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            policy = repo / "infra/terraform/governance/version.toml"
+            policy.parent.mkdir(parents=True)
+            policy.write_text(
+                'contract_version = "0.4.0"\n'
+                'contract_version = "0.4.1"\n'
+                'status = "planned"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "exactly one string"):
+                MODULE_INTERFACES.validate_candidate_version(repo, "v0.4.0")
+
     def test_every_provider_lock_uses_terraform_115_normalized_constraints(
         self,
     ) -> None:

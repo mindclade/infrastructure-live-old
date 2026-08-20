@@ -12,6 +12,7 @@ distinct deployment attestation.
 | Variable | Authoritative output |
 |---|---|
 | `ARTIFACT_RELEASE_IDENTITIES_JSON` | `bootstrap.platform_contract.github.artifact_release_identities` |
+| `DR_EVIDENCE_IDENTITY_JSON` | `bootstrap.platform_contract.github.dr_evidence_identity` |
 | `WIF_PROVIDER_ARC_*` / `WIF_PROVIDER_SIGNER` | the corresponding bootstrap capability identity |
 | `SA_ARC_CANARY` / `SA_ARTIFACT_*` | `1-org/automation-iam.artifact_release_identity_contract` |
 | `BINAUTHZ_BUILD_ATTESTOR_PROJECT` | `5-workloads/production/binary-authorization.project_id` |

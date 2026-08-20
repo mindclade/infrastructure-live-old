@@ -87,8 +87,12 @@ module_contract_docs = (ROOT / "docs/module-interface-contract.md").read_text(
     "utf-8", errors="ignore"
 )
 for required_make_contract in (
-    "validate-integration: validate validate-module-interfaces",
+    "validate-integration: validate validate-module-interfaces validate-capacity-contract",
+    "validate-source-integration: validate validate-module-candidate validate-capacity-candidate",
     'python3 scripts/validate-module-interfaces.py --monorepo "$(MONOREPO)"',
+    'python3 scripts/validate-module-interfaces.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"',
+    'python3 scripts/validate-capacity-contract.py --monorepo "$(MONOREPO)"',
+    'python3 scripts/validate-capacity-contract.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"',
 ):
     if required_make_contract not in makefile:
         error(
@@ -100,6 +104,11 @@ if (
     not in module_contract_docs
 ):
     error("module interface documentation omits the executable integration target")
+if (
+    "make validate-source-integration MONOREPO=../mindclade-internal-monorepo"
+    not in module_contract_docs
+):
+    error("module interface documentation omits the planned-source integration target")
 
 for rel in CONTRACT["required_paths"]:
     if not (ROOT / rel).exists():
@@ -465,6 +474,8 @@ elif REPOSITORY == "infrastructure-live":
     account_text = (ROOT / "account.hcl").read_text("utf-8", errors="ignore")
     if 'jsondecode(get_env("ARTIFACT_RELEASE_IDENTITIES_JSON"))' not in account_text:
         error("account contract does not consume the exact ARC identity inventory")
+    if 'jsondecode(get_env("DR_EVIDENCE_IDENTITY_JSON"))' not in account_text:
+        error("account contract does not consume the exact DR evidence identity")
     if "BUILDKITE_WIF" in account_text:
         error("account contract retains retired Buildkite federation inputs")
     if 'get_env("CLOUD_IDENTITY_CUSTOMER_ID")' not in account_text:
@@ -479,9 +490,11 @@ elif REPOSITORY == "infrastructure-live":
     if (
         "validated_retired_buildkite" not in bootstrap_account
         or '"ARTIFACT_RELEASE_IDENTITIES_JSON"' not in bootstrap_account
+        or '"DR_EVIDENCE_IDENTITY_JSON"' not in bootstrap_account
         or "validated_release_identities" not in bootstrap_account
+        or "validated_dr_evidence_identity" not in bootstrap_account
     ):
-        error("bootstrap account exporter omits the exact ARC identity contract")
+        error("bootstrap account exporter omits an exact v4 identity contract")
     initial_import = (ROOT / "docs/initial-import.md").read_text(
         "utf-8", errors="ignore"
     )
@@ -507,7 +520,7 @@ elif REPOSITORY == "infrastructure-live":
     if (
         '"platform_contract"' not in bootstrap_account
         or '"output"' not in bootstrap_account
-        or 'contract.get("contract_version") != "1.3.0"' not in bootstrap_account
+        or 'contract.get("contract_version") != "1.4.0"' not in bootstrap_account
     ):
         error(
             "bootstrap account exporter bypasses the versioned Ring-0 platform contract"
@@ -694,6 +707,8 @@ elif REPOSITORY == "infrastructure-live":
         for required_variable in (
             "CLOUD_IDENTITY_CUSTOMER_ID",
             "ORG_POLICY_ACTIVATION_PHASE",
+            "ARTIFACT_RELEASE_IDENTITIES_JSON",
+            "DR_EVIDENCE_IDENTITY_JSON",
         ):
             if (
                 f"{required_variable}: ${{{{ vars.{required_variable} }}}}"
@@ -738,13 +753,41 @@ elif REPOSITORY == "infrastructure-live":
     account_contract = (ROOT / "account.hcl").read_text("utf-8", errors="ignore")
     if 'get_env("GPU_ZONE"' not in account_contract:
         error("account contract lacks an explicit GPU/Parallelstore zone")
+    gpu_profiles = {
+        "gpu-a3": "gke-h100-a3-megagpu-8g",
+        # The directory name is a retained Terragrunt state address; the selected
+        # production profile is H200 A3 Ultra.
+        "gpu-a4": "gke-h200-a3-ultragpu-8g",
+    }
     for env in ("development", "staging", "production"):
-        for pool in ("gpu-a3", "gpu-a4"):
+        for pool, profile in gpu_profiles.items():
             gpu = (
                 ROOT / f"5-workloads/{env}/nodepools/{pool}/terragrunt.hcl"
             ).read_text("utf-8", errors="ignore")
             if "account_vars.locals.gpu_zone" not in gpu:
                 error(f"{env}/{pool} is not tied to the account GPU zone contract")
+            if not re.search(rf'profile\s*=\s*"{re.escape(profile)}"', gpu):
+                error(f"{env}/{pool} does not select the qualified {profile} contract")
+            if profile in {
+                "gke-h200-a3-ultragpu-8g",
+                "gke-b200-a4-highgpu-8g",
+            } and not re.search(
+                r'capacity_mode\s*=\s*"QUEUED_PROVISIONING"', gpu
+            ):
+                error(f"{env}/{pool} H200/B200 capacity must use queued provisioning")
+            if profile in {
+                "gke-h200-a3-ultragpu-8g",
+                "gke-b200-a4-highgpu-8g",
+            } and not re.search(
+                r'enable_compact_placement\s*=\s*false', gpu
+            ):
+                error(f"{env}/{pool} queued GPU capacity must disable compact placement")
+
+    gpu_defaults = (ROOT / "_envcommon/gpu-nodepool.hcl").read_text(
+        "utf-8", errors="ignore"
+    )
+    if not re.search(r"(?m)^\s*total_min_nodes\s*=\s*0\s*$", gpu_defaults):
+        error("GPU pools must share a scale-to-zero minimum")
 
     selector = (ROOT / "scripts/select-apply-scopes.py").read_text(
         "utf-8", errors="ignore"
@@ -769,6 +812,13 @@ elif REPOSITORY == "infrastructure-live":
     plan_workflow = (ROOT / ".github/workflows/plan.yml").read_text(
         "utf-8", errors="ignore"
     )
+    if (
+        "- name: Validate account contract source\n"
+        "        run: python3 scripts/validate-account.py\n"
+    ) not in plan_workflow:
+        error("unprivileged PR validation does not use the source-only account gate")
+    if plan_workflow.count("python3 scripts/validate-account.py --runtime") != 1:
+        error("protected plan must retain exactly one runtime account gate")
     if "  merge_group:" not in plan_workflow:
         error("plan workflow does not report a merge-queue check")
     if "    environment: plan" not in plan_workflow:

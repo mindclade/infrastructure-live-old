@@ -22,11 +22,11 @@ include "root" {
 }
 
 terraform {
-  source = "${include.root.locals.module_source_base}//storage?ref=${local.module_version}"
+  source = "${include.root.locals.module_source_base}//parallelstore?ref=${local.module_version}"
 }
 
 locals {
-  module_version = "v0.1.0"
+  module_version = "v0.4.0"
   env_vars       = read_terragrunt_config(find_in_parent_folders("env.hcl"))
   env            = local.env_vars.locals.environment
 }

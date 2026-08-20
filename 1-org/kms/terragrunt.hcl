@@ -24,7 +24,7 @@ terraform {
 }
 
 locals {
-  module_version = "v0.1.1"
+  module_version = "v0.4.0"
 }
 
 inputs = {

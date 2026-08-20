@@ -49,6 +49,8 @@ env:
   WIF_PROVIDER_SIGNER: ${{ vars.WIF_PROVIDER_SIGNER }}
   ARTIFACT_SIGNER_PRINCIPAL: ${{ vars.ARTIFACT_SIGNER_PRINCIPAL }}
   ARTIFACT_SIGNER_JOB_WORKFLOW_REF: ${{ vars.ARTIFACT_SIGNER_JOB_WORKFLOW_REF }}
+  ARTIFACT_RELEASE_IDENTITIES_JSON: ${{ vars.ARTIFACT_RELEASE_IDENTITIES_JSON }}
+  DR_EVIDENCE_IDENTITY_JSON: ${{ vars.DR_EVIDENCE_IDENTITY_JSON }}
   TFSTATE_BUCKET_DEVELOPMENT: ${{ vars.TFSTATE_BUCKET_DEVELOPMENT }}
   TFSTATE_BUCKET_STAGING: ${{ vars.TFSTATE_BUCKET_STAGING }}
   TFSTATE_BUCKET_PRODUCTION: ${{ vars.TFSTATE_BUCKET_PRODUCTION }}
@@ -122,8 +124,8 @@ jobs:
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py'
       - name: Validate DNS portfolio policy and live-record parity
         run: python3 scripts/validate_dns_portfolio.py
-      - name: Validate bootstrap-derived account contract
-        run: python3 scripts/validate-account.py --runtime
+      - name: Validate account contract source
+        run: python3 scripts/validate-account.py
       - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342  # v31.11.0
         with:
           extra_nix_config: |

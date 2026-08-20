@@ -51,8 +51,9 @@ locals {
 inputs = {
   networks = {
     (local.environment) = {
-      project_id   = dependency.shared.outputs.project_ids["net"]
-      network_name = "${include.root.locals.prefix}-${local.environment}-vpc"
+      project_id                    = dependency.shared.outputs.project_ids["net"]
+      network_name                  = "${include.root.locals.prefix}-${local.environment}-vpc"
+      create_default_internet_route = true
 
       # Flow-log sampling is a per-SUBNET setting, not a per-network one, and it differs by
       # purpose: a proxy-only subnet cannot carry flow logs at all. It is therefore applied

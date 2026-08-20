@@ -36,6 +36,15 @@ dependency "gke" {
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
+dependency "shared" {
+  config_path = "../../../2-environments/production/shared-projects"
+  mock_outputs = {
+    project_ids     = { platform = "mc-production-platform" }
+    project_numbers = { platform = "100000000003" }
+  }
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+}
+
 dependency "automation" {
   config_path = "../../../1-org/automation-iam"
   mock_outputs = { supply_chain_service_accounts = {
@@ -59,8 +68,9 @@ dependency "kms" {
 }
 
 inputs = {
-  project_id = dependency.gke.outputs.project_id
-  cluster    = "${dependency.gke.outputs.location}.${dependency.gke.outputs.cluster_name}"
+  project_id     = dependency.gke.outputs.project_id
+  project_number = dependency.shared.outputs.project_numbers["platform"]
+  cluster        = "${dependency.gke.outputs.location}.${dependency.gke.outputs.cluster_name}"
 
   attestor_key_ring = dependency.kms.outputs.key_ring_name
 

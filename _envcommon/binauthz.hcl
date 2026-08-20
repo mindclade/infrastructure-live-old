@@ -15,7 +15,7 @@ locals {
   account_vars = read_terragrunt_config("${get_repo_root()}/account.hcl")
 
   environment    = local.env_vars.locals.environment
-  module_version = "v0.1.1"
+  module_version = "v0.4.0"
 
   # Terraform's Binary Authorization resource has no Kubernetes-namespace-rule interface.
   # Upstream GitOps control-plane images therefore use a reviewed exact-digest contract rather

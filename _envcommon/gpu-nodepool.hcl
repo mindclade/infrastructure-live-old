@@ -14,18 +14,7 @@ locals {
   account_vars = read_terragrunt_config("${get_repo_root()}/account.hcl")
 
   environment    = local.env_vars.locals.environment
-  module_version = "v0.1.1"
-
-  # A local as well as an input, so a pool that needs an ADDITIONAL taint can concat onto it
-  # rather than retyping it — see nodepools/gpu-a4. Redeclaring the accelerator taint by hand
-  # in a unit is how one pool ends up with a subtly different effect from the others.
-  gpu_taints = [
-    {
-      key    = "nvidia.com/gpu"
-      value  = "present"
-      effect = "NO_SCHEDULE"
-    },
-  ]
+  module_version = "v0.4.0"
 }
 
 terraform {
@@ -33,44 +22,27 @@ terraform {
 }
 
 inputs = {
-  cluster  = "${local.account_vars.locals.prefix}-${local.environment}"
-  location = local.account_vars.locals.region
+  region = local.account_vars.locals.region
+  zone   = local.account_vars.locals.gpu_zone
 
   # Zero minimum, always. A GPU pool with min_count > 1 is a standing charge for capacity
   # nobody asked for; Kueue scales it up when a job is admitted.
-  min_node_count = 0
+  total_min_nodes          = 0
+  max_pods_per_node        = 16
+  boot_disk_size_gb        = 250
+  gpu_driver_version       = local.environment == "production" ? "DEFAULT" : "LATEST"
+  enable_compact_placement = true
+  upgrade_max_surge        = 0
+  upgrade_max_unavailable  = 1
+  node_drain_grace_period  = "3600s"
+  node_drain_pdb_timeout   = "3600s"
 
-  autoscaling = true
+  environment         = local.environment
+  owner               = "ml-platform"
+  data_classification = "confidential"
 
-  # Taint so that only workloads that explicitly tolerate a GPU node land on one. Without
-  # it, an ordinary deployment with no resource limits schedules onto an A4 and holds it.
-  taints = local.gpu_taints
-
-  # Repair yes, upgrade no. An automatic upgrade that drains a node mid-training loses the
-  # run — checkpointing helps but does not make it free.
-  auto_repair  = true
-  auto_upgrade = false
-
-  # Spot in non-production only. A preemption during a production inference request is a
-  # customer-visible error; during a development experiment it is a retry.
-  spot = local.environment != "production"
-
-  enable_gvnic       = true
-  enable_fast_socket = true
-  # Keep production on GKE's default qualified driver branch; lower environments exercise
-  # the newest driver first.
-  gpu_driver_version    = local.environment == "production" ? "DEFAULT" : "LATEST"
-  ephemeral_storage_ssd = true
-
-  enable_secure_boot          = true
-  enable_integrity_monitoring = true
-
-  # Workload Identity on the pool. Without it, pods fall back to the node service account,
-  # which is a shared identity across everything scheduled there.
-  workload_metadata_mode = "GKE_METADATA"
-
-  labels = merge(local.root.locals.common_labels, {
-    accelerator = "gpu"
-    cost-centre = "research"
+  resource_labels = merge(local.root.locals.common_labels, {
+    authority   = "terraform"
+    cost_centre = "research"
   })
 }
