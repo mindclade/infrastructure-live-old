@@ -53,6 +53,39 @@ def need(mapping: dict[str, Any], key: str, label: str) -> Any:
     return value
 
 
+def validated_buildkite(
+    value: Any, federation_project_number: str
+) -> tuple[bool, str | None]:
+    if not isinstance(value, dict):
+        raise ValueError("platform_contract buildkite must be an object")
+    enabled = value.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ValueError("platform_contract buildkite.enabled must be boolean")
+
+    pool = value.get("workload_identity_pool")
+    provider = value.get("workload_identity_provider")
+    if not enabled:
+        if pool is not None or provider is not None:
+            raise ValueError(
+                "disabled Buildkite federation must publish null pool and provider"
+            )
+        return False, None
+
+    expected_pool = (
+        f"projects/{federation_project_number}/locations/global/"
+        "workloadIdentityPools/buildkite"
+    )
+    if pool != expected_pool:
+        raise ValueError(
+            "enabled Buildkite federation must publish its exact bootstrap pool"
+        )
+    if provider != f"{expected_pool}/providers/buildkite":
+        raise ValueError(
+            "enabled Buildkite federation must publish its exact bootstrap provider"
+        )
+    return True, expected_pool
+
+
 def main() -> int:
     args = parse_args()
     bootstrap = args.bootstrap.resolve()
@@ -89,6 +122,9 @@ def main() -> int:
         match = re.fullmatch(r"projects/([0-9]+)/.*", pool)
         if match is None:
             raise ValueError("invalid GitHub workload identity pool resource name")
+        buildkite_enabled, buildkite_pool = validated_buildkite(
+            need(contract, "buildkite", "platform_contract"), match.group(1)
+        )
         values = {
             "GCP_ORG_ID": need(contract, "organization_id", "platform_contract"),
             "BILLING_ACCOUNT": need(contract, "billing_account", "platform_contract"),
@@ -102,11 +138,7 @@ def main() -> int:
             ),
             "BOOTSTRAP_CICD_PROJECT_NUMBER": match.group(1),
             "GITHUB_WIF_POOL_NAME": pool,
-            "BUILDKITE_WIF_POOL_NAME": need(
-                need(contract, "buildkite", "platform_contract"),
-                "workload_identity_pool",
-                "buildkite",
-            ),
+            "BUILDKITE_WIF_ENABLED": str(buildkite_enabled).lower(),
             "WIF_PROVIDER_SIGNER": need(
                 need(github, "artifact_signer", "github"),
                 "workload_identity_provider",
@@ -151,6 +183,8 @@ def main() -> int:
             "STATE_LOCATION": need(contract["state"], "primary_location", "state"),
             "MONOREPO_ORG": need(github, "organization", "github"),
         }
+        if buildkite_pool is not None:
+            values["BUILDKITE_WIF_POOL_NAME"] = buildkite_pool
         content = "# Generated from verified bootstrap outputs. Contains identifiers only; never commit.\n"
         content += "".join(
             f"export {name}={shlex.quote(str(value))}\n"

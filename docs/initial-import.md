@@ -74,13 +74,28 @@ bootstrap outputs and the target estate has been reconciled with Terraform state
      *) echo "state bucket versioning is not enabled" >&2; exit 1 ;;
    esac
 
+   state_versions="${IMPORT_EVIDENCE_DIR}/state-versions-before.txt"
+   state_list_error="${IMPORT_EVIDENCE_DIR}/state-versions-before.stderr.txt"
+   set +e
    gcloud storage ls --all-versions --long \
      "gs://${STATE_BUCKET}/1-org/org-policies/**" \
-     | tee "${IMPORT_EVIDENCE_DIR}/state-versions-before.txt"
+     >"${state_versions}" 2>"${state_list_error}"
+   state_list_status=$?
+   set -e
+   prefix_status="$(
+     python3 ../../scripts/classify-state-prefix.py \
+       --status "${state_list_status}" \
+       --stderr-file "${state_list_error}"
+   )"
+   case "${prefix_status}" in
+     fresh) : >"${state_versions}" ;;
+     existing-or-empty) ;;
+     *) echo "invalid state-prefix classification" >&2; exit 1 ;;
+   esac
+   cat "${state_versions}"
 
    previous_generation=""
-   if grep -Fq "${STATE_OBJECT}" \
-     "${IMPORT_EVIDENCE_DIR}/state-versions-before.txt"; then
+   if grep -Fq "${STATE_OBJECT}" "${state_versions}"; then
      previous_generation="$(
        gcloud storage objects describe "${STATE_OBJECT}" \
          --raw --format='value(generation)' \
@@ -92,11 +107,13 @@ bootstrap outputs and the target estate has been reconciled with Terraform state
    fi
    ```
 
-   A successful empty prefix listing is acceptable only when the isolated state unit has never
-   existed. A permission, authentication, network, retention, or metadata-read error is a stop
-   condition, not evidence of an empty prefix. The exact-object lookup above is required whenever
-   any version of that state object is listed; a listed object without a readable current numeric
-   generation is therefore a stop condition rather than a fresh backend.
+   Exit status `1` is accepted as a fresh prefix only when stderr is exactly
+   `ERROR: (gcloud.storage.ls) One or more URLs matched no objects.` with an optional final newline.
+   Extra warnings or any permission, authentication, network, retention, or metadata-read error
+   are stop conditions, not evidence of an empty prefix. A successful empty listing is also
+   acceptable. The exact-object lookup above is required whenever any version of that state
+   object is listed; a listed object without a readable current numeric generation is therefore a
+   stop condition rather than a fresh backend.
 
 7. In `1-org/org-policies`, import only policies proven to exist, one at a time, into the exact v2
    address below. Immediately after each import, save a targeted plan and require zero managed
