@@ -144,6 +144,7 @@ class ImportRuntimeContractTest(unittest.TestCase):
         for lock in locks:
             text = lock.read_text(encoding="utf-8")
             self.assertEqual(text.count('constraints = "7.41.0"'), 2, lock)
+            self.assertEqual(text.count('"h1:'), 4, lock)
             self.assertNotIn('constraints = "= 7.41.0"', text, lock)
 
     def test_both_nix_shells_pin_terragrunt_to_terraform(self) -> None:

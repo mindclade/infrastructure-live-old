@@ -20,6 +20,7 @@ EXPECTED_PROVIDERS = {
     "registry.terraform.io/hashicorp/google",
     "registry.terraform.io/hashicorp/google-beta",
 }
+EXPECTED_PACKAGE_HASHES_PER_PROVIDER = 2  # darwin_arm64 and linux_amd64
 
 locks = sorted(
     path
@@ -54,7 +55,8 @@ for address, body in entries:
     constraints = re.search(
         r'^\s*constraints\s*=\s*"([^"]+)"', body, flags=re.MULTILINE
     )
-    hashes = re.findall(r'"zh:([0-9a-f]{64})"', body)
+    zip_hashes = re.findall(r'"zh:([0-9a-f]{64})"', body)
+    package_hashes = re.findall(r'"h1:([A-Za-z0-9+/]+={0,2})"', body)
     if not version or version.group(1) != EXPECTED_VERSION:
         print(f"{address}: lock version is not {EXPECTED_VERSION}", file=sys.stderr)
         raise SystemExit(1)
@@ -64,10 +66,22 @@ for address, body in entries:
             file=sys.stderr,
         )
         raise SystemExit(1)
-    if len(set(hashes)) < 10:
+    if len(set(zip_hashes)) < 10:
         print(f"{address}: incomplete multi-platform zip checksum set", file=sys.stderr)
+        raise SystemExit(1)
+    if (
+        len(package_hashes) != EXPECTED_PACKAGE_HASHES_PER_PROVIDER
+        or len(set(package_hashes)) != EXPECTED_PACKAGE_HASHES_PER_PROVIDER
+    ):
+        print(
+            f"{address}: expected distinct h1 package checksums for "
+            "darwin_arm64 and linux_amd64",
+            file=sys.stderr,
+        )
         raise SystemExit(1)
 print(
     "provider lock parity passed: "
-    f"{len(locks)} units, {len(entries)} exact providers, {next(iter(digests))}"
+    f"{len(locks)} units, {len(entries)} exact providers, "
+    "darwin_arm64 + linux_amd64 package hashes, "
+    f"{next(iter(digests))}"
 )
