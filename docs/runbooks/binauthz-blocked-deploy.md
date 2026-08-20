@@ -6,7 +6,7 @@
 
 > **Use when:** GKE rejects an immutable image digest under Binary Authorization policy.
 > **Impact:** the new revision is blocked; the last healthy qualified revision should remain.
-> **Owner:** release owner with platform and security support.
+> **Primary owner:** release owner with platform and security support.
 > **Escalate:** immediately if an expected attestation cannot be verified or policy/key drift exists.
 
 ## Symptoms
@@ -57,3 +57,9 @@ release qualification suite.
 
 If those links cannot be proven, keep the deployment blocked and hand off the digest, attestor,
 policy decision, key version, timestamps, and relevant audit events to security.
+
+## Escalation and handoff
+
+Escalate unverifiable evidence or key/policy drift to security with the exact digest, environment,
+attestor note, KMS key version, policy decision, source/release commits, signer run, timestamps, and
+audit events. Do not attach secret values or grant an admission exception for diagnosis.

@@ -6,7 +6,7 @@
 
 > **Use when:** a GKE cluster is deleted, irrecoverable, or unsafe to operate.
 > **Impact:** the affected trust domain is unavailable while cloud authorities and data remain.
-> **Owner:** incident commander with infrastructure, GitOps, service, and data recovery owners.
+> **Primary owner:** incident commander with infrastructure, GitOps, service, and data recovery owners.
 > **Escalate:** before destructive replacement, recovery-point selection, or reopening traffic.
 
 ## Symptoms
@@ -55,3 +55,10 @@ manual dependencies, and corrective work.
 
 Reopen traffic only after the incident commander records recovery-point acceptance, residual data
 loss, service validation, security-control evidence, and rollback or forward-recovery ownership.
+
+## Escalation and handoff
+
+At each recovery boundary, provide authoritative infrastructure/GitOps commits, cluster identity,
+state generations, recovery point, plans and mutations, admission evidence, service checks, data
+loss estimate, and current owner. Escalate destructive replacement and traffic reopening to the
+incident commander and security/data owners.

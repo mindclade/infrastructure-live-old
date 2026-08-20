@@ -5,6 +5,7 @@
 > **Audience:** platform operators activating a new or reconstructed GKE environment.
 > **Outcome:** transfer control from provisioned cloud infrastructure to the pinned GitOps root
 > without creating overlapping ownership.
+> **Risk:** critical—an incorrect handoff can create overlapping owners or reconcile the wrong cluster.
 
 Terraform does not install Argo CD or apply workload manifests. `infrastructure-live` creates the
 cloud prerequisites; the `gitops` repository performs the one-time Argo CD bootstrap, after which
@@ -55,3 +56,10 @@ If reconciliation fails, preserve the exact commits and events and follow the Gi
 [`failed-sync.md`](https://github.com/mindclade/gitops/blob/main/docs/failed-sync.md) runbook. If
 cloud prerequisites are missing, repair them through a reviewed infrastructure plan before
 retrying the handoff.
+
+## Roll back or recover
+
+Before the root Application is active, stop and correct the prerequisite or bootstrap input. After
+GitOps owns the environment, do not remove Argo-managed resources with Terraform. Recover Argo from
+the pinned GitOps commit or reconstruct the cluster with
+[GKE reconstruction](runbooks/gke-reconstruction.md), depending on the failure boundary.

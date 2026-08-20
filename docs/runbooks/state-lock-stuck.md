@@ -6,7 +6,7 @@
 
 > **Use when:** a state unit remains locked after its apparent plan or apply has ended.
 > **Impact:** changes to that unit are blocked; running infrastructure should be unaffected.
-> **Owner:** state-unit owner with a second qualified operator.
+> **Primary owner:** state-unit owner with a second qualified operator.
 > **Escalate:** when lock ownership is uncertain, an apply may still run, or state drift is detected.
 
 ## Symptoms
@@ -53,3 +53,9 @@ state-lock recovery drills.
 
 Record the unit, lock ID, original actor/source SHA, reviewers, release action, validation result,
 and audit timestamps. Stop and escalate rather than retrying force-unlock against a different ID.
+
+## Escalation and handoff
+
+Hand off the incident ID, unit/prefix, lock ID, owning operation and source SHA, workflow status,
+audit timestamps, state generations, reviewers, release action, and fresh-plan result. Escalate when
+any evidence suggests the operation is still active or state integrity is uncertain.

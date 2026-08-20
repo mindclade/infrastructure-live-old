@@ -5,6 +5,7 @@
 > **Audience:** Infrastructure bootstrap operators  
 > **Outcome:** Import the live tree, prove its account and module contracts, and activate
 > protected scopes without recreating existing cloud resources.
+> **Risk:** critical—incorrect imports or scope selection can replace organization and production resources.
 
 ## Prerequisites
 
@@ -99,3 +100,11 @@ bootstrap outputs and the target estate has been reconciled with Terraform state
 
 The platform import order is `.github`, `bootstrap`, `github-config`,
 `infrastructure-live`, then `gitops`.
+
+## Roll back or recover
+
+Before apply, remove an incorrect import from the isolated candidate state and replan. After an
+approved import or mutation, prefer a reviewed forward correction; never delete state bindings to
+make the plan green. For a failed production mutation follow
+[the failed-apply runbook](runbooks/failed-production-apply.md), and for an orphaned lock follow
+[the state-lock runbook](runbooks/state-lock-stuck.md).

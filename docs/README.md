@@ -64,6 +64,8 @@
 - [Repository production blueprint](../BLUEPRINT.md) — compact authority and exclusion contract.
 - [Enterprise platform blueprint](MINDCLADE_ENTERPRISE_PLATFORM_FOUNDATION_BLUEPRINT.md) —
   stable pointer to the canonical estate-wide contract.
+- [DNS portfolio compatibility path](dns-domain-portfolio.md) — stable path retained for earlier
+  references; authoritative content lives in [DNS domains](dns-domains.md).
 - [Contributing](../CONTRIBUTING.md) and [security](../SECURITY.md) — review, handling, and
   sensitive-output rules.
 

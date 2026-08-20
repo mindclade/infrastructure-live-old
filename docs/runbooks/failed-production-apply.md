@@ -2,9 +2,10 @@
 
 # A protected production apply failed
 
-> **Audience:** Incident commander and qualified infrastructure operator  
-> **Outcome:** Determine whether cloud mutation occurred, protect the state boundary, and
-> recover through a reviewed exact plan.
+> **Use when:** a protected foundation, partner, or production plan/apply workflow fails.
+> **Impact:** one or more state units may be partially changed while other units remain isolated.
+> **Primary owner:** incident commander and qualified infrastructure operator.
+> **Escalate:** when mutation, lock ownership, account context, target unit, or plan provenance is unclear.
 
 ## Symptoms
 
@@ -75,13 +76,20 @@ Restore state only when evidence proves state corruption and the state-recovery 
 identifies the exact recoverable object. A partial provider apply normally requires refresh
 and forward reconciliation, not state rollback.
 
-## Verify
+## Verify recovery
 
 - the successful apply commit matches current `main`;
 - the plan bundle checksum, account context, scope, and unit checks all passed;
 - a fresh plan for the affected unit is empty or contains only separately approved follow-up;
 - dependent services and policy controls report healthy; and
 - no state lock or unreviewed console change remains.
+
+## Escalation and handoff
+
+Provide the incident ID, workflow URL, source SHA, scope/unit, account context, failure phase, plan
+bundle/checksum, provider logs, lock status, state generations, mutations, fresh plan, and remaining
+risk. Escalate state corruption, unexplained mutation, or a destructive recovery decision before
+another protected apply.
 
 ## Prevention
 

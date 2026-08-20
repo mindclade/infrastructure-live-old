@@ -6,7 +6,7 @@
 
 > **Use when:** a Google API request is denied by a service perimeter or access level.
 > **Impact:** the operation is blocked; an unexpected denial may indicate unauthorized access.
-> **Owner:** workload owner with platform and security review.
+> **Primary owner:** workload owner with platform and security review.
 > **Escalate:** immediately for an unexpected production caller or suspected perimeter drift.
 
 ## Symptoms
@@ -57,3 +57,9 @@ would detect a broader grant.
 
 If the authenticated caller or target cannot be reconciled with the approved architecture, do not
 change the perimeter. Preserve evidence and hand the incident to security.
+
+## Escalation and handoff
+
+Provide the incident ID, troubleshooting token, timestamp, caller, source network, target resource,
+service/method, audit event, current policy, dry-run result, mutations, and negative tests. Escalate
+an unexpected identity or resource to security without broadening the perimeter.
