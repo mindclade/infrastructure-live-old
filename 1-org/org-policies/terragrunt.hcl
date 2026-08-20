@@ -46,6 +46,7 @@ dependency "folders" {
     "import",
     "init",
     "plan",
+    "show",
     "validate",
   ] : []
 }

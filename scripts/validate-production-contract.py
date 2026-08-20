@@ -415,6 +415,10 @@ elif REPOSITORY == "infrastructure-live":
         "state_list_status=$?",
         "One or more URLs matched no objects.",
         "permission, authentication, network, retention, or metadata-read error",
+        "Resume after a completed import",
+        "resume_verified_import",
+        "must not be imported again",
+        "state generation changed after the stopped import",
     ):
         if required not in initial_import:
             error(f"initial import fresh-prefix guard omits: {required}")
@@ -521,6 +525,24 @@ elif REPOSITORY == "infrastructure-live":
             error(f"organization-policy baseline dependency guard omits: {required}")
     if "skip_outputs = true" in org_policy:
         error("organization-policy folders dependency bypass is not phase-scoped")
+    mock_commands_match = re.search(
+        r"mock_outputs_allowed_terraform_commands\s*=\s*"
+        r"local\.baseline_org_policy_adoption\s*\?\s*\[(.*?)\]\s*:\s*\[\]",
+        org_policy,
+        re.S,
+    )
+    expected_mock_commands = {"import", "init", "plan", "show", "validate"}
+    if not mock_commands_match:
+        error("organization-policy baseline mock-command allowlist is not parseable")
+    else:
+        actual_mock_commands = set(
+            re.findall(r'"([a-z-]+)"', mock_commands_match.group(1))
+        )
+        if actual_mock_commands != expected_mock_commands:
+            error(
+                "organization-policy baseline mock commands must be exactly "
+                f"{sorted(expected_mock_commands)}; got {sorted(actual_mock_commands)}"
+            )
     if "https://agent.buildkite.com" not in org_policy:
         error(
             "organization WIF issuer policy omits the bootstrap-managed Buildkite issuer"
@@ -560,6 +582,26 @@ elif REPOSITORY == "infrastructure-live":
     ):
         if required not in policy_module:
             error(f"organization-policy v2 adoption module omits: {required}")
+    policy_variables = (
+        ROOT / "1-org/org-policies/module/variables.tf"
+    ).read_text("utf-8", errors="ignore")
+    for required in (
+        'length(var.list_policies["iam.allowedPolicyMemberDomains"].allowed_values) == 1',
+        'var.list_policies["iam.allowedPolicyMemberDomains"].allowed_values[0] == var.cloud_identity_customer_id',
+        'length(var.list_policies["iam.allowedPolicyMemberDomains"].denied_values) == 0',
+    ):
+        if required not in policy_variables:
+            error(
+                "domain-restricted-sharing policy does not require the exact "
+                f"Cloud Identity customer: {required}"
+            )
+    if (
+        'allowed_values == [var.cloud_identity_customer_id]'
+        in policy_variables
+    ):
+        error(
+            "domain-restricted-sharing check compares a list value to a tuple literal"
+        )
     for required in (
         'allowedDomains = ["@${include.root.locals.domain}"]',
         'allowedSchemes = ["INTERNAL"]',

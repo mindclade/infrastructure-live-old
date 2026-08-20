@@ -117,9 +117,11 @@ bootstrap outputs and the target estate has been reconciled with Terraform state
 
    The explicit baseline environment also makes this unit set `skip_outputs = true` for its
    folders dependency and use only the sentinel folder outputs during `init`, `validate`,
-   `import`, and `plan`; the uninitialized folders backend is not read. Any absent value or the
-   later `extended` phase sets `skip_outputs = false`, disables these mocks, and requires real
-   folders state.
+   `import`, `plan`, and `show`; the uninitialized folders backend is not read. The command
+   allowlist is exact: it permits rendering a saved plan or the current state for verification,
+   but it does not permit `apply`, `destroy`, or any other mutation. Any absent value or the later
+   `extended` phase sets `skip_outputs = false`, disables these mocks, and requires real folders
+   state.
 
    Exit status `1` is accepted as a fresh prefix only when stderr is exactly
    `ERROR: (gcloud.storage.ls) One or more URLs matched no objects.` with an optional final newline.
@@ -212,6 +214,78 @@ bootstrap outputs and the target estate has been reconciled with Terraform state
      'google_org_policy_policy.boolean["iam.disableServiceAccountKeyUpload"]' \
      "organizations/${GCP_ORG_ID}/policies/iam.disableServiceAccountKeyUpload"
    ```
+
+   ### Resume after a completed import
+
+   If an import completed and its new state generation was recorded, but verification stopped
+   while rendering the targeted plan, that address is already state-owned. It must not be imported again.
+   Resume only from the same protected evidence directory. The remote current
+   generation must still equal the generation recorded immediately after the import; otherwise,
+   stop because the state generation changed after the stopped import and reconcile who changed
+   it before proceeding.
+
+   Re-enter the pinned shell, reload `.account.env`, recreate the `STATE_OBJECT` value from step
+   6, and redefine `import_and_verify_policy` from the preceding block without invoking it for an
+   address already in state. Then verify the completed binding with this read-only helper:
+
+   ```sh
+   resume_verified_import() {
+     label="$1"
+     address="$2"
+     recorded_generation_file="${IMPORT_EVIDENCE_DIR}/state-generation-${label}.txt"
+     state_json="${IMPORT_EVIDENCE_DIR}/${label}-resume-state.json"
+     plan_file="${IMPORT_EVIDENCE_DIR}/${label}-resume.tfplan"
+     plan_json="${IMPORT_EVIDENCE_DIR}/${label}-resume.tfplan.json"
+
+     test -s "${recorded_generation_file}" || {
+       echo "missing recorded post-import state generation for ${label}" >&2
+       return 1
+     }
+     recorded_generation="$(tr -d '[:space:]' < "${recorded_generation_file}")"
+     current_generation="$(
+       gcloud storage objects describe "${STATE_OBJECT}" \
+         --raw --format='value(generation)'
+     )"
+     case "${current_generation}" in
+       ''|*[!0-9]*) echo "invalid current state generation for ${label}" >&2; return 1 ;;
+     esac
+     test "${current_generation}" = "${recorded_generation}" || {
+       echo "state generation changed after the stopped import for ${label}" >&2
+       return 1
+     }
+
+     terragrunt show -json > "${state_json}"
+     jq -e --arg address "${address}" '
+       ([
+         .values.root_module.resources[]?
+         | select(.address == $address)
+       ] | length) == 1
+     ' "${state_json}"
+
+     terragrunt plan \
+       -input=false \
+       -lock-timeout=20m \
+       -target="${address}" \
+       -out="${plan_file}"
+     terragrunt show -json "${plan_file}" > "${plan_json}"
+     jq -e --arg address "${address}" '
+       ([
+         .resource_changes[]? | select(.address == $address) | .change.actions
+       ] == [["no-op"]]) and
+       ([.resource_changes[]? | select(.change.actions != ["no-op"])] == [])
+     ' "${plan_json}"
+
+     previous_generation="${current_generation}"
+   }
+
+   resume_verified_import allowed-member-domains \
+     'google_org_policy_policy.list["iam.allowedPolicyMemberDomains"]'
+   ```
+
+   Continue with only the first not-yet-imported call—`uniform-bucket-access` in this example—and
+   then the remaining calls in order. Do not rerun `allowed-member-domains`. If the state address,
+   recorded generation, remote generation, or fresh targeted no-op plan does not match exactly,
+   stop rather than guessing where the sequence ended.
 
    Each successful import must create a new current generation while retaining the preceding
    generation in the all-versions listing. Stop on a missing generation, a non-no-op action for

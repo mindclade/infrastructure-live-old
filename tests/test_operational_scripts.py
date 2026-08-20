@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -168,6 +169,55 @@ class ImportRuntimeContractTest(unittest.TestCase):
             "mock_outputs = local.baseline_org_policy_adoption ? {", policy
         )
         self.assertNotIn("skip_outputs = true", policy)
+
+    def test_baseline_mock_commands_are_minimal_and_support_plan_rendering(self) -> None:
+        policy = (ROOT / "1-org/org-policies/terragrunt.hcl").read_text(
+            encoding="utf-8"
+        )
+        match = re.search(
+            r"mock_outputs_allowed_terraform_commands\s*=\s*"
+            r"local\.baseline_org_policy_adoption\s*\?\s*\[(.*?)\]\s*:\s*\[\]",
+            policy,
+            re.S,
+        )
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(
+            set(re.findall(r'"([a-z-]+)"', match.group(1))),
+            {"import", "init", "plan", "show", "validate"},
+        )
+
+    def test_domain_restricted_sharing_requires_one_exact_customer_id(self) -> None:
+        variables = (
+            ROOT / "1-org/org-policies/module/variables.tf"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'length(var.list_policies["iam.allowedPolicyMemberDomains"].allowed_values) == 1',
+            variables,
+        )
+        self.assertIn(
+            'var.list_policies["iam.allowedPolicyMemberDomains"].allowed_values[0] == var.cloud_identity_customer_id',
+            variables,
+        )
+        self.assertIn(
+            'length(var.list_policies["iam.allowedPolicyMemberDomains"].denied_values) == 0',
+            variables,
+        )
+        self.assertNotIn(
+            'allowed_values == [var.cloud_identity_customer_id]', variables
+        )
+
+    def test_import_runbook_has_fail_closed_resume_path(self) -> None:
+        runbook = (ROOT / "docs/initial-import.md").read_text(encoding="utf-8")
+        for required in (
+            "Resume after a completed import",
+            "resume_verified_import",
+            "must not be imported again",
+            "state generation changed after the stopped import",
+            'terragrunt show -json > "${state_json}"',
+            'previous_generation="${current_generation}"',
+        ):
+            self.assertIn(required, runbook)
 
 
 if __name__ == "__main__":
