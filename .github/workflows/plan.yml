@@ -121,6 +121,8 @@ jobs:
           persist-credentials: false
       - name: Test operational script safety
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Validate DNS portfolio policy and live-record parity
+        run: python3 scripts/validate_dns_portfolio.py
       - name: Validate bootstrap-derived account contract
         run: python3 scripts/validate-account.py --runtime
       - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342  # v31.11.0

@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "registrar": "squarespace",
+  "authoritative_dns": "google-cloud-dns",
+  "module_contract": {
+    "repository": "mindclade/mindclade-internal-monorepo",
+    "path": "infra/terraform/modules/dns",
+    "ref": "v0.1.0",
+    "allowed_public_record_types": [
+      "CAA",
+      "MX",
+      "NS",
+      "TXT"
+    ],
+    "supports_record_name_override": false
+  },
+  "domains": [
+    {
+      "domain": "mindclade.com",
+      "role": "corporate-identity-email-trust",
+      "mail_policy": "google-workspace",
+      "dnssec_required": true,
+      "inventory_complete": false,
+      "delegation_ready": false,
+      "activation_blockers": [
+        "current-authoritative-record-inventory-not-reviewed",
+        "workspace-mail-records-not-imported",
+        "dns-live-zone-interface-not-aligned",
+        "dns-module-record-name-override-not-released"
+      ],
+      "records": []
+    },
+    {
+      "domain": "mindclade.ai",
+      "role": "production-product-api-auth",
+      "mail_policy": "no-mail",
+      "dnssec_required": true,
+      "inventory_complete": false,
+      "delegation_ready": false,
+      "activation_blockers": [
+        "current-authoritative-record-inventory-not-reviewed",
+        "dns-live-zone-interface-not-aligned",
+        "dns-module-record-name-override-not-released"
+      ],
+      "records": [
+        {
+          "name": "@",
+          "type": "MX",
+          "ttl": 3600,
+          "rrdatas": [
+            "0 ."
+          ]
+        },
+        {
+          "name": "@",
+          "type": "TXT",
+          "ttl": 3600,
+          "rrdatas": [
+            "v=spf1 -all"
+          ]
+        },
+        {
+          "name": "_dmarc",
+          "type": "TXT",
+          "ttl": 3600,
+          "rrdatas": [
+            "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s"
+          ]
+        }
+      ]
+    },
+    {
+      "domain": "mindclade.dev",
+      "role": "developer-documentation-sdks",
+      "mail_policy": "no-mail",
+      "dnssec_required": true,
+      "inventory_complete": false,
+      "delegation_ready": false,
+      "activation_blockers": [
+        "current-authoritative-record-inventory-not-reviewed",
+        "dns-live-zone-interface-not-aligned",
+        "dns-module-record-name-override-not-released"
+      ],
+      "records": [
+        {
+          "name": "@",
+          "type": "MX",
+          "ttl": 3600,
+          "rrdatas": [
+            "0 ."
+          ]
+        },
+        {
+          "name": "@",
+          "type": "TXT",
+          "ttl": 3600,
+          "rrdatas": [
+            "v=spf1 -all"
+          ]
+        },
+        {
+          "name": "_dmarc",
+          "type": "TXT",
+          "ttl": 3600,
+          "rrdatas": [
+            "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s"
+          ]
+        }
+      ]
+    },
+    {
+      "domain": "mindclade.studio",
+      "role": "isolated-demos-experiments",
+      "mail_policy": "no-mail",
+      "dnssec_required": true,
+      "inventory_complete": false,
+      "delegation_ready": false,
+      "activation_blockers": [
+        "current-authoritative-record-inventory-not-reviewed",
+        "dns-live-zone-interface-not-aligned",
+        "dns-module-record-name-override-not-released"
+      ],
+      "records": [
+        {
+          "name": "@",
+          "type": "MX",
+          "ttl": 3600,
+          "rrdatas": [
+            "0 ."
+          ]
+        },
+        {
+          "name": "@",
+          "type": "TXT",
+          "ttl": 3600,
+          "rrdatas": [
+            "v=spf1 -all"
+          ]
+        },
+        {
+          "name": "_dmarc",
+          "type": "TXT",
+          "ttl": 3600,
+          "rrdatas": [
+            "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s"
+          ]
+        }
+      ]
+    }
+  ]
+}
