@@ -1,6 +1,13 @@
 <!-- Copyright © 2026 Mindclade, LLC. All Rights Reserved. Mindclade Proprietary and Confidential. SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary -->
 
+<!-- mindclade-doc: runbook@1 -->
+
 # Binary Authorization blocked a deployment
+
+> **Use when:** GKE rejects an immutable image digest under Binary Authorization policy.
+> **Impact:** the new revision is blocked; the last healthy qualified revision should remain.
+> **Owner:** release owner with platform and security support.
+> **Escalate:** immediately if an expected attestation cannot be verified or policy/key drift exists.
 
 ## Symptoms
 
@@ -39,3 +46,14 @@ weaken admission merely to make the rollout progress.
 
 Keep builder negative-authorization tests and a staging end-to-end attestation test in the
 release qualification suite.
+
+## Verify recovery
+
+- GKE admits the exact qualified digest without a policy exception.
+- The attestation resolves to the approved note and enabled KMS key version.
+- GitOps reports the intended revision healthy and synchronized.
+- The incident/change record links source, SBOM, provenance, qualification, signer, GitOps, and
+  admission evidence.
+
+If those links cannot be proven, keep the deployment blocked and hand off the digest, attestor,
+policy decision, key version, timestamps, and relevant audit events to security.

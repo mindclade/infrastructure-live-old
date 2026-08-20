@@ -1,6 +1,13 @@
 <!-- Copyright © 2026 Mindclade, LLC. All Rights Reserved. Mindclade Proprietary and Confidential. SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary -->
 
+<!-- mindclade-doc: runbook@1 -->
+
 # Terraform state lock appears stuck
+
+> **Use when:** a state unit remains locked after its apparent plan or apply has ended.
+> **Impact:** changes to that unit are blocked; running infrastructure should be unaffected.
+> **Owner:** state-unit owner with a second qualified operator.
+> **Escalate:** when lock ownership is uncertain, an apply may still run, or state drift is detected.
 
 ## Symptoms
 
@@ -36,3 +43,13 @@ run; urgency does not justify deleting lock or state objects.
 
 Retain apply concurrency groups, bounded provider timeouts, GCS audit logs, and periodic
 state-lock recovery drills.
+
+## Verify recovery
+
+- Audit and workflow evidence proves no prior operation remains active.
+- The exact orphaned lock is gone and state generations remain intact.
+- A locked read-only plan completes for the same unit.
+- Any proposed drift is explained and reviewed before another apply.
+
+Record the unit, lock ID, original actor/source SHA, reviewers, release action, validation result,
+and audit timestamps. Stop and escalate rather than retrying force-unlock against a different ID.

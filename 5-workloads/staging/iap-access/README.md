@@ -22,4 +22,5 @@ Google-managed IAP OAuth clients are the default for internal browser access. Cu
 credentials are used only when external users or custom branding require them, and their
 secrets stay outside Git.
 
-See `docs/gitops-handoff.md` and the GitOps rendering/provenance gates before activation.
+See the [GitOps handoff](../../../docs/gitops-handoff.md) and the GitOps rendering/provenance
+gates before activation.

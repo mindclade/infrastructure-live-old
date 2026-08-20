@@ -1,6 +1,13 @@
 <!-- Copyright © 2026 Mindclade, LLC. All Rights Reserved. Mindclade Proprietary and Confidential. SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary -->
 
+<!-- mindclade-doc: runbook@1 -->
+
 # VPC Service Controls denial
+
+> **Use when:** a Google API request is denied by a service perimeter or access level.
+> **Impact:** the operation is blocked; an unexpected denial may indicate unauthorized access.
+> **Owner:** workload owner with platform and security review.
+> **Escalate:** immediately for an unexpected production caller or suspected perimeter drift.
 
 ## Symptoms
 
@@ -39,3 +46,14 @@ Git reconciliation.
 
 Add the approved path to the VPC-SC integration fixtures and retain the negative test that
 would detect a broader grant.
+
+## Verify recovery
+
+- The intended request succeeds through the exact approved identity, service, method, and resource.
+- Unrelated callers, services, resources, and network paths remain denied.
+- The applied plan matches the protected reviewed artifact.
+- The incident/change record retains the troubleshooting token, audit event, policy delta, test
+  results, approvers, and expiry/removal evidence for any emergency rule.
+
+If the authenticated caller or target cannot be reconciled with the approved architecture, do not
+change the perimeter. Preserve evidence and hand the incident to security.
