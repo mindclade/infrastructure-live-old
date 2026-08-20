@@ -114,7 +114,7 @@
         # ---------------------------------------------------------------------------------
         # CI shell
         # ---------------------------------------------------------------------------------
-        # Terragrunt only.
+        # Terragrunt with an exact Terraform delegate.
         #
         # It was previously fetched with `curl -fsSL -o /usr/local/bin/terragrunt` in five
         # places across plan.yml, apply.yml, and drift.yml, with nothing verifying the bytes —
@@ -122,14 +122,15 @@
         # revision and Nix checks every store path against its hash, so the download is gone
         # rather than merely authenticated.
         #
-        # NO terraform here, deliberately. The workflows get it from the SHA-pinned
-        # hashicorp/setup-terraform action, which is not an unverified download; putting it in
-        # this shell as well would leave two terraform binaries on PATH with the order
-        # deciding which one runs.
+        # Terraform stays off PATH so workflow steps can continue using setup-terraform directly.
+        # Terragrunt does not consult that ambiguous PATH: TG_TF_PATH points at the same
+        # hash-pinned Terraform derivation used by the developer shell.
         #
         # Separate from `default` because that shell also carries google-cloud-sdk, checkov and
         # infracost — a large closure to realise for a job that needs one binary.
         devShells.ci = pkgs.mkShell {
+          TG_TF_PATH = "${terraform-pinned}/bin/terraform";
+
           packages = [ terragrunt-pinned ] ++ (with pkgs; [
             # The `lint` job in plan.yml. .yamllint.yaml and .github/actionlint.yaml were in
             # this repository with nothing running either of them — and only `default` carried
@@ -142,6 +143,8 @@
         };
 
         devShells.default = pkgs.mkShell {
+          TG_TF_PATH = "${terraform-pinned}/bin/terraform";
+
           # Every version here is fixed by flake.lock, which is committed. Without it
           # `nixos-25.05` is a BRANCH resolved at evaluation time, and the toolchain would
           # drift between a laptop and CI with no file in this repository changing.

@@ -75,5 +75,12 @@ jobs:
           # command. Select the JSON object so the banner cannot be parsed as Terraform JSON.
           have_tf="$(nix develop --command terraform version -json | sed -n '/^{/,$p' | jq -r .terraform_version)"
           have_tg="$(nix develop .#ci --command terragrunt --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+          have_tg_tf="$(
+            nix develop .#ci --command sh -c '
+              test -x "$TG_TF_PATH"
+              "$TG_TF_PATH" version -json
+            ' | jq -r .terraform_version
+          )"
           [[ "$have_tf" == "$want_tf" ]]
           [[ "$have_tg" == "$want_tg" ]]
+          [[ "$have_tg_tf" == "$want_tf" ]]

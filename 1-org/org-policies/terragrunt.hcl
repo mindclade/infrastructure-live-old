@@ -20,26 +20,34 @@ terraform {
   source = "./module"
 }
 
+locals {
+  # Read the raw environment rather than account.hcl's safe planning default. Only an operator
+  # who explicitly selects the baseline adoption phase may bypass the uninitialized folders
+  # backend and consume the sentinel outputs below.
+  baseline_org_policy_adoption = get_env("ORG_POLICY_ACTIVATION_PHASE", "") == "baseline"
+}
+
 # The sandbox folder gets one constraint relaxed, so this unit needs its id. During the
 # baseline-only adoption, none of the folder-scoped resources exist in configuration, and an
 # import of an already-existing organization policy must not be blocked merely because the
 # folders unit has not produced state yet. Permit the sentinel only for that exact import phase;
 # an extended-phase import must resolve the real folder output and therefore fails closed.
 dependency "folders" {
-  config_path = "../folders"
+  config_path  = "../folders"
+  skip_outputs = local.baseline_org_policy_adoption
 
-  mock_outputs = {
+  mock_outputs = local.baseline_org_policy_adoption ? {
     folder_ids = {
       partners = "folders/000000000000"
       sandbox  = "folders/000000000001"
     }
-  }
-  mock_outputs_allowed_terraform_commands = concat(
-    ["plan", "validate", "init"],
-    # Read the raw environment value rather than account.hcl's planning default: an operator
-    # must explicitly export the baseline phase before import can use a synthetic folder id.
-    get_env("ORG_POLICY_ACTIVATION_PHASE", "") == "baseline" ? ["import"] : [],
-  )
+  } : {}
+  mock_outputs_allowed_terraform_commands = local.baseline_org_policy_adoption ? [
+    "import",
+    "init",
+    "plan",
+    "validate",
+  ] : []
 }
 
 inputs = {

@@ -44,8 +44,15 @@ bootstrap outputs and the target estate has been reconciled with Terraform state
    source ./.account.env
    python3 scripts/validate-account.py --runtime
    test "${ORG_POLICY_ACTIVATION_PHASE}" = baseline
+   test -x "${TG_TF_PATH}"
+   test "$("${TG_TF_PATH}" version -json | jq -r .terraform_version)" = \
+     "$(tr -d '[:space:]' < .terraform-version)"
    make validate
    ```
+
+   Remain inside this Nix shell for every Terragrunt command below. Both development shells set
+   `TG_TF_PATH` to the repository's hash-pinned Terraform 1.15.9 derivation, so Terragrunt cannot
+   select a different Terraform binary from the operator's `PATH`.
 
 5. Validate immutable module interfaces against the approved internal monorepo checkout using
    the repository's module-interface script and contract.
@@ -59,6 +66,7 @@ bootstrap outputs and the target estate has been reconciled with Terraform state
    cd 1-org/org-policies
    set -euo pipefail
    test "${ORG_POLICY_ACTIVATION_PHASE}" = baseline
+   test -x "${TG_TF_PATH}"
 
    umask 077
    IMPORT_EVIDENCE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/mindclade-policy-import.XXXXXX")"
@@ -106,6 +114,12 @@ bootstrap outputs and the target estate has been reconciled with Terraform state
      esac
    fi
    ```
+
+   The explicit baseline environment also makes this unit set `skip_outputs = true` for its
+   folders dependency and use only the sentinel folder outputs during `init`, `validate`,
+   `import`, and `plan`; the uninitialized folders backend is not read. Any absent value or the
+   later `extended` phase sets `skip_outputs = false`, disables these mocks, and requires real
+   folders state.
 
    Exit status `1` is accepted as a fresh prefix only when stderr is exactly
    `ERROR: (gcloud.storage.ls) One or more URLs matched no objects.` with an optional final newline.
