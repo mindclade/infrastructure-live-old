@@ -62,15 +62,15 @@ class CapacityContractTests(unittest.TestCase):
                 )
 
     def test_matching_profile_contract_passes(self) -> None:
-        profile = "gke-h200-a3-ultragpu-8g"
-        documents = source(profile, "h200")
+        profile = "gke-b200-a4-highgpu-8g"
+        documents = source(profile, "b200")
         self.assertEqual(
             CAPACITY.contract_errors({profile}, lambda path: documents[path]), []
         )
 
-    def test_stale_b200_contract_is_rejected_for_h200_live_pool(self) -> None:
-        live = "gke-h200-a3-ultragpu-8g"
-        documents = source("gke-b200-a4-highgpu-8g", "b200")
+    def test_stale_h200_contract_is_rejected_for_b200_live_pool(self) -> None:
+        live = "gke-b200-a4-highgpu-8g"
+        documents = source("gke-h200-a3-ultragpu-8g", "h200")
 
         def read(path: str) -> str:
             try:
@@ -95,22 +95,22 @@ class CapacityContractTests(unittest.TestCase):
         errors = CAPACITY.contract_errors({profile}, read)
         self.assertTrue(any("h100-job.json: missing" in item for item in errors))
 
-    def test_live_contract_rejects_b200_substitution(self) -> None:
+    def test_live_contract_rejects_h200_substitution(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            self.write_live_contract(root, "gke-b200-a4-highgpu-8g")
+            self.write_live_contract(root, "gke-h200-a3-ultragpu-8g")
             previous = CAPACITY.ROOT
             CAPACITY.ROOT = root
             try:
                 _, _, errors = CAPACITY.live_contract()
             finally:
                 CAPACITY.ROOT = previous
-        self.assertTrue(any("approved H100 A3 Mega + H200 A3 Ultra" in item for item in errors))
+        self.assertTrue(any("approved H100 A3 Mega + B200 A4" in item for item in errors))
 
-    def test_live_contract_accepts_h200_a3_ultra(self) -> None:
+    def test_live_contract_accepts_b200_a4(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            self.write_live_contract(root, "gke-h200-a3-ultragpu-8g")
+            self.write_live_contract(root, "gke-b200-a4-highgpu-8g")
             previous = CAPACITY.ROOT
             CAPACITY.ROOT = root
             try:

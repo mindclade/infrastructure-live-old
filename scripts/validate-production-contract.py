@@ -756,8 +756,8 @@ elif REPOSITORY == "infrastructure-live":
     gpu_profiles = {
         "gpu-a3": "gke-h100-a3-megagpu-8g",
         # The directory name is a retained Terragrunt state address; the selected
-        # production profile is H200 A3 Ultra.
-        "gpu-a4": "gke-h200-a3-ultragpu-8g",
+        # production profile is B200 A4 High.
+        "gpu-a4": "gke-b200-a4-highgpu-8g",
     }
     for env in ("development", "staging", "production"):
         for pool, profile in gpu_profiles.items():
@@ -774,7 +774,7 @@ elif REPOSITORY == "infrastructure-live":
             } and not re.search(
                 r'capacity_mode\s*=\s*"QUEUED_PROVISIONING"', gpu
             ):
-                error(f"{env}/{pool} H200/B200 capacity must use queued provisioning")
+                error(f"{env}/{pool} high-density GPU capacity must use queued provisioning")
             if profile in {
                 "gke-h200-a3-ultragpu-8g",
                 "gke-b200-a4-highgpu-8g",

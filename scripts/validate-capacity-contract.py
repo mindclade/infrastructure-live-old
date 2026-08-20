@@ -30,7 +30,7 @@ PROFILE_CODES = {
 CANONICAL_POOL_PROFILES = {
     "gpu-a3": "gke-h100-a3-megagpu-8g",
     # gpu-a4 is a retained Terragrunt state address, not the selected machine series.
-    "gpu-a4": "gke-h200-a3-ultragpu-8g",
+    "gpu-a4": "gke-b200-a4-highgpu-8g",
 }
 SEMVER = re.compile(r"v\d+\.\d+\.\d+")
 
@@ -107,7 +107,7 @@ def live_contract() -> tuple[str, dict[str, str], list[str]]:
     if baseline != CANONICAL_POOL_PROFILES:
         errors.append(
             "live GPU pool/profile mapping differs from the approved H100 A3 Mega + "
-            f"H200 A3 Ultra contract: {baseline} != {CANONICAL_POOL_PROFILES}"
+            f"B200 A4 contract: {baseline} != {CANONICAL_POOL_PROFILES}"
         )
     return ref, baseline, errors
 

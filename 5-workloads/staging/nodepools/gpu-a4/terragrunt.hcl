@@ -2,11 +2,11 @@
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
 
-# H200 A3 Ultra accelerator pool. Tainted, scales to zero, and scheduled through Kueue.
+# B200 A4 High accelerator pool. Tainted, scales to zero, and scheduled through Kueue.
 # The legacy gpu-a4 state path is retained deliberately; renaming it would fork Terragrunt state.
 #
 # It exists as a separate pool rather than a larger max on the H100 pool because the two are
-# not substitutable: a run compiled and tuned for H100 does not simply go faster on H200, and
+# not substitutable: a run compiled and tuned for H100 does not simply go faster on B200, and
 # Kueue needs to be able to admit to one and not the other. A single pool with mixed shapes
 # would let a job land on whichever node happened to be free.
 #
@@ -55,8 +55,8 @@ dependency "node_identities" {
 }
 
 inputs = {
-  name                       = "gpu-h200"
-  profile                    = "gke-h200-a3-ultragpu-8g"
+  name                       = "gpu-b200"
+  profile                    = "gke-b200-a4-highgpu-8g"
   zone                       = include.root.locals.account_vars.locals.gpu_zone
   cluster_name               = dependency.gke.outputs.cluster_name
   project_id                 = dependency.shared.outputs.project_ids["platform"]
