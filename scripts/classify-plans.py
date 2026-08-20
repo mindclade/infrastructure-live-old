@@ -2,12 +2,14 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+
 #
 """Classify Terraform JSON plans for destructive and critical changes.
 
 This is an enforcement input, not a presentation-only parser. Unknown or malformed plan JSON
 fails closed so a production apply cannot proceed on an unclassified plan bundle.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -85,7 +87,9 @@ def main() -> int:
     if not documents:
         errors.append("no Terraform plan JSON documents were generated")
 
-    counts = {name: 0 for name in ("create", "update", "delete", "replace", "read", "no-op")}
+    counts = {
+        name: 0 for name in ("create", "update", "delete", "replace", "read", "no-op")
+    }
     destructive_changes: list[dict] = []
     critical_changes: list[dict] = []
     plan_files: list[str] = []
@@ -103,8 +107,12 @@ def main() -> int:
                 continue
             change = entry.get("change")
             actions = change.get("actions") if isinstance(change, dict) else None
-            if not isinstance(actions, list) or not all(isinstance(action, str) for action in actions):
-                errors.append(f"{relative}: {entry.get('address', '<unknown>')} has invalid actions")
+            if not isinstance(actions, list) or not all(
+                isinstance(action, str) for action in actions
+            ):
+                errors.append(
+                    f"{relative}: {entry.get('address', '<unknown>')} has invalid actions"
+                )
                 continue
             classification = classify_actions(actions)
             counts[classification] += 1
@@ -142,7 +150,9 @@ def main() -> int:
         "critical_changes": critical_changes,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    args.output.write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     print(
         "plan classification: "
         f"create={counts['create']} update={counts['update']} "

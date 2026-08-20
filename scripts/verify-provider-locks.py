@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+
 # MINDCLADE CONFIDENTIAL - PROPRIETARY AND TRADE SECRET
 # Copyright (c) 2026 Mindclade. All rights reserved.
 """Verify provider dependency-lock completeness and parity for all live units."""
+
 from __future__ import annotations
 
 import hashlib
@@ -44,7 +49,9 @@ if addresses != EXPECTED_PROVIDERS:
     raise SystemExit(1)
 for address, body in entries:
     version = re.search(r'^\s*version\s*=\s*"([^"]+)"', body, flags=re.MULTILINE)
-    constraints = re.search(r'^\s*constraints\s*=\s*"([^"]+)"', body, flags=re.MULTILINE)
+    constraints = re.search(
+        r'^\s*constraints\s*=\s*"([^"]+)"', body, flags=re.MULTILINE
+    )
     hashes = re.findall(r'"zh:([0-9a-f]{64})"', body)
     if not version or version.group(1) != EXPECTED_VERSION:
         print(f"{address}: lock version is not {EXPECTED_VERSION}", file=sys.stderr)

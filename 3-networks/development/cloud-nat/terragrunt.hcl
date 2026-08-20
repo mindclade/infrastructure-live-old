@@ -4,7 +4,7 @@
 
 # Egress NAT. Required because external IPs are denied org-wide.
 #
-# `compute.vmExternalIpAccess` is deny-all in bootstrap, so no node, no pod, and no VM has a
+# `compute.vmExternalIpAccess` is deny-all in `1-org/org-policies`, so no node, pod, or VM has a
 # route off the network without this. That makes NAT load-bearing rather than convenient: an
 # outage here is every image pull, every package install, and every outbound API call failing
 # at once, with an error that says "connection timed out" and names nothing.

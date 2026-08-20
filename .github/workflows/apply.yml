@@ -168,7 +168,7 @@ jobs:
           SCOPE: ${{ matrix.scope }}
           UNIT: ${{ matrix.unit }}
           PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
-        run: ./scripts/terragrunt-scope.sh plan "$SCOPE" "$PLAN_DIR" "$UNIT"
+        run: python3 scripts/terragrunt-scope.py plan "$SCOPE" "$PLAN_DIR" "$UNIT"
       - name: Summarize classified changes
         env:
           PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
@@ -266,7 +266,7 @@ jobs:
           SCOPE: ${{ matrix.scope }}
           UNIT: ${{ matrix.unit }}
           PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
-        run: ./scripts/terragrunt-scope.sh apply "$SCOPE" "$PLAN_DIR" "$UNIT"
+        run: python3 scripts/terragrunt-scope.py apply "$SCOPE" "$PLAN_DIR" "$UNIT"
 
   report-failure:
     needs: [scope, plan-exact-main, apply]

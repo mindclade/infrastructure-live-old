@@ -54,11 +54,16 @@ resource "google_project_iam_custom_role" "attestation_occurrence_creator" {
   ]
 }
 
-resource "google_project_iam_member" "attestation_issuer_viewer" {
+resource "google_project_iam_member" "attestation_issuer_verifier" {
   for_each = local.attestation_issuers
   project  = var.project_id
-  role     = "roles/binaryauthorization.attestorsViewer"
+  role     = "roles/binaryauthorization.attestorsVerifier"
   member   = each.value
+}
+
+moved {
+  from = google_project_iam_member.attestation_issuer_viewer
+  to   = google_project_iam_member.attestation_issuer_verifier
 }
 
 resource "google_project_iam_member" "attestation_issuer_occurrence_creator" {

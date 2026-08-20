@@ -1,5 +1,15 @@
 <!-- mindclade-doc: repository-home@1 -->
 
+<!-- Brand source: mindclade/.github-private/mindclade-brand-assets (MONO family). -->
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/mono-wordmark-dark-1080w.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/brand/mono-wordmark-1080w.png">
+    <img alt="Mindclade." src="docs/assets/brand/mono-wordmark-1080w.png" width="360">
+  </picture>
+</p>
+
 # Mindclade · Infrastructure Live
 
 > **Platform Foundation · Google Cloud desired state**
@@ -32,6 +42,7 @@ install Argo CD or applications and does not store secret values.
 The diagram shows the enforced layer direction and the two external handoffs.
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#F2EFE8","primaryTextColor":"#201C24","primaryBorderColor":"#B5673F","secondaryColor":"#FBFAF7","tertiaryColor":"#FBFAF7","lineColor":"#5B5660","edgeLabelBackground":"#FBFAF7","clusterBkg":"#FBFAF7","clusterBorder":"#E2DED4"}}}%%
 flowchart TD
     B["bootstrap<br/>Ring-0 state and federation"] --> O["1-org<br/>hierarchy and common controls"]
     O --> E["2-environments<br/>environment foundations"]
@@ -40,9 +51,9 @@ flowchart TD
     P --> W["5-workloads<br/>clusters and managed services"]
     W --> G["gitops<br/>Kubernetes desired state"]
 
-    classDef authority fill:#0b1f33,color:#ffffff,stroke:#3aa3ff,stroke-width:2px;
-    classDef managed fill:#e8f4ff,color:#0b1f33,stroke:#1677b8,stroke-width:1.5px;
-    classDef external fill:#f4f7fa,color:#0b1f33,stroke:#66788a,stroke-width:1.5px;
+    classDef authority fill:#201C24,color:#F2EFE8,stroke:#D68A61,stroke-width:2px;
+    classDef managed fill:#F2EFE8,color:#201C24,stroke:#B5673F,stroke-width:1.5px;
+    classDef external fill:#FBFAF7,color:#423D48,stroke:#5B5660,stroke-width:1.5px;
     class O,E,N,P,W managed;
     class B,G external;
 ```
@@ -72,13 +83,15 @@ make plan-development
 ```
 
 The flake and CI pin Terraform and Terragrunt. CI enables Terragrunt strict mode. Create a
-local ignored account contract only from verified bootstrap outputs:
+local ignored account contract only from bootstrap's verified, versioned `platform_contract`
+output (currently `1.2.0`):
 
 ```sh
-./scripts/bootstrap-account.sh ../bootstrap
+python3 scripts/bootstrap-account.py ../bootstrap
 ```
 
-Do not hand-edit state bucket, WIF, project-number, or bootstrap project values.
+Do not hand-edit state bucket, GitHub/Buildkite WIF, project-number, or bootstrap project
+values.
 
 ## Exact apply model
 

@@ -91,9 +91,12 @@ check "artifact_signer_trust_contract" {
   assert {
     condition = (
       var.artifact_signer_wif_provider == "${var.github_wif_pool_name}/providers/gh-mindclade-internal-monorepo" &&
-      var.artifact_signer_principal == "principal://iam.googleapis.com/${var.github_wif_pool_name}/subject/repo:${var.github_org}/mindclade-internal-monorepo:environment:release" &&
+      can(regex(
+        "^principal://iam\\.googleapis\\.com/${var.github_wif_pool_name}/subject/repo:${var.github_org}@[0-9]+/mindclade-internal-monorepo@[0-9]+:environment:release$",
+        var.artifact_signer_principal,
+      )) &&
       var.artifact_signer_job_workflow_ref == "${var.github_org}/.github/.github/workflows/reusable-binauthz-sign.yml@refs/tags/v3.0.0"
     )
-    error_message = "Artifact signer trust must match bootstrap's exact monorepo release subject and immutable reusable signer workflow."
+    error_message = "Artifact signer trust must match bootstrap's immutable-ID monorepo release subject and immutable reusable signer workflow."
   }
 }

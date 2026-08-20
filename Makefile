@@ -1,12 +1,15 @@
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := validate
 
-.PHONY: validate format plan-development plan-staging plan-production
-validate: validate-production-contract
+.PHONY: validate test format plan-development plan-staging plan-production
+validate: validate-production-contract test
 	python3 scripts/verify-provider-locks.py
 	./scripts/validate-live-tree.py
 	./scripts/validate-dependency-order.py
 	terragrunt hcl fmt --check --diff
+
+test:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py'
 
 format:
 	terragrunt hcl fmt

@@ -12,7 +12,7 @@ locals {
 
   verifier_roles = toset([
     "roles/artifactregistry.reader",
-    "roles/binaryauthorization.attestorsViewer",
+    "roles/binaryauthorization.attestorsVerifier",
     "roles/containeranalysis.occurrences.viewer",
   ])
 

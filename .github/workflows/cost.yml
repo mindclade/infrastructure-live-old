@@ -47,6 +47,9 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # Match the bootstrap plan identity's exact environment-shaped subject. Fork pull
+    # requests remain excluded before an OIDC token can be requested.
+    environment: plan
     permissions:
       contents: read
       id-token: write

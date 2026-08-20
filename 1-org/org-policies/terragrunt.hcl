@@ -2,18 +2,10 @@
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
 
-# The full constraint set. bootstrap applies only the subset needed to build safely.
-#
-# The split is deliberate. bootstrap runs before anything exists and must not be able to lock
-# itself out, so it applies the constraints that make a mistake unrecoverable — no service
-# account keys, no public buckets, no external IPs — and stops there. Everything that
-# constrains how workloads are BUILT belongs here, where it is applied by a pipeline and
-# reviewed as a PR.
-#
-# THIS UNIT MUST NOT REDECLARE A CONSTRAINT bootstrap ALREADY OWNS. Two configurations
-# managing one policy each read the other's value as drift and revert it on every apply,
-# which produces no error and no stable state. The list bootstrap owns is in
-# the former bootstrap governance owner; every constraint below is absent from it.
+# The complete normal-plane organization-policy set. `bootstrap` intentionally owns no normal
+# organization policy; this is the sole Terraform state owner for every constraint below.
+# High-risk policies must pass Policy Simulator/dry-run evaluation and the documented lockout
+# recovery rehearsal before the exact reviewed organization-level plan is applied.
 
 include "root" {
   path   = find_in_parent_folders("root.hcl")
@@ -21,11 +13,11 @@ include "root" {
 }
 
 terraform {
-  source = "${include.root.locals.module_source_base}//org_policy?ref=${local.module_version}"
-}
-
-locals {
-  module_version = "v0.1.1"
+  # This unit is intentionally local. Google automatically provisioned Mindclade's 2026
+  # security baseline with Org Policy API v2 managed constraints whose parameter blocks are
+  # not representable by the legacy org_policy@v0.1.1 module. Keeping the implementation
+  # beside the live policy prevents a fake legacy equivalent or an unpublished module ref.
+  source = "./module"
 }
 
 # The sandbox folder gets one constraint relaxed, so this unit needs its id.
@@ -42,33 +34,56 @@ dependency "folders" {
 }
 
 inputs = {
-  parent = "organizations/${include.root.locals.org_id}"
+  parent                     = "organizations/${include.root.locals.org_id}"
+  sandbox_folder_id          = dependency.folders.outputs.folder_ids["sandbox"]
+  cloud_identity_customer_id = include.root.locals.cloud_identity_customer_id
 
   # ---------------------------------------------------------------------------------------
   # Boolean constraints
   # ---------------------------------------------------------------------------------------
   boolean_policies = {
+    # Static service-account credentials are incompatible with Mindclade's keyless identity
+    # invariant. The managed key-creation constraint is declared separately below; upload is
+    # the legacy boolean policy that Google provisioned in this organization.
+    "iam.disableServiceAccountKeyUpload" = true
+
+    # Google-provisioned security baselines. These exact constraint names must be imported
+    # before the first apply; a second policy with a similar name is not reconciliation.
+    "iam.automaticIamGrantsForDefaultServiceAccounts" = true
+    "storage.uniformBucketLevelAccess"                 = true
+
+    # Uniform bucket policy is necessary but not sufficient: PAP blocks public principals
+    # even if a later IAM edit attempts to add allUsers or allAuthenticatedUsers.
+    "storage.publicAccessPrevention" = true
+
+    # Interactive serial access and nested virtualization are absent from the platform's
+    # operating model and expand the host-level attack surface.
+    "compute.disableSerialPortAccess"     = true
+    "compute.disableNestedVirtualization" = true
+
+    # Security contacts are governed at organization/folder scope below. Project owners may
+    # not redirect security notices to an unreviewed project contact.
+    "essentialcontacts.disableProjectSecurityContacts" = true
+
     # Shielded VM: secure boot, vTPM, integrity monitoring. GKE sets this per node pool
     # anyway; enforcing it org-wide is what covers the VM somebody creates by hand.
     "compute.requireShieldedVm" = true
 
     # IP forwarding turns any VM into a router, which is how a workload reaches a subnet the
     # firewall says it cannot. Nothing here needs it; a NAT gateway is a managed service.
-    "compute.vmCanIpForward" = false
+    "compute.vmCanIpForward" = true
 
     # Removing a lien on a Shared VPC host project is the step before deleting it out from
     # under every service project attached to it.
     "compute.restrictXpnProjectLienRemoval" = true
 
-    # Serial-port output can contain secrets echoed by a startup script. Bootstrap already
-    # denies interactive serial access; this denies the log.
+    # Serial-port output can contain secrets echoed by a startup script. Interactive access is
+    # denied above; this also denies the log.
     "compute.disableSerialPortLogging" = true
 
     # Guest attributes are a metadata channel readable by anything on the instance, which
     # makes them a convenient exfiltration path out of a locked-down VM.
     "compute.disableGuestAttributesAccess" = true
-
-    # Nested virtualisation is already denied by bootstrap. Not repeated here.
 
     # GKE node diagnostic data can be uploaded to Google support with cluster contents in it.
     # Fine as a deliberate act during a support case; not fine as a default.
@@ -88,6 +103,20 @@ inputs = {
   # List constraints
   # ---------------------------------------------------------------------------------------
   list_policies = {
+    # Only identities from Mindclade's immutable Cloud Identity customer may be added to IAM.
+    # The customer ID is a governed runtime account value, never a committed identifier.
+    "iam.allowedPolicyMemberDomains" = {
+      allowed_values = [include.root.locals.cloud_identity_customer_id]
+      denied_values  = []
+    }
+
+    # No VM receives a public address by default. The isolated sandbox override below is the
+    # only exception; GKE nodes, CI runners, and every environment remain private.
+    "compute.vmExternalIpAccess" = {
+      allowed_values = []
+      denied_values  = ["*"]
+    }
+
     # CMEK, not Google-managed keys, on the services that hold model weights, training data,
     # and credentials. This is the constraint that makes 1-org/kms load-bearing rather than
     # decorative: without it, a bucket created without an `encryption_key` is silently
@@ -142,13 +171,6 @@ inputs = {
       denied_values = []
     }
 
-    # Protocol forwarding to an external address is a way to expose a VM without creating
-    # anything the load-balancer constraint above would catch.
-    "compute.restrictProtocolForwardingCreationForTypes" = {
-      allowed_values = ["INTERNAL"]
-      denied_values  = []
-    }
-
     # VPC peering leaves the perimeter without leaving the console. Restricting it to our own
     # org means a peering to a partner's network is a policy exception somebody signs off.
     "compute.restrictVpcPeering" = {
@@ -164,6 +186,27 @@ inputs = {
     }
   }
 
+  # Managed constraints are boolean policies with typed JSON parameters. They must use the
+  # Org Policy API v2 resource; treating them as legacy list constraints changes semantics.
+  managed_policies = {
+    "iam.managed.disableServiceAccountKeyCreation" = {
+      enforced   = true
+      parameters = {}
+    }
+    "essentialcontacts.managed.allowedContactDomains" = {
+      enforced = true
+      parameters = {
+        allowedDomains = ["@${include.root.locals.domain}"]
+      }
+    }
+    "compute.managed.restrictProtocolForwardingCreationForTypes" = {
+      enforced = true
+      parameters = {
+        allowedSchemes = ["INTERNAL"]
+      }
+    }
+  }
+
   # ---------------------------------------------------------------------------------------
   # Folder-scoped exceptions
   # ---------------------------------------------------------------------------------------
@@ -173,17 +216,6 @@ inputs = {
   #
   # Nothing else is loosened, and nothing in sandbox is reachable from a production network:
   # it has its own folder, and 3-networks peers no VPC into it.
-  folder_overrides = {
-    "${dependency.folders.outputs.folder_ids["sandbox"]}" = {
-      "compute.vmExternalIpAccess" = {
-        # Reset rather than allow_all: reset restores the org default of deny, then the rule
-        # below re-permits. Writing allow_all directly would inherit nothing and silently
-        # drop any future org-level tightening.
-        deny_all = false
-        reason   = "Experiments need reachable endpoints. Isolated folder, no peering, 2000 budget cap."
-      }
-    }
-  }
-
-  labels = include.root.locals.common_labels
+  # The local module resets only compute.vmExternalIpAccess at this exact folder.
+  sandbox_external_ip_reset = true
 }

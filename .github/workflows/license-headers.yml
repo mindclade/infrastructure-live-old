@@ -39,4 +39,4 @@ jobs:
           persist-credentials: false
 
       - name: Ensure proprietary header policy
-        run: bash scripts/license-header-check.sh --check
+        run: python3 scripts/license-header-check.py --check

@@ -10,7 +10,7 @@ This file covers what is different here.
 
 ```sh
 nix develop                                    # terraform 1.15.9, terragrunt 1.1.2, gcloud
-./scripts/bootstrap-account.sh ../bootstrap    # generate .account.env from bootstrap outputs
+python3 scripts/bootstrap-account.py ../bootstrap    # generate .account.env from bootstrap outputs
 ```
 
 `account.hcl` is a stable `get_env()` contract. Source `.account.env` locally; every generated value comes from `terraform output` in the
@@ -74,7 +74,7 @@ python3 scripts/validate-account.py
 python3 scripts/validate-live-tree.py
 python3 scripts/validate-dependency-order.py
 python3 scripts/validate-production-contract.py
-./scripts/plan-changed.sh origin/main       # only what your branch touches, plus dependents
+python3 scripts/plan-changed.py origin/main # only what your branch touches, plus dependents
 pre-commit install
 pre-commit run --all-files
 ```

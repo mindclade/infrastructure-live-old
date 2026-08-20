@@ -161,13 +161,6 @@
             # of this repository's units — see the derivation above.
             terragrunt-pinned
 
-            # bash 5, explicitly.
-            #
-            # scripts/plan-changed.sh uses `declare -A` and `mapfile`, both bash 4+. macOS
-            # ships bash 3.2 and will never ship newer, so on a laptop without this the
-            # script fails with "mapfile: command not found" — while CI, on ubuntu, passes.
-            # A script that only works in CI is a script nobody can debug.
-            bashInteractive
           ];
 
           shellHook = ''
@@ -205,7 +198,7 @@
             fi
 
             echo
-            echo "  ./scripts/plan-changed.sh    plan only what this branch touches"
+            echo "  python3 scripts/plan-changed.py  plan only what this branch touches"
             echo "  docs/dependency-graph.md     apply order between stages"
           '';
         };

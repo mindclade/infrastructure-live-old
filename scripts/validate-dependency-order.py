@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+
 """Validate literal Terragrunt dependency paths and the numbered layer DAG."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -24,7 +29,9 @@ def environment(path: Path) -> str | None:
 
 
 for config in ROOT.rglob("terragrunt.hcl"):
-    if any(part in {".git", ".terraform", ".terragrunt-cache"} for part in config.parts):
+    if any(
+        part in {".git", ".terraform", ".terragrunt-cache"} for part in config.parts
+    ):
         continue
     relative = config.relative_to(ROOT)
     source_layer = layer(relative)
@@ -39,11 +46,17 @@ for config in ROOT.rglob("terragrunt.hcl"):
             errors.append(f"{relative}: dependency escapes repository: {raw}")
             continue
         if not (target / "terragrunt.hcl").is_file():
-            errors.append(f"{relative}: dependency target is missing: {target_relative}")
+            errors.append(
+                f"{relative}: dependency target is missing: {target_relative}"
+            )
             continue
 
         target_layer = layer(target_relative)
-        if source_layer is not None and target_layer is not None and target_layer > source_layer:
+        if (
+            source_layer is not None
+            and target_layer is not None
+            and target_layer > source_layer
+        ):
             errors.append(f"{relative}: backward dependency on {target_relative}")
 
         target_env = environment(target_relative)

@@ -29,8 +29,8 @@ inputs = {
   name     = "${local.account_vars.locals.prefix}-${local.environment}"
   location = local.account_vars.locals.region
 
-  # Private cluster. Nodes have no public IPs — which is enforced org-wide anyway by
-  # compute.vmExternalIpAccess, so a public cluster would simply fail to create.
+  # Private cluster. Nodes have no public IPs — which infrastructure-live's organization
+  # policy also enforces, so a public cluster would fail to create.
   enable_private_nodes    = true
   enable_private_endpoint = true # control plane is reachable only through private connectivity
 

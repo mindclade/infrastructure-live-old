@@ -23,9 +23,10 @@ folder. The identities cannot mutate another environment through those bindings.
 
 It also creates normal-plane builder, qualifier, signer, and promoter service accounts. The
 builder, qualifier, and promoter use narrowly selected Buildkite step principals. The signer
-does not: only bootstrap's exact
-`repo:mindclade/mindclade-internal-monorepo:environment:release` GitHub subject, executing the
-immutable `reusable-binauthz-sign.yml@refs/tags/v3.0.0` job workflow, may impersonate it.
+does not: only bootstrap's exact post-July-2026 immutable-ID subject
+`repo:mindclade@OWNER_ID/mindclade-internal-monorepo@REPOSITORY_ID:environment:release`,
+executing the immutable `reusable-binauthz-sign.yml@refs/tags/v3.0.0` job workflow, may
+impersonate it. The IDs come from bootstrap outputs and are never invented here.
 See [`supply-chain-signer-contract.md`](supply-chain-signer-contract.md).
 
 The foundation identity remains the only automation principal for:
@@ -35,6 +36,23 @@ The foundation identity remains the only automation principal for:
 - centralized security and logging;
 - authoritative DNS and shared networking;
 - the environment-identity handoff itself.
+
+### GitOps identity re-export
+
+`5-workloads/shared/control-plane-identities` is authoritative for both GitOps workflow
+identities. Its `github_config_identity_handoff` output exposes their exact emails as:
+
+```text
+SA_GITOPS_RENDER
+SA_GITOPS_VERIFIER
+```
+
+These values are outputs, not naming conventions. `github-config` must not construct or
+hardcode either email. Initial activation is deliberately staged: apply this live unit, export
+the two non-secret output values into the `github-config` catalog, review its resulting plan,
+then reapply `github-config` so the GitOps repository receives the authoritative values. Repeat
+that re-export and reviewed governance apply after any identity replacement. Until this handoff
+has completed, the GitOps render and provenance workflows are not activation-ready.
 
 `account.hcl` is a stable `get_env()` contract. In CI, `github-config` exports verified
 bootstrap outputs as repository variables; local operators generate the ignored `.account.env` file

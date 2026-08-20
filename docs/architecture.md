@@ -41,6 +41,7 @@ The diagram shows dependency and handoff direction. Recovery rebuilds from top t
 approved decommission proceeds in the reverse direction.
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#F2EFE8","primaryTextColor":"#201C24","primaryBorderColor":"#B5673F","secondaryColor":"#FBFAF7","tertiaryColor":"#FBFAF7","lineColor":"#5B5660","edgeLabelBackground":"#FBFAF7","clusterBkg":"#FBFAF7","clusterBorder":"#E2DED4"}}}%%
 flowchart TD
     B["bootstrap<br/>state, WIF, seed projects"] --> L1["1-org<br/>organization and common controls"]
     L1 --> L2["2-environments<br/>folders and shared projects"]
@@ -54,9 +55,9 @@ flowchart TD
     M --> L5
     L5 --> G["gitops<br/>Argo and Kubernetes state"]
 
-    classDef authority fill:#0b1f33,color:#ffffff,stroke:#3aa3ff,stroke-width:2px;
-    classDef managed fill:#e8f4ff,color:#0b1f33,stroke:#1677b8,stroke-width:1.5px;
-    classDef external fill:#f4f7fa,color:#0b1f33,stroke:#66788a,stroke-width:1.5px;
+    classDef authority fill:#201C24,color:#F2EFE8,stroke:#D68A61,stroke-width:2px;
+    classDef managed fill:#F2EFE8,color:#201C24,stroke:#B5673F,stroke-width:1.5px;
+    classDef external fill:#FBFAF7,color:#423D48,stroke:#5B5660,stroke-width:1.5px;
     class L1,L2,L3,L4,L5 managed;
     class B,M,G external;
 ```
@@ -85,7 +86,7 @@ environment configuration; lower environments do not silently omit trust boundar
 
 On a merge, `scripts/select-apply-scopes.py` maps changed paths to the minimum of
 `foundation`, `development`, `staging`, `production`, or `partners`. Global account or shared
-configuration can select multiple scopes. `scripts/terragrunt-scope.sh` creates an exact plan
+configuration can select multiple scopes. `scripts/terragrunt-scope.py` creates an exact plan
 bundle with account context, run context, classification, and checksums.
 
 The protected apply downloads that one-day artifact, requires explicit authorization for

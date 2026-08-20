@@ -9,6 +9,7 @@
 The numeric tree is an enforced dependency contract, not cosmetic organization.
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#F2EFE8","primaryTextColor":"#201C24","primaryBorderColor":"#B5673F","secondaryColor":"#FBFAF7","tertiaryColor":"#FBFAF7","lineColor":"#5B5660","edgeLabelBackground":"#FBFAF7","clusterBkg":"#FBFAF7","clusterBorder":"#E2DED4"}}}%%
 flowchart TD
     B["bootstrap<br/>external Ring 0"] --> L1["1-org"]
     L1 --> L2["2-environments"]
@@ -17,8 +18,8 @@ flowchart TD
     L4 --> L5["5-workloads"]
     L5 --> G["gitops<br/>external Kubernetes state"]
 
-    classDef managed fill:#e8f4ff,color:#0b1f33,stroke:#1677b8,stroke-width:1.5px;
-    classDef external fill:#f4f7fa,color:#0b1f33,stroke:#66788a,stroke-width:1.5px;
+    classDef managed fill:#F2EFE8,color:#201C24,stroke:#B5673F,stroke-width:1.5px;
+    classDef external fill:#FBFAF7,color:#423D48,stroke:#5B5660,stroke-width:1.5px;
     class L1,L2,L3,L4,L5 managed;
     class B,G external;
 ```

@@ -2,6 +2,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+
 #
 """Validate live Terragrunt module references against an exact monorepo Git checkout.
 
@@ -10,6 +11,7 @@ that every referenced module exists and that each Terragrunt input name is decla
 module. Terraform/Terragrunt planning remains the authoritative semantic validation, but this
 preflight turns missing/scaffolded module interfaces into a small, explicit failure.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -83,7 +85,10 @@ def top_level_input_keys(text: str) -> set[str]:
 
 
 def module_contract(text: str) -> tuple[str, str] | None:
-    source = re.search(r'(?s)terraform\s*\{.*?source\s*=\s*"[^\"]*//([^?\"]+)\?ref=\$\{local\.module_version\}"', text)
+    source = re.search(
+        r'(?s)terraform\s*\{.*?source\s*=\s*"[^\"]*//([^?\"]+)\?ref=\$\{local\.module_version\}"',
+        text,
+    )
     version = re.search(r'module_version\s*=\s*"([^"]+)"', text)
     if not source:
         return None
@@ -91,20 +96,30 @@ def module_contract(text: str) -> tuple[str, str] | None:
         raise ValueError("module source has no literal local.module_version")
     ref = version.group(1)
     if not SEMVER_OR_SHA.fullmatch(ref):
-        raise ValueError(f"module ref is not a protected full semver tag or commit SHA: {ref}")
+        raise ValueError(
+            f"module ref is not a protected full semver tag or commit SHA: {ref}"
+        )
     return source.group(1), ref
 
 
 def envcommon_path(unit_text: str) -> Path | None:
-    m = re.search(r'_envcommon/([A-Za-z0-9_.-]+\.hcl)', unit_text)
+    m = re.search(r"_envcommon/([A-Za-z0-9_.-]+\.hcl)", unit_text)
     return ROOT / "_envcommon" / m.group(1) if m else None
 
 
 def module_tf(repo: Path, ref: str, module: str) -> str:
     prefix = f"{MODULE_PREFIX}/{module}/"
-    names = [n for n in git(repo, "ls-tree", "-r", "--name-only", ref, "--", prefix).splitlines() if n.endswith(".tf")]
+    names = [
+        n
+        for n in git(
+            repo, "ls-tree", "-r", "--name-only", ref, "--", prefix
+        ).splitlines()
+        if n.endswith(".tf")
+    ]
     if not names:
-        raise RuntimeError(f"{ref}:{MODULE_PREFIX}/{module} does not contain Terraform source")
+        raise RuntimeError(
+            f"{ref}:{MODULE_PREFIX}/{module} does not contain Terraform source"
+        )
     return "\n".join(git(repo, "show", f"{ref}:{name}") for name in names)
 
 
@@ -129,7 +144,9 @@ def main() -> int:
         common = envcommon_path(unit_text)
         if module_contract(contract_text) is None and common:
             if not common.is_file():
-                errors.append(f"{config.relative_to(ROOT)}: included envcommon file missing: {common.relative_to(ROOT)}")
+                errors.append(
+                    f"{config.relative_to(ROOT)}: included envcommon file missing: {common.relative_to(ROOT)}"
+                )
                 continue
             contract_text = common.read_text(encoding="utf-8")
         try:
@@ -149,7 +166,9 @@ def main() -> int:
                 tf = module_tf(repo, ref, module)
                 variables = set(re.findall(r'variable\s+"([^"]+)"', tf))
                 if not variables:
-                    raise RuntimeError(f"{ref}:{MODULE_PREFIX}/{module} declares no Terraform variables (scaffold/incomplete module)")
+                    raise RuntimeError(
+                        f"{ref}:{MODULE_PREFIX}/{module} declares no Terraform variables (scaffold/incomplete module)"
+                    )
                 cache[key] = variables
             extra = sorted(inputs - variables)
             if extra:
@@ -163,9 +182,14 @@ def main() -> int:
     if errors:
         for e in errors:
             print(f"ERROR: {e}", file=sys.stderr)
-        print(f"module-interface preflight failed: {len(errors)} violation(s), {checked} unit(s) checked", file=sys.stderr)
+        print(
+            f"module-interface preflight failed: {len(errors)} violation(s), {checked} unit(s) checked",
+            file=sys.stderr,
+        )
         return 1
-    print(f"module-interface preflight passed: {checked} unit(s), {len(cache)} module/ref pair(s)")
+    print(
+        f"module-interface preflight passed: {checked} unit(s), {len(cache)} module/ref pair(s)"
+    )
     return 0
 
 

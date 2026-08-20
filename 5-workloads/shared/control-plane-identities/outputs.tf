@@ -3,9 +3,18 @@
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
 
 output "service_accounts" {
+  description = "Normal-plane GitOps render and verification service-account emails."
   value = {
     gitops_render   = google_service_account.gitops_render.email
     gitops_verifier = google_service_account.gitops_verifier.email
+  }
+}
+
+output "github_config_identity_handoff" {
+  description = "Exact non-secret variables that github-config must re-export after this unit is applied."
+  value = {
+    SA_GITOPS_RENDER   = google_service_account.gitops_render.email
+    SA_GITOPS_VERIFIER = google_service_account.gitops_verifier.email
   }
 }
 

@@ -23,10 +23,11 @@ bootstrap outputs and the target estate has been reconciled with Terraform state
 1. Back up the current repository and record its default-branch commit.
 2. Copy this tree into the existing checkout while preserving `.git`. Exclude `.account.env`,
    Terraform or Terragrunt caches, plans, state, credentials, and local overrides.
-3. Generate the ignored account contract from the verified bootstrap checkout:
+3. Generate the ignored account contract from the verified bootstrap checkout. The exporter
+   fails closed unless the Ring-0 `platform_contract` version is exactly supported:
 
    ```sh
-   ./scripts/bootstrap-account.sh ../bootstrap
+   python3 scripts/bootstrap-account.py ../bootstrap
    ```
 
 4. Enter the pinned shell and run structural validation:

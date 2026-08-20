@@ -47,7 +47,7 @@ namespace policy and is not part of the global default.
 |---|---|
 | Builder | Artifact publication plus create/list on `build-attestor`; its note/key only |
 | Qualifier | Artifact and analysis read plus create/list on `qualification-attestor`; its note/key only |
-| Protected signer | Artifact read; build/qualification read; create/list on `deployment-attestor`; its note/key only |
+| Protected signer | Artifact read; cryptographic verification of all three attestors; create/list on `deployment-attestor`; its note/key only |
 
 The project-local `mindcladeAttestationOccurrenceCreator` custom role includes only occurrence
 create/get/list and project discovery; it deliberately omits occurrence update/delete. All
@@ -56,6 +56,9 @@ of those permissions are supported in Google Cloud custom roles. Note-scoped
 remain owned by the Binary Authorization module. No issuer is an attestor, note, key, or
 policy administrator, and each note/key grant must name only its matching identity. Occurrence
 read is project-scoped; attachment and signing mutation remain stage-scoped by note and key.
+Issuers and GitOps verification use the read-only
+`roles/binaryauthorization.attestorsVerifier`; the list-only `attestorsViewer` role cannot
+prove an occurrence signature and is insufficient for promotion or deployment evidence.
 
 ## Required negative tests
 

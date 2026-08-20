@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+
 """Select the minimum infrastructure-live apply scopes for a merged commit.
 
 The script deliberately ignores documentation/tooling-only changes. A manual dispatch must
 name a scope, and an optional unit is validated against that scope before a privileged job is
 created.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path, PurePosixPath
+from typing import NoReturn
 import subprocess
 import sys
 
@@ -53,7 +59,7 @@ ENVIRONMENT = {
 ORDER = tuple(SCOPE_PREFIXES)
 
 
-def fail(message: str) -> "NoReturn":
+def fail(message: str) -> NoReturn:
     print(f"error: {message}", file=sys.stderr)
     raise SystemExit(2)
 
@@ -84,9 +90,7 @@ def scope_for_path(path: str) -> set[str]:
     if path.startswith(FOUNDATION_SPECIAL_PREFIXES):
         return {"foundation"}
     return {
-        scope
-        for scope, prefixes in SCOPE_PREFIXES.items()
-        if path.startswith(prefixes)
+        scope for scope, prefixes in SCOPE_PREFIXES.items() if path.startswith(prefixes)
     }
 
 
@@ -109,7 +113,9 @@ def changed_paths(before: str, after: str) -> list[str]:
         command = ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", after]
     else:
         command = ["git", "diff", "--name-only", before, after]
-    result = subprocess.run(command, cwd=ROOT, check=True, text=True, capture_output=True)
+    result = subprocess.run(
+        command, cwd=ROOT, check=True, text=True, capture_output=True
+    )
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
