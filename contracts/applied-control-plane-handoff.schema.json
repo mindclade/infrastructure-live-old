@@ -13,7 +13,7 @@
     "credential_material_included"
   ],
   "properties": {
-    "contract_version": { "const": "1.0.0" },
+    "contract_version": { "const": "1.1.0" },
     "producer": { "const": "mindclade/infrastructure-live" },
     "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "environment": { "const": "production" },
@@ -35,7 +35,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "CI_PROJECT_ID",
+        "SA_ARC_CANARY",
+        "SA_ARTIFACT_BUILDER",
+        "SA_ARTIFACT_QUALIFICATION_READER",
+        "SA_ARTIFACT_QUALIFIER",
         "SA_ARTIFACT_SIGNER",
+        "SA_ARTIFACT_PROMOTER",
         "SA_GITOPS_RENDER",
         "SA_GITOPS_VERIFIER",
         "BINAUTHZ_BUILD_ATTESTOR_PROJECT",
@@ -47,9 +53,33 @@
         "BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION"
       ],
       "properties": {
+        "CI_PROJECT_ID": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*-common-ci$"
+        },
+        "SA_ARC_CANARY": {
+          "type": "string",
+          "pattern": "^sa-arc-canary@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
+        "SA_ARTIFACT_BUILDER": {
+          "type": "string",
+          "pattern": "^sa-artifact-builder@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
+        "SA_ARTIFACT_QUALIFICATION_READER": {
+          "type": "string",
+          "pattern": "^sa-artifact-qual-reader@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
+        "SA_ARTIFACT_QUALIFIER": {
+          "type": "string",
+          "pattern": "^sa-artifact-qualifier@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
         "SA_ARTIFACT_SIGNER": {
           "type": "string",
           "pattern": "^sa-artifact-signer@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
+        "SA_ARTIFACT_PROMOTER": {
+          "type": "string",
+          "pattern": "^sa-artifact-promoter@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
         },
         "SA_GITOPS_RENDER": {
           "type": "string",

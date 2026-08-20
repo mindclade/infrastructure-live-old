@@ -11,7 +11,7 @@
 ## Prerequisites
 
 - the existing `mindclade/infrastructure-live` repository and `.git` history;
-- `.github` workflow release `v3.0.0`, completed Ring-0 bootstrap, and applied
+- `.github` workflow release `v4.0.0`, completed Ring-0 bootstrap contract `1.3.0`, and applied
   `github-config` environments and variables;
 - distinct plan and scope-specific apply identities with qualified negative tests;
 - the exact immutable internal-monorepo module releases referenced by live units; and

@@ -36,13 +36,13 @@ it consumes without moving reusable module ownership into this repository.
 Run the interface preflight directly when diagnosing a mismatch:
 
 ```sh
-python3 scripts/validate-module-interfaces.py
+make validate-module-interfaces MONOREPO=../mindclade-internal-monorepo
 ```
 
 Then run the complete repository contract:
 
 ```sh
-nix develop .#ci --command make validate
+nix develop .#ci --command make validate-integration MONOREPO=../mindclade-internal-monorepo
 ```
 
 The preflight is structural; a successful Terraform plan is still the authoritative semantic and

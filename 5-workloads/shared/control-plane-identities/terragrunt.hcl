@@ -15,7 +15,18 @@ include "root" {
 dependency "common_projects" {
   config_path = "../../../1-org/common-projects"
   mock_outputs = {
-    project_ids = { security = "mc-common-security" }
+    project_ids     = { security = "mc-common-security", ci = "mc-common-ci" }
+    project_numbers = { ci = "000000000001" }
+  }
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+}
+
+dependency "automation" {
+  config_path = "../../../1-org/automation-iam"
+  mock_outputs = {
+    supply_chain_service_accounts = {
+      promoter = "sa-artifact-promoter@mc-common-ci.iam.gserviceaccount.com"
+    }
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
@@ -47,11 +58,14 @@ dependency "production" {
 }
 
 inputs = {
-  security_project_id  = dependency.common_projects.outputs.project_ids["security"]
-  region               = include.root.locals.region
-  secret_kms_key_id    = dependency.global_kms.outputs.crypto_key_ids["ci_secrets"]
-  github_wif_pool_name = include.root.locals.account_vars.locals.github_wif_pool_name
-  github_org           = include.root.locals.github_org
+  security_project_id                = dependency.common_projects.outputs.project_ids["security"]
+  region                             = include.root.locals.region
+  secret_kms_key_id                  = dependency.global_kms.outputs.crypto_key_ids["ci_secrets"]
+  github_wif_pool_name               = include.root.locals.account_vars.locals.github_wif_pool_name
+  github_org                         = include.root.locals.github_org
+  ci_project_id                      = dependency.common_projects.outputs.project_ids["ci"]
+  ci_project_number                  = dependency.common_projects.outputs.project_numbers["ci"]
+  arc_promoter_service_account_email = dependency.automation.outputs.supply_chain_service_accounts["promoter"]
 
 
   platform_project_ids = {

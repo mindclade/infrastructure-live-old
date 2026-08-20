@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "infrastructure-live"
 CONTRACT = json.loads(
-    '{"authority": ["normal-gcp-organization-infrastructure", "folders", "org-policy", "environments", "networks", "projects", "gke", "managed-cloud-services"], "forbidden_authority": ["ring0-state-foundation", "argocd-installation", "kubernetes-desired-state", "application-source"], "forbidden_paths": [".terraform", ".terragrunt-cache", "5-workloads/development/argocd", "5-workloads/staging/argocd", "5-workloads/production/argocd"], "repository_class": "production-control", "required_paths": ["1-org", "2-environments/development", "2-environments/staging", "2-environments/production", "3-networks", "4-projects", "5-workloads/development", "5-workloads/staging", "5-workloads/production", "root.hcl"], "visibility": "private"}'
+    '{"authority": ["normal-gcp-organization-infrastructure", "folders", "org-policy", "environments", "networks", "projects", "gke", "managed-cloud-services"], "forbidden_authority": ["ring0-state-foundation", "argocd-installation", "kubernetes-desired-state", "application-source"], "forbidden_paths": [".terraform", ".terragrunt-cache", "5-workloads/development/argocd", "5-workloads/staging/argocd", "5-workloads/production/argocd"], "repository_class": "production-control", "required_paths": ["AGENTS.md", "1-org", "2-environments/development", "2-environments/staging", "2-environments/production", "3-networks", "4-projects", "5-workloads/development", "5-workloads/staging", "5-workloads/production", "root.hcl"], "visibility": "private"}'
 )
 ERRORS = []
 
@@ -81,6 +81,25 @@ for canonical_url in (
 ):
     if canonical_url not in repository_contract:
         error(f"repository contract omits canonical GitHub URL: {canonical_url}")
+
+makefile = (ROOT / "Makefile").read_text("utf-8", errors="ignore")
+module_contract_docs = (ROOT / "docs/module-interface-contract.md").read_text(
+    "utf-8", errors="ignore"
+)
+for required_make_contract in (
+    "validate-integration: validate validate-module-interfaces",
+    'python3 scripts/validate-module-interfaces.py --monorepo "$(MONOREPO)"',
+):
+    if required_make_contract not in makefile:
+        error(
+            "local cross-repository module validation omits: "
+            + required_make_contract
+        )
+if (
+    "make validate-integration MONOREPO=../mindclade-internal-monorepo"
+    not in module_contract_docs
+):
+    error("module interface documentation omits the executable integration target")
 
 for rel in CONTRACT["required_paths"]:
     if not (ROOT / rel).exists():
@@ -215,7 +234,9 @@ elif REPOSITORY == "infrastructure-live":
         for path in (ROOT / "1-org/automation-iam").rglob("*.tf")
     )
     for identity in (
+        "arc-canary",
         "artifact-builder",
+        "artifact-qual-reader",
         "artifact-qualifier",
         "artifact-signer",
         "artifact-promoter",
@@ -248,42 +269,30 @@ elif REPOSITORY == "infrastructure-live":
     automation_outputs = (ROOT / "1-org/automation-iam/outputs.tf").read_text(
         "utf-8", errors="ignore"
     )
-    if (
-        'resource "google_service_account_iam_member" "artifact_signer_github_wif"'
-        not in automation_main
-    ):
-        error("artifact signer is not bound to the bootstrap-exported GitHub principal")
-    if "member             = var.artifact_signer_principal" not in automation_main:
-        error(
-            "artifact signer WIF binding does not consume bootstrap's exact principal"
-        )
-    if re.search(
-        r'(?m)^\s*signer\s*=\s*\{\s*account\s*=\s*"artifact-signer"\s*,?\s*step\s*=\s*"artifact-sign"',
-        automation_main,
-    ):
-        error(
-            "artifact signer remains impersonable by the Buildkite artifact-sign step"
-        )
-    if (
-        "for_each           = local.buildkite_supply_chain_identities"
-        not in automation_main
-    ):
-        error(
-            "Buildkite federation is not limited to builder/qualifier/promoter identities"
-        )
+    if 'resource "google_service_account_iam_member" "supply_chain_github_wif"' not in automation_main:
+        error("ARC capabilities are not bound to bootstrap-exported GitHub principals")
+    if "member             = var.artifact_release_identities[each.value.capability].principal" not in automation_main:
+        error("ARC WIF bindings do not consume each bootstrap capability principal")
+    if "buildkite" in automation_main.lower():
+        error("retired Buildkite federation remains in normal-plane automation IAM")
     for trust_value in (
         "gh-mindclade-internal-monorepo",
-        "repo:${var.github_org}@[0-9]+",
-        "mindclade-internal-monorepo@[0-9]+:environment:release",
-        "reusable-binauthz-sign.yml@refs/tags/v3.0.0",
+        "gh-arc-qualification-reader",
+        'capability == "signer" ? "" : "arc-${capability}:"',
+        "reusable-binauthz-sign.yml",
+        "@refs/tags/v4.0.0",
     ):
         if trust_value not in automation_main:
-            error(f"artifact signer trust check omits: {trust_value}")
+            error(f"ARC artifact trust check omits: {trust_value}")
     for output_name in (
         "WIF_PROVIDER_SIGNER",
         "SA_ARTIFACT_SIGNER",
         "ARTIFACT_SIGNER_PRINCIPAL",
         "ARTIFACT_SIGNER_JOB_WORKFLOW_REF",
+        "artifact_release_identity_contract",
+        "SA_ARC_CANARY",
+        "SA_ARTIFACT_QUALIFICATION_READER",
+        "SA_ARTIFACT_PROMOTER",
     ):
         if output_name not in automation_outputs:
             error(f"artifact signer identity output omits: {output_name}")
@@ -318,7 +327,11 @@ elif REPOSITORY == "infrastructure-live":
             "utf-8", errors="ignore"
         )
         for required_handoff_gate in (
-            "artifact_signer_identity_contract",
+            "artifact_release_identity_contract",
+            "ARTIFACT_RELEASE_IDENTITIES_JSON",
+            "SA_ARC_CANARY",
+            "SA_ARTIFACT_QUALIFICATION_READER",
+            "SA_ARTIFACT_PROMOTER",
             "github_config_identity_handoff",
             '"project_id"',
             '"attestor_names"',
@@ -343,6 +356,8 @@ elif REPOSITORY == "infrastructure-live":
         error(
             "GitOps verifier cannot cryptographically validate deployment attestations"
         )
+    if "roles/binaryauthorization.policyViewer" not in control_plane_iam:
+        error("GitOps verifier cannot read the applied Binary Authorization policy")
     if "roles/binaryauthorization.attestorsViewer" in control_plane_iam:
         error("GitOps verifier retains list-only Binary Authorization access")
 
@@ -375,6 +390,10 @@ elif REPOSITORY == "infrastructure-live":
         )
         for env in ("development", "staging", "production")
     )
+    if "cluster_admission_rules" in all_binauthz:
+        error("Binary Authorization live units retain unsupported pseudo-namespace cluster rules")
+    if "ALWAYS_ALLOW" in all_binauthz:
+        error("Binary Authorization live units retain an ALWAYS_ALLOW bypass")
     attestor_issuers = {
         "build-attestor": "builder",
         "qualification-attestor": "qualifier",
@@ -394,6 +413,26 @@ elif REPOSITORY == "infrastructure-live":
     binauthz_defaults = (ROOT / "_envcommon/binauthz.hcl").read_text(
         "utf-8", errors="ignore"
     )
+    for required in (
+        'jsondecode(file("${get_repo_root()}/contracts/argocd-image-exceptions.json"))',
+        "exempt_images                 = local.argocd_exception_images",
+        'global_policy_evaluation_mode = "ENABLE"',
+    ):
+        if required not in binauthz_defaults:
+            error(f"Binary Authorization exact-exception contract omits: {required}")
+    for forbidden in (
+        "gcr.io/google-containers/*",
+        "k8s.gcr.io/**",
+        "registry.k8s.io/**",
+        "gke.gcr.io/**",
+    ):
+        if forbidden in binauthz_defaults:
+            error(f"Binary Authorization retains broad image exemption: {forbidden}")
+    if not re.search(
+        r'enforcement_mode\s*=\s*local\.environment\s*==\s*"development"\s*\?\s*"DRYRUN_AUDIT_LOG_ONLY"\s*:\s*"ENFORCED_BLOCK_AND_AUDIT_LOG"',
+        binauthz_defaults,
+    ):
+        error("Binary Authorization must audit development and enforce staging/production")
     admission = re.search(
         r"require_attestations_by\s*=\s*local\.environment\s*==\s*\"production\"\s*\?\s*\[(.*?)\]\s*:\s*\[(.*?)\]",
         binauthz_defaults,
@@ -409,16 +448,25 @@ elif REPOSITORY == "infrastructure-live":
         if production_attestors != {"deployment-attestor"}:
             error("global production admission must require deployment-attestor only")
         if lower_attestors != {"build-attestor"}:
-            error("lower environments must rehearse build-attestor in dry-run")
+            error("lower environments must use the build-attestor trust root")
+
+    exception_validator = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/validate-argocd-image-exceptions.py")],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if exception_validator.returncode != 0:
+        error(
+            "Argo exact-digest exception contract failed: "
+            + exception_validator.stderr.strip()
+        )
 
     account_text = (ROOT / "account.hcl").read_text("utf-8", errors="ignore")
-    if (
-        'get_env("BUILDKITE_WIF_ENABLED", "false")' not in account_text
-        or 'get_env("BUILDKITE_WIF_POOL_NAME", "")' not in account_text
-    ):
-        error(
-            "account contract does not model optional bootstrap-managed Buildkite WIF"
-        )
+    if 'jsondecode(get_env("ARTIFACT_RELEASE_IDENTITIES_JSON"))' not in account_text:
+        error("account contract does not consume the exact ARC identity inventory")
+    if "BUILDKITE_WIF" in account_text:
+        error("account contract retains retired Buildkite federation inputs")
     if 'get_env("CLOUD_IDENTITY_CUSTOMER_ID")' not in account_text:
         error("account contract omits the immutable Cloud Identity customer ID")
     if 'get_env("ORG_POLICY_ACTIVATION_PHASE", "baseline")' not in account_text:
@@ -429,13 +477,11 @@ elif REPOSITORY == "infrastructure-live":
         "utf-8", errors="ignore"
     )
     if (
-        '"BUILDKITE_WIF_ENABLED"' not in bootstrap_account
-        or 'values["BUILDKITE_WIF_POOL_NAME"]' not in bootstrap_account
-        or "validated_buildkite" not in bootstrap_account
+        "validated_retired_buildkite" not in bootstrap_account
+        or '"ARTIFACT_RELEASE_IDENTITIES_JSON"' not in bootstrap_account
+        or "validated_release_identities" not in bootstrap_account
     ):
-        error(
-            "bootstrap account exporter omits the bootstrap-managed Buildkite WIF pool"
-        )
+        error("bootstrap account exporter omits the exact ARC identity contract")
     initial_import = (ROOT / "docs/initial-import.md").read_text(
         "utf-8", errors="ignore"
     )
@@ -452,7 +498,7 @@ elif REPOSITORY == "infrastructure-live":
         if required not in initial_import:
             error(f"initial import fresh-prefix guard omits: {required}")
     flake = (ROOT / "flake.nix").read_text("utf-8", errors="ignore")
-    pinned_tf_path = 'TG_TF_PATH = "${terraform-pinned}/bin/terraform";'
+    pinned_tf_path = 'TG_TF_PATH = "${terraformPinned}/bin/terraform";'
     if flake.count(pinned_tf_path) != 2:
         error("both Nix dev shells must pin Terragrunt to the exact Terraform derivation")
     for required in ("TG_TF_PATH", "skip_outputs", "baseline"):
@@ -461,7 +507,7 @@ elif REPOSITORY == "infrastructure-live":
     if (
         '"platform_contract"' not in bootstrap_account
         or '"output"' not in bootstrap_account
-        or 'contract.get("contract_version") != "1.2.0"' not in bootstrap_account
+        or 'contract.get("contract_version") != "1.3.0"' not in bootstrap_account
     ):
         error(
             "bootstrap account exporter bypasses the versioned Ring-0 platform contract"
@@ -474,13 +520,8 @@ elif REPOSITORY == "infrastructure-live":
         error(
             "bootstrap account exporter does not preserve baseline-only policy adoption"
         )
-    for signer_field in (
-        "artifact_signer_wif_provider",
-        "artifact_signer_principal",
-        "artifact_signer_job_workflow_ref",
-    ):
-        if signer_field not in account_text:
-            error(f"account contract omits bootstrap signer field: {signer_field}")
+    if "artifact_release_identities" not in account_text:
+        error("account contract omits bootstrap ARC release identities")
     production_cpu = ROOT / "5-workloads/production/nodepools/cpu/terragrunt.hcl"
     if production_cpu.exists() and re.search(
         r"(?m)^\s*spot\s*=\s*true\s*$",
@@ -572,10 +613,8 @@ elif REPOSITORY == "infrastructure-live":
                 "organization-policy baseline mock commands must be exactly "
                 f"{sorted(expected_mock_commands)}; got {sorted(actual_mock_commands)}"
             )
-    if "https://agent.buildkite.com" not in org_policy:
-        error(
-            "organization WIF issuer policy omits the bootstrap-managed Buildkite issuer"
-        )
+    if "https://agent.buildkite.com" in org_policy:
+        error("organization WIF issuer policy retains the retired Buildkite issuer")
     for constraint in (
         "iam.managed.disableServiceAccountKeyCreation",
         "iam.disableServiceAccountKeyUpload",
@@ -741,8 +780,8 @@ elif REPOSITORY == "infrastructure-live":
     flake = (ROOT / "flake.nix").read_text("utf-8", errors="ignore")
     for terraform_pin in (
         'terraformVersion = "1.15.9"',
-        'x86_64-linux = "76edd0b22d2f27d3d2e097cd793209646f719cf60f02ff3af626b07361137da1"',
-        'aarch64-darwin = "05b27586a5d7d84105690ecccc7edbbf48bc3d6d577745cb61f163ba990adf4f"',
+        'x86_64-linux = "sha256-du3Qsi0vJ9PS4JfNeTIJZG9xnPYPAv869iawc2ETfaE="',
+        'aarch64-darwin = "sha256-BbJ1hqXX2EEFaQ7MzH7bv0i8PW1Xd0XLYfFjupkK308="',
     ):
         if terraform_pin not in flake:
             error(f"Nix Terraform release contract omits: {terraform_pin}")

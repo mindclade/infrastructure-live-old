@@ -31,6 +31,21 @@ variable "github_org" {
   description = "Canonical GitHub organization login."
 }
 
+variable "ci_project_id" {
+  type        = string
+  description = "Project that owns the private ARC GKE cluster."
+}
+
+variable "ci_project_number" {
+  type        = string
+  description = "Numeric project number used in the exact GKE workload principal."
+}
+
+variable "arc_promoter_service_account_email" {
+  type        = string
+  description = "Normal-plane promoter identity that may read only its GitHub App key."
+}
+
 variable "platform_project_ids" {
   type = object({
     development = string

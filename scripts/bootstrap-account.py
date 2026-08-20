@@ -53,37 +53,95 @@ def need(mapping: dict[str, Any], key: str, label: str) -> Any:
     return value
 
 
-def validated_buildkite(
-    value: Any, federation_project_number: str
-) -> tuple[bool, str | None]:
+def validated_retired_buildkite(value: Any) -> None:
     if not isinstance(value, dict):
         raise ValueError("platform_contract buildkite must be an object")
-    enabled = value.get("enabled")
-    if not isinstance(enabled, bool):
-        raise ValueError("platform_contract buildkite.enabled must be boolean")
+    if value != {
+        "enabled": False,
+        "workload_identity_pool": None,
+        "workload_identity_provider": None,
+    }:
+        raise ValueError(
+            "Buildkite is retired and must publish disabled with null pool and provider"
+        )
 
-    pool = value.get("workload_identity_pool")
-    provider = value.get("workload_identity_provider")
-    if not enabled:
-        if pool is not None or provider is not None:
-            raise ValueError(
-                "disabled Buildkite federation must publish null pool and provider"
-            )
-        return False, None
 
-    expected_pool = (
-        f"projects/{federation_project_number}/locations/global/"
-        "workloadIdentityPools/buildkite"
+def validated_release_identities(
+    value: Any, github_pool: str, github_org: str
+) -> dict[str, dict[str, str]]:
+    if not isinstance(value, dict):
+        raise ValueError("platform_contract artifact release identities must be an object")
+    workflows = {
+        "canary": "reusable-arc-wif-canary.yml",
+        "builder": "reusable-arc-oci-build.yml",
+        "qualification-reader": "reusable-arc-oci-qualify.yml",
+        "qualifier": "reusable-arc-qualification-attest.yml",
+        "signer": "reusable-binauthz-sign.yml",
+        "promoter": "reusable-gitops-promote.yml",
+    }
+    if set(value) != set(workflows):
+        raise ValueError("platform_contract artifact release identity inventory is not exact")
+    caller = (
+        f"{github_org}/mindclade-internal-monorepo/.github/workflows/"
+        "release.yml@refs/heads/main"
     )
-    if pool != expected_pool:
-        raise ValueError(
-            "enabled Buildkite federation must publish its exact bootstrap pool"
+    required = {
+        "workload_identity_provider",
+        "principal",
+        "subject",
+        "workflow_ref",
+        "job_workflow_ref",
+    }
+    validated: dict[str, dict[str, str]] = {}
+    for capability, workflow in workflows.items():
+        identity = value[capability]
+        if not isinstance(identity, dict) or set(identity) != required:
+            raise ValueError(f"artifact release identity {capability} is not exact")
+        if not all(
+            isinstance(identity[field], str) and identity[field] for field in required
+        ):
+            raise ValueError(f"artifact release identity {capability} contains an empty field")
+        provider_id = (
+            "gh-mindclade-internal-monorepo"
+            if capability == "signer"
+            else f"gh-arc-{capability}"
         )
-    if provider != f"{expected_pool}/providers/buildkite":
-        raise ValueError(
-            "enabled Buildkite federation must publish its exact bootstrap provider"
+        if identity["workload_identity_provider"] != (
+            f"{github_pool}/providers/{provider_id}"
+        ):
+            raise ValueError(f"artifact release identity {capability} has wrong provider")
+        subject_suffix = (
+            "environment:release"
+            if capability in {"signer", "promoter"}
+            else "ref:refs/heads/main"
         )
-    return True, expected_pool
+        if re.fullmatch(
+            rf"repo:{re.escape(github_org)}@[0-9]+/"
+            rf"mindclade-internal-monorepo@[0-9]+:{re.escape(subject_suffix)}",
+            identity["subject"],
+        ) is None:
+            raise ValueError(f"artifact release identity {capability} has wrong subject")
+        federated_subject = (
+            identity["subject"]
+            if capability == "signer"
+            else f"arc-{capability}:{identity['subject']}"
+        )
+        expected_principal = (
+            f"principal://iam.googleapis.com/{github_pool}/subject/{federated_subject}"
+        )
+        if identity["principal"] != expected_principal:
+            raise ValueError(f"artifact release identity {capability} has wrong principal")
+        if identity["workflow_ref"] != caller:
+            raise ValueError(f"artifact release identity {capability} has wrong caller")
+        expected_job = (
+            f"{github_org}/.github/.github/workflows/{workflow}@refs/tags/v4.0.0"
+        )
+        if identity["job_workflow_ref"] != expected_job:
+            raise ValueError(
+                f"artifact release identity {capability} has wrong reusable workflow"
+            )
+        validated[capability] = {field: identity[field] for field in sorted(required)}
+    return validated
 
 
 def main() -> int:
@@ -109,7 +167,7 @@ def main() -> int:
             capture_output=True,
         )
         contract = json.loads(output.stdout)
-        if contract.get("contract_version") != "1.2.0":
+        if contract.get("contract_version") != "1.3.0":
             raise ValueError(
                 f"unsupported bootstrap platform_contract version: {contract.get('contract_version', 'missing')}"
             )
@@ -122,8 +180,10 @@ def main() -> int:
         match = re.fullmatch(r"projects/([0-9]+)/.*", pool)
         if match is None:
             raise ValueError("invalid GitHub workload identity pool resource name")
-        buildkite_enabled, buildkite_pool = validated_buildkite(
-            need(contract, "buildkite", "platform_contract"), match.group(1)
+        validated_retired_buildkite(need(contract, "buildkite", "platform_contract"))
+        github_org = str(need(github, "organization", "github"))
+        release_identities = validated_release_identities(
+            need(github, "artifact_release_identities", "github"), pool, github_org
         )
         values = {
             "GCP_ORG_ID": need(contract, "organization_id", "platform_contract"),
@@ -138,7 +198,9 @@ def main() -> int:
             ),
             "BOOTSTRAP_CICD_PROJECT_NUMBER": match.group(1),
             "GITHUB_WIF_POOL_NAME": pool,
-            "BUILDKITE_WIF_ENABLED": str(buildkite_enabled).lower(),
+            "ARTIFACT_RELEASE_IDENTITIES_JSON": json.dumps(
+                release_identities, sort_keys=True, separators=(",", ":")
+            ),
             "WIF_PROVIDER_SIGNER": need(
                 need(github, "artifact_signer", "github"),
                 "workload_identity_provider",
@@ -181,10 +243,8 @@ def main() -> int:
                 "automation identities",
             ),
             "STATE_LOCATION": need(contract["state"], "primary_location", "state"),
-            "MONOREPO_ORG": need(github, "organization", "github"),
+            "MONOREPO_ORG": github_org,
         }
-        if buildkite_pool is not None:
-            values["BUILDKITE_WIF_POOL_NAME"] = buildkite_pool
         content = "# Generated from verified bootstrap outputs. Contains identifiers only; never commit.\n"
         content += "".join(
             f"export {name}={shlex.quote(str(value))}\n"

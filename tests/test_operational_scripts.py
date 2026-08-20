@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import tempfile
@@ -35,6 +36,45 @@ HANDOFF = load(
     "export_applied_control_plane_handoff",
     "scripts/export-applied-control-plane-handoff.py",
 )
+
+
+def release_identities(
+    pool: str = "projects/123456789/locations/global/workloadIdentityPools/github",
+) -> dict[str, dict[str, str]]:
+    workflows = {
+        "canary": "reusable-arc-wif-canary.yml",
+        "builder": "reusable-arc-oci-build.yml",
+        "qualification-reader": "reusable-arc-oci-qualify.yml",
+        "qualifier": "reusable-arc-qualification-attest.yml",
+        "signer": "reusable-binauthz-sign.yml",
+        "promoter": "reusable-gitops-promote.yml",
+    }
+    result = {}
+    for capability, workflow in workflows.items():
+        subject = (
+            "repo:mindclade@316676129/mindclade-internal-monorepo@1333792222:"
+            + (
+                "environment:release"
+                if capability in {"signer", "promoter"}
+                else "ref:refs/heads/main"
+            )
+        )
+        provider = (
+            "gh-mindclade-internal-monorepo"
+            if capability == "signer"
+            else f"gh-arc-{capability}"
+        )
+        mapped_subject = subject if capability == "signer" else f"arc-{capability}:{subject}"
+        result[capability] = {
+            "workload_identity_provider": f"{pool}/providers/{provider}",
+            "principal": f"principal://iam.googleapis.com/{pool}/subject/{mapped_subject}",
+            "subject": subject,
+            "workflow_ref": "mindclade/mindclade-internal-monorepo/.github/workflows/release.yml@refs/heads/main",
+            "job_workflow_ref": (
+                f"mindclade/.github/.github/workflows/{workflow}@refs/tags/v4.0.0"
+            ),
+        }
+    return result
 
 
 class PlanSafetyTest(unittest.TestCase):
@@ -74,58 +114,46 @@ class PlanSafetyTest(unittest.TestCase):
             ACCOUNT.validated_customer_id("")
         self.assertEqual(ACCOUNT.validated_customer_id("C01234567"), "C01234567")
 
-    def test_disabled_buildkite_contract_requires_null_resources(self) -> None:
-        self.assertEqual(
-            ACCOUNT.validated_buildkite(
+    def test_retired_buildkite_contract_requires_null_resources(self) -> None:
+        self.assertIsNone(
+            ACCOUNT.validated_retired_buildkite(
                 {
                     "enabled": False,
                     "workload_identity_pool": None,
                     "workload_identity_provider": None,
-                },
-                "123456789",
-            ),
-            (False, None),
+                }
+            )
         )
         with self.assertRaises(ValueError):
-            ACCOUNT.validated_buildkite(
+            ACCOUNT.validated_retired_buildkite(
                 {
-                    "enabled": False,
+                    "enabled": True,
                     "workload_identity_pool": "projects/123456789/locations/global/workloadIdentityPools/buildkite",
-                    "workload_identity_provider": None,
-                },
-                "123456789",
+                    "workload_identity_provider": "projects/123456789/locations/global/workloadIdentityPools/buildkite/providers/buildkite",
+                }
             )
 
-    def test_enabled_buildkite_contract_requires_exact_pool_and_provider(self) -> None:
-        pool = "projects/123456789/locations/global/workloadIdentityPools/buildkite"
+    def test_release_identity_contract_is_capability_exact(self) -> None:
+        pool = "projects/123456789/locations/global/workloadIdentityPools/github"
+        identities = release_identities(pool)
         self.assertEqual(
-            ACCOUNT.validated_buildkite(
-                {
-                    "enabled": True,
-                    "workload_identity_pool": pool,
-                    "workload_identity_provider": f"{pool}/providers/buildkite",
-                },
-                "123456789",
-            ),
-            (True, pool),
+            ACCOUNT.validated_release_identities(identities, pool, "mindclade"),
+            identities,
         )
-        with self.assertRaises(ValueError):
-            ACCOUNT.validated_buildkite(
-                {
-                    "enabled": True,
-                    "workload_identity_pool": pool,
-                    "workload_identity_provider": None,
-                },
-                "123456789",
+        self.assertEqual(
+            ACCOUNT_VALIDATOR.release_identity_errors(
+                json.dumps(identities), pool, "mindclade"
+            ),
+            [],
+        )
+        identities["builder"]["principal"] = identities["qualifier"]["principal"]
+        with self.assertRaisesRegex(ValueError, "builder has wrong principal"):
+            ACCOUNT.validated_release_identities(identities, pool, "mindclade")
+        self.assertTrue(
+            ACCOUNT_VALIDATOR.release_identity_errors(
+                json.dumps(identities), pool, "mindclade"
             )
-
-    def test_runtime_buildkite_validation_is_mode_aware(self) -> None:
-        pool = "projects/123456789/locations/global/workloadIdentityPools/buildkite"
-        self.assertEqual(ACCOUNT_VALIDATOR.buildkite_errors("false", ""), [])
-        self.assertEqual(ACCOUNT_VALIDATOR.buildkite_errors("true", pool), [])
-        self.assertTrue(ACCOUNT_VALIDATOR.buildkite_errors("false", pool))
-        self.assertTrue(ACCOUNT_VALIDATOR.buildkite_errors("true", ""))
-        self.assertTrue(ACCOUNT_VALIDATOR.buildkite_errors("yes", ""))
+        )
 
     def test_state_prefix_accepts_only_exact_no_object_result(self) -> None:
         self.assertEqual(STATE_PREFIX.classify(0, ""), "existing-or-empty")
@@ -148,7 +176,12 @@ class ImportRuntimeContractTest(unittest.TestCase):
         self,
     ) -> None:
         locks = sorted(ROOT.rglob(".terraform.lock.hcl"))
-        self.assertEqual(len(locks), 103)
+        unit_directories = {
+            path.parent
+            for path in ROOT.rglob("terragrunt.hcl")
+            if not any(part in {".terraform", ".terragrunt-cache"} for part in path.parts)
+        }
+        self.assertEqual({lock.parent for lock in locks}, unit_directories | {ROOT})
         for lock in locks:
             text = lock.read_text(encoding="utf-8")
             self.assertEqual(text.count('constraints = "7.41.0"'), 2, lock)
@@ -158,7 +191,7 @@ class ImportRuntimeContractTest(unittest.TestCase):
     def test_both_nix_shells_pin_terragrunt_to_terraform(self) -> None:
         flake = (ROOT / "flake.nix").read_text(encoding="utf-8")
         self.assertEqual(
-            flake.count('TG_TF_PATH = "${terraform-pinned}/bin/terraform";'), 2
+            flake.count('TG_TF_PATH = "${terraformPinned}/bin/terraform";'), 2
         )
 
     def test_baseline_only_skips_the_folders_state_dependency(self) -> None:
@@ -227,55 +260,44 @@ class ImportRuntimeContractTest(unittest.TestCase):
 
 class AppliedControlPlaneHandoffTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.previous = {
-            name: os.environ.get(name)
-            for name in (
-                "WIF_PROVIDER_SIGNER",
-                "ARTIFACT_SIGNER_PRINCIPAL",
-                "ARTIFACT_SIGNER_JOB_WORKFLOW_REF",
-            )
-        }
-        os.environ["WIF_PROVIDER_SIGNER"] = (
-            "projects/123456789/locations/global/workloadIdentityPools/github/"
-            "providers/mindclade-internal-monorepo"
-        )
-        os.environ["ARTIFACT_SIGNER_PRINCIPAL"] = (
-            "principal://iam.googleapis.com/projects/123456789/locations/global/"
-            "workloadIdentityPools/github/subject/repo:mindclade@316676129/"
-            "mindclade-internal-monorepo@1333792222:environment:release"
-        )
-        os.environ["ARTIFACT_SIGNER_JOB_WORKFLOW_REF"] = (
-            "mindclade/.github/.github/workflows/reusable-binauthz-sign.yml@"
-            "refs/tags/v3.0.0"
+        self.previous = os.environ.get("ARTIFACT_RELEASE_IDENTITIES_JSON")
+        os.environ["ARTIFACT_RELEASE_IDENTITIES_JSON"] = json.dumps(
+            release_identities(), sort_keys=True, separators=(",", ":")
         )
 
     def tearDown(self) -> None:
-        for name, value in self.previous.items():
-            if value is None:
-                os.environ.pop(name, None)
-            else:
-                os.environ[name] = value
+        if self.previous is None:
+            os.environ.pop("ARTIFACT_RELEASE_IDENTITIES_JSON", None)
+        else:
+            os.environ["ARTIFACT_RELEASE_IDENTITIES_JSON"] = self.previous
 
     @staticmethod
     def output(value, sensitive: bool = False):
         return {"sensitive": sensitive, "type": "dynamic", "value": value}
 
     def fixtures(self):
+        accounts = {
+            "canary": "sa-arc-canary",
+            "builder": "sa-artifact-builder",
+            "qualification-reader": "sa-artifact-qual-reader",
+            "qualifier": "sa-artifact-qualifier",
+            "signer": "sa-artifact-signer",
+            "promoter": "sa-artifact-promoter",
+        }
+        applied_release_identities = {
+            capability: {
+                **identity,
+                "service_account": (
+                    f"{accounts[capability]}@mc-common-ci.iam.gserviceaccount.com"
+                ),
+            }
+            for capability, identity in release_identities().items()
+        }
         automation = {
-            "artifact_signer_identity_contract": self.output(
-                {
-                    "WIF_PROVIDER_SIGNER": os.environ["WIF_PROVIDER_SIGNER"],
-                    "SA_ARTIFACT_SIGNER": (
-                        "sa-artifact-signer@mc-common-ci.iam.gserviceaccount.com"
-                    ),
-                    "ARTIFACT_SIGNER_PRINCIPAL": os.environ[
-                        "ARTIFACT_SIGNER_PRINCIPAL"
-                    ],
-                    "ARTIFACT_SIGNER_JOB_WORKFLOW_REF": os.environ[
-                        "ARTIFACT_SIGNER_JOB_WORKFLOW_REF"
-                    ],
-                }
-            )
+            "artifact_release_identity_contract": self.output(
+                applied_release_identities
+            ),
+            "ci_project_id": self.output("mc-common-ci"),
         }
         gitops = {
             "github_config_identity_handoff": self.output(
@@ -313,7 +335,8 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
             contract["variables"]["BINAUTHZ_DEPLOYMENT_ATTESTOR"],
             "deployment-attestor",
         )
-        self.assertEqual(len(contract["variables"]), 10)
+        self.assertEqual(len(contract["variables"]), 16)
+        self.assertEqual(contract["contract_version"], "1.1.0")
         self.assertFalse(contract["credential_material_included"])
 
     def test_sensitive_output_is_rejected(self) -> None:
@@ -338,8 +361,8 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
 
     def test_identity_names_and_project_trust_domains_are_exact(self) -> None:
         automation, gitops, binauthz = self.fixtures()
-        automation["artifact_signer_identity_contract"]["value"][
-            "SA_ARTIFACT_SIGNER"
+        automation["artifact_release_identity_contract"]["value"]["signer"][
+            "service_account"
         ] = "sa-artifact-builder@mc-common-ci.iam.gserviceaccount.com"
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
@@ -365,8 +388,8 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
         automation, gitops, binauthz = self.fixtures()
-        automation["artifact_signer_identity_contract"]["value"][
-            "ARTIFACT_SIGNER_JOB_WORKFLOW_REF"
+        automation["artifact_release_identity_contract"]["value"]["signer"][
+            "job_workflow_ref"
         ] = "mindclade/.github/.github/workflows/reusable-binauthz-sign.yml@main"
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)

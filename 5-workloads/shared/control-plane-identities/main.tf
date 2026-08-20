@@ -13,6 +13,7 @@ locals {
   verifier_roles = toset([
     "roles/artifactregistry.reader",
     "roles/binaryauthorization.attestorsVerifier",
+    "roles/binaryauthorization.policyViewer",
     "roles/containeranalysis.occurrences.viewer",
   ])
 
@@ -93,6 +94,143 @@ resource "google_secret_manager_secret_iam_member" "gitops_render" {
   secret_id = google_secret_manager_secret.github_app_render_pem.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.gitops_render.email}"
+}
+
+resource "google_secret_manager_secret" "github_app_arc_pem" {
+  project   = var.security_project_id
+  secret_id = "github-app-arc-pem"
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+        customer_managed_encryption {
+          kms_key_name = var.secret_kms_key_id
+        }
+      }
+    }
+  }
+
+  labels = {
+    managed_by  = "terraform"
+    repository  = "infrastructure-live"
+    purpose     = "arc-runner-registration"
+    criticality = "critical"
+  }
+
+  depends_on = [google_kms_crypto_key_iam_member.secret_manager]
+}
+
+resource "google_secret_manager_secret" "github_app_arc_id" {
+  project   = var.security_project_id
+  secret_id = "github-app-arc-id"
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+        customer_managed_encryption {
+          kms_key_name = var.secret_kms_key_id
+        }
+      }
+    }
+  }
+
+  labels = {
+    managed_by  = "terraform"
+    repository  = "infrastructure-live"
+    purpose     = "arc-runner-registration"
+    criticality = "critical"
+  }
+
+  depends_on = [google_kms_crypto_key_iam_member.secret_manager]
+}
+
+resource "google_secret_manager_secret" "github_app_arc_installation_id" {
+  project   = var.security_project_id
+  secret_id = "github-app-arc-installation-id"
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+        customer_managed_encryption {
+          kms_key_name = var.secret_kms_key_id
+        }
+      }
+    }
+  }
+
+  labels = {
+    managed_by  = "terraform"
+    repository  = "infrastructure-live"
+    purpose     = "arc-runner-registration"
+    criticality = "critical"
+  }
+
+  depends_on = [google_kms_crypto_key_iam_member.secret_manager]
+}
+
+locals {
+  arc_secret_sync_principals = toset([
+    for namespace in ["arc-build", "arc-canary", "arc-qualify"] :
+    "principal://iam.googleapis.com/projects/${var.ci_project_number}/locations/global/workloadIdentityPools/${var.ci_project_id}.svc.id.goog/subject/ns/${namespace}/sa/arc-secret-sync"
+  ])
+
+  arc_secret_sync_bindings = {
+    for pair in setproduct(
+      toset([
+        google_secret_manager_secret.github_app_arc_id.secret_id,
+        google_secret_manager_secret.github_app_arc_installation_id.secret_id,
+        google_secret_manager_secret.github_app_arc_pem.secret_id,
+      ]),
+      local.arc_secret_sync_principals,
+    ) : "${pair[0]}:${pair[1]}" => {
+      secret_id = pair[0]
+      member    = pair[1]
+    }
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "arc_secret_sync" {
+  for_each = local.arc_secret_sync_bindings
+
+  project   = var.security_project_id
+  secret_id = each.value.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = each.value.member
+}
+
+resource "google_secret_manager_secret" "github_app_promoter_pem" {
+  project   = var.security_project_id
+  secret_id = "github-app-promoter-pem"
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+        customer_managed_encryption {
+          kms_key_name = var.secret_kms_key_id
+        }
+      }
+    }
+  }
+
+  labels = {
+    managed_by  = "terraform"
+    repository  = "infrastructure-live"
+    purpose     = "gitops-promotion"
+    criticality = "critical"
+  }
+
+  depends_on = [google_kms_crypto_key_iam_member.secret_manager]
+}
+
+resource "google_secret_manager_secret_iam_member" "arc_promoter" {
+  project   = var.security_project_id
+  secret_id = google_secret_manager_secret.github_app_promoter_pem.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${var.arc_promoter_service_account_email}"
 }
 
 resource "google_project_iam_member" "gitops_verifier" {

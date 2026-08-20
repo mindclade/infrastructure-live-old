@@ -31,13 +31,10 @@ dependency "common_projects" {
 }
 
 inputs = {
-  ci_project_id                    = dependency.common_projects.outputs.project_ids["ci"]
-  buildkite_wif_pool_name          = include.root.locals.account_vars.locals.buildkite_wif_pool_name
-  github_wif_pool_name             = include.root.locals.account_vars.locals.github_wif_pool_name
-  github_org                       = include.root.locals.account_vars.locals.github_org
-  artifact_signer_wif_provider     = include.root.locals.account_vars.locals.artifact_signer_wif_provider
-  artifact_signer_principal        = include.root.locals.account_vars.locals.artifact_signer_principal
-  artifact_signer_job_workflow_ref = include.root.locals.account_vars.locals.artifact_signer_job_workflow_ref
+  ci_project_id               = dependency.common_projects.outputs.project_ids["ci"]
+  github_wif_pool_name        = include.root.locals.account_vars.locals.github_wif_pool_name
+  github_org                  = include.root.locals.account_vars.locals.github_org
+  artifact_release_identities = include.root.locals.account_vars.locals.artifact_release_identities
 
   environment_folder_ids = {
     development = dependency.folders.outputs.folder_ids["development"]

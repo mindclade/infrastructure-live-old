@@ -164,11 +164,8 @@ inputs = {
     # it, someone with project-level IAM can federate an arbitrary OIDC provider and mint
     # credentials the audit log records as legitimate.
     "iam.workloadIdentityPoolProviders" = {
-      allowed_values = [
-        "https://token.actions.githubusercontent.com",
-        "https://agent.buildkite.com",
-      ]
-      denied_values = []
+      allowed_values = ["https://token.actions.githubusercontent.com"]
+      denied_values  = []
     }
 
     # Shared VPC hosts. A project that can become a host project can offer subnets to

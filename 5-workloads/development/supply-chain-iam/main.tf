@@ -23,12 +23,12 @@ resource "google_project_iam_member" "builder_writer" {
 resource "google_project_iam_member" "qualifier_reader" {
   project = var.project_id
   role    = "roles/artifactregistry.reader"
-  member  = local.member.qualifier
+  member  = local.member.qualification_reader
 }
 resource "google_project_iam_member" "qualifier_analysis" {
   project = var.project_id
   role    = "roles/containeranalysis.occurrences.viewer"
-  member  = local.member.qualifier
+  member  = local.member.qualification_reader
 }
 resource "google_project_iam_member" "signer_reader" {
   project = var.project_id
@@ -71,16 +71,4 @@ resource "google_project_iam_member" "attestation_issuer_occurrence_creator" {
   project  = var.project_id
   role     = google_project_iam_custom_role.attestation_occurrence_creator.name
   member   = each.value
-}
-resource "google_project_iam_member" "promoter_reader" {
-  count   = var.environment == "development" ? 1 : 0
-  project = var.project_id
-  role    = "roles/artifactregistry.reader"
-  member  = local.member.promoter
-}
-resource "google_project_iam_member" "promoter_writer" {
-  count   = var.environment == "development" ? 0 : 1
-  project = var.project_id
-  role    = "roles/artifactregistry.writer"
-  member  = local.member.promoter
 }

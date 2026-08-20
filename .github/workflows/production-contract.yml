@@ -34,3 +34,6 @@ jobs:
       - name: Validate production contract
         shell: bash
         run: python3 scripts/validate-production-contract.py
+      - name: Validate repository home
+        shell: bash
+        run: python3 scripts/validate-repository-home.py --root .

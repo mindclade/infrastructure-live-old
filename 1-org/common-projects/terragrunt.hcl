@@ -72,10 +72,17 @@ inputs = {
       project_id = "${include.root.locals.prefix}-common-ci"
       name       = "Mindclade CI and supply-chain identities"
       services = [
+        "artifactregistry.googleapis.com",
+        "binaryauthorization.googleapis.com",
+        "compute.googleapis.com",
+        "container.googleapis.com",
+        "containeranalysis.googleapis.com",
         "iam.googleapis.com",
+        "iamcredentials.googleapis.com",
         "logging.googleapis.com",
         "monitoring.googleapis.com",
         "secretmanager.googleapis.com",
+        "serviceusage.googleapis.com",
       ]
       lien = true
     }

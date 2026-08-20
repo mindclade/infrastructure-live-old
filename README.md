@@ -1,5 +1,4 @@
-<!-- mindclade-doc: repository-home@1 -->
-
+<!-- mindclade-doc: repository-home@2 -->
 <!-- Brand source: mindclade/.github-private/mindclade-brand-assets (MONO family). -->
 
 <p align="center">
@@ -10,115 +9,115 @@
   </picture>
 </p>
 
+<p align="center">
+  <img alt="class: production-control" src="docs/assets/badges/repository-class.svg">
+  <img alt="visibility: private" src="docs/assets/badges/visibility.svg">
+  <img alt="change: pull-request" src="docs/assets/badges/change-model.svg">
+  <img alt="stack: Terraform + Terragrunt" src="docs/assets/badges/stack.svg">
+</p>
+
 # Mindclade · Infrastructure Live
 
 > **Platform Foundation · Google Cloud desired state**
-> Layered Terraform and Terragrunt for the normal Mindclade cloud estate after Ring 0.
+> Operate the normal cloud estate through isolated Terraform state and an explicit Terragrunt
+> dependency graph after Ring 0 is established.
 
 | Repository contract | Value |
 | --- | --- |
-| Enterprise | [`mindclade`](https://github.com/enterprises/mindclade) |
-| Organization | [`mindclade`](https://github.com/mindclade) |
-| Repository index | [Mindclade repositories](https://github.com/orgs/mindclade/repositories) |
-| Repository | [`mindclade/infrastructure-live`](https://github.com/mindclade/infrastructure-live) |
 | Class | `production-control` |
 | Visibility | `private` |
-| Owner | Infrastructure |
-| Production authority | Yes |
-| Change model | Pull request; affected plans; exact post-merge saved plans; protected apply |
-| Documentation | [`docs/README.md`](docs/README.md) |
+| Change model | `pull-request` |
+| Authority | `normal-gcp-organization-infrastructure`<br>`folders`<br>`org-policy`<br>`environments`<br>`networks`<br>`projects`<br>`gke`<br>`managed-cloud-services` |
+| Start here | [`docs/README.md`](docs/README.md) |
 
-This repository is authoritative for normal Google Cloud infrastructure. Ring-0 state,
-initial federation, and break-glass recovery remain in `bootstrap`; Kubernetes and Argo CD
-desired state remain in `gitops`.
+## Mission
+
+`infrastructure-live` is the authoritative normal-plane Google Cloud configuration. Platform
+engineers use its numbered Terragrunt layers to create organization controls, environments,
+networks, projects, GKE, and managed services with independent state boundaries.
 
 ## Authority boundary
 
-This repository owns organization controls, environment foundations, networks, workload
-projects, GKE, managed services, cloud-side identities, Binary Authorization, storage,
-databases, backups, VPC Service Controls, DNS, and Secret Manager resources. It does not
-install Argo CD or applications and does not store secret values.
+### This repository creates
 
-The diagram shows the enforced layer direction and the two external handoffs.
+- Organization hierarchy and policy after the bootstrap boundary.
+- Development, staging, and production foundations, networks, and workload projects.
+- GKE and managed cloud services, cloud-side workload identities, and GitOps prerequisites.
 
-```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#F2EFE8","primaryTextColor":"#201C24","primaryBorderColor":"#B5673F","secondaryColor":"#FBFAF7","tertiaryColor":"#FBFAF7","lineColor":"#5B5660","edgeLabelBackground":"#FBFAF7","clusterBkg":"#FBFAF7","clusterBorder":"#E2DED4"}}}%%
-flowchart TD
-    B["bootstrap<br/>Ring-0 state and federation"] --> O["1-org<br/>hierarchy and common controls"]
-    O --> E["2-environments<br/>environment foundations"]
-    E --> N["3-networks<br/>shared and environment networking"]
-    N --> P["4-projects<br/>domain and partner projects"]
-    P --> W["5-workloads<br/>clusters and managed services"]
-    W --> G["gitops<br/>Kubernetes desired state"]
+### This repository deliberately does not create
 
-    classDef authority fill:#201C24,color:#F2EFE8,stroke:#D68A61,stroke-width:2px;
-    classDef managed fill:#F2EFE8,color:#201C24,stroke:#B5673F,stroke-width:1.5px;
-    classDef external fill:#FBFAF7,color:#423D48,stroke:#5B5660,stroke-width:1.5px;
-    class O,E,N,P,W managed;
-    class B,G external;
+- Ring-0 state, initial federation, or break-glass recovery; those remain in `bootstrap`.
+- Argo CD installation, Kubernetes objects, or application selection; those remain in `gitops`.
+- Application source or reusable Terraform modules; those remain in the monorepo.
+
+## Quick start
+
+Run the complete credential-free validation path from the repository root:
+
+```sh
+nix develop .#ci --command make validate
+nix flake check --no-update-lock-file
 ```
 
-Dependencies may point within a layer or from a higher-numbered layer to the same or a
-lower-numbered layer. Every executable Terragrunt unit has an independent state prefix.
+Expected result: repository contracts, account and module interfaces, layer dependencies,
+Terraform/Terragrunt syntax, DNS portfolio, and tests pass without reading live state. Do not
+run an apply, import, destroy, state operation, or production plan from an agent or ordinary
+development session.
+
+## Estate position
+
+The highlighted node is this repository. The contract and boundary sections preserve the
+diagram's authority model when Mermaid is unavailable.
+
+```mermaid
+%% current: infrastructure-live %%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#F2EFE8","primaryTextColor":"#201C24","primaryBorderColor":"#B5673F","secondaryColor":"#FBFAF7","tertiaryColor":"#FBFAF7","lineColor":"#5B5660","edgeLabelBackground":"#FBFAF7","clusterBkg":"#FBFAF7","clusterBorder":"#E2DED4"}}}%%
+flowchart LR
+    GHP[".github-private<br/>profile + brand"] --> GH[".github<br/>shared workflows"]
+    GH --> GC["github-config<br/>GitHub governance"]
+    GH --> BS["bootstrap<br/>Ring 0 trust"]
+    BS --> IL["infrastructure-live<br/>cloud foundation"]
+    IL --> GO["gitops<br/>cluster desired state"]
+    MO["internal monorepo<br/>source + evidence"] --> GO
+    GC --> MO
+    classDef current fill:#201C24,color:#F2EFE8,stroke:#D68A61,stroke-width:3px;
+    classDef managed fill:#F2EFE8,color:#201C24,stroke:#B5673F,stroke-width:1.5px;
+    classDef source fill:#FBFAF7,color:#423D48,stroke:#5B5660,stroke-width:1.5px;
+    class IL current;
+    class GH,GC,BS,GO managed;
+    class GHP,MO source;
+```
 
 ## Repository map
 
-| Path | Responsibility |
+| Path | Purpose |
 | --- | --- |
-| `1-org/` | Organization hierarchy, policies, logging, security, and common projects |
-| `2-environments/` | Development, staging, and production foundations |
-| `3-networks/` | Shared VPC, DNS, NAT, firewall, PSC, and connectivity |
-| `4-projects/` | Domain and partner workload projects |
-| `5-workloads/` | GKE and managed cloud services |
-| `_envcommon/` | Reviewed shared Terragrunt configuration |
-| `scripts/` | Tree, dependency, plan, scope, account, and module-interface gates |
-| `docs/` | Architecture, contracts, activation gates, handoffs, and runbooks |
+| `1-org/` | Organization hierarchy, policy, logging, and common controls. |
+| `2-environments/` | Development, staging, and production foundations. |
+| `3-networks/` | Shared VPC, DNS, NAT, firewall, and connectivity. |
+| `4-projects/` | Domain and partner workload projects. |
+| `5-workloads/` | GKE and managed cloud services. |
+| `_envcommon/` | Shared reviewed inputs; it creates no resources. |
+| `contracts/` | Account, handoff, DNS, and repository contracts. |
 
-## Toolchain and validation
+## Change path
 
-```sh
-nix develop
-make validate
-make plan-development
-```
+Pull requests run validation and affected speculative plans. After merge, protected workflows
+create saved plans for the exact commit, select the minimum privilege scope, require the
+matching environment approval, and apply the verified plan. Destructive changes require an
+explicit reviewed dispatch and change reference. See the
+[dependency graph](docs/dependency-graph.md) and [activation gates](docs/production-activation-gates.md).
 
-The flake and CI pin Terraform and Terragrunt. CI enables Terragrunt strict mode. Create a
-local ignored account contract only from bootstrap's verified, versioned `platform_contract`
-output (currently `1.2.0`):
+## Documentation and support
 
-```sh
-python3 scripts/bootstrap-account.py ../bootstrap
-```
-
-Do not hand-edit state bucket, GitHub/Buildkite WIF, project-number, or bootstrap project
-values. `CLOUD_IDENTITY_CUSTOMER_ID` is the one operator-verified normal-plane identifier:
-obtain it from the existing `iam.allowedPolicyMemberDomains` organization policy and supply it
-to the account exporter. The organization-policy unit uses a repository-local API v2
-implementation because Google's parameterized managed baselines cannot be represented by the
-legacy private module contract; all other reusable modules remain immutable-pinned. The
-catalog starts `ORG_POLICY_ACTIVATION_PHASE` at `baseline` so the seven existing policies can
-be imported and proven no-op before the additional Mindclade constraints are enabled in a
-separate reviewed change.
-
-## Exact apply model
-
-Pull requests run formatting, validation, policy and security checks, affected plans, cost
-analysis, and destructive-change classification. After merge, `apply.yml` selects the
-minimum affected privilege scope, creates saved plans for the exact commit with the plan
-identity, stores them for one day with a checksum manifest, waits on the corresponding
-protected environment, then verifies and applies the same plans with a scope-specific apply
-identity.
-
-Destructive plans require an explicit manual dispatch with `allow_destroy=true` and a
-`CHG-`, `INC-`, `SEC-`, or `DR-` change reference. Those inputs do not bypass environment
-approval, checksums, account-context validation, or commit matching.
-
-## Start here
-
-- [Documentation index](docs/README.md)
+- [Documentation home](docs/README.md)
 - [Architecture](docs/architecture.md)
-- [Dependency graph and apply order](docs/dependency-graph.md)
 - [State boundaries](docs/state-boundaries.md)
-- [Production activation gates](docs/production-activation-gates.md)
+- [GitOps handoff](docs/gitops-handoff.md)
 - [Runbooks](docs/runbooks/README.md)
-- [Enterprise platform blueprint](BLUEPRINT.md)
+- [Contributing](CONTRIBUTING.md)
+
+## Security
+
+Never expose state, plans, account contracts, credentials, kubeconfigs, partner data, or
+restricted identifiers. Use [the private security process](SECURITY.md) for vulnerabilities.

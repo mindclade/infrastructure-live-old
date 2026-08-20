@@ -29,6 +29,7 @@ forbidden_authority:
     - kubernetes-desired-state
     - application-source
 required_paths:
+    - AGENTS.md
     - 1-org
     - 2-environments/development
     - 2-environments/staging

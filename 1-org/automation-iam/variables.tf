@@ -40,21 +40,30 @@ variable "ci_project_id" {
   description = "Normal-plane common CI project that owns supply-chain service accounts."
 }
 
-variable "buildkite_wif_pool_name" {
-  type        = string
-  description = "Bootstrap-managed Buildkite workload identity pool resource name."
-  validation {
-    condition     = can(regex("^projects/[0-9]+/locations/global/workloadIdentityPools/buildkite$", var.buildkite_wif_pool_name))
-    error_message = "buildkite_wif_pool_name must be the bootstrap-managed Buildkite WIF pool."
-  }
-}
-
 variable "github_wif_pool_name" {
   type        = string
   description = "Bootstrap-managed GitHub workload identity pool resource name."
   validation {
     condition     = can(regex("^projects/[0-9]+/locations/global/workloadIdentityPools/github$", var.github_wif_pool_name))
     error_message = "github_wif_pool_name must be the bootstrap-managed GitHub WIF pool."
+  }
+}
+
+variable "artifact_release_identities" {
+  description = "Bootstrap-exported capability-specific ARC provider/principal contracts."
+  type = map(object({
+    workload_identity_provider = string
+    principal                  = string
+    subject                    = string
+    workflow_ref               = string
+    job_workflow_ref           = string
+  }))
+
+  validation {
+    condition = toset(keys(var.artifact_release_identities)) == toset([
+      "canary", "builder", "qualification-reader", "qualifier", "signer", "promoter"
+    ])
+    error_message = "artifact_release_identities must contain exactly the six ARC release capabilities."
   }
 }
 
@@ -65,19 +74,4 @@ variable "github_org" {
     condition     = can(regex("^[A-Za-z0-9-]+$", var.github_org))
     error_message = "github_org must be a GitHub organization login."
   }
-}
-
-variable "artifact_signer_wif_provider" {
-  type        = string
-  description = "Bootstrap signer-only WIF provider published to GitHub as WIF_PROVIDER_SIGNER."
-}
-
-variable "artifact_signer_principal" {
-  type        = string
-  description = "Bootstrap output for the exact monorepo release-environment WIF subject."
-}
-
-variable "artifact_signer_job_workflow_ref" {
-  type        = string
-  description = "Exact immutable reusable signer workflow enforced by the WIF provider."
 }
