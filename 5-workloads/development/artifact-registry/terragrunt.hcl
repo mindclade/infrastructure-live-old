@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Container and language artifact repositories.
 #
 # One registry per environment rather than one shared registry with environment tags. The
@@ -128,8 +128,8 @@ inputs = {
     }
   }
 
-  # Vulnerability scanning on push. Its findings are what the vuln-scan attestor reads before
-  # it will sign — see ../binary-authorization. Without scanning enabled the attestor has
+  # Vulnerability scanning on push. Its findings are part of independent qualification before
+  # qualification-attestor is issued — see ../binary-authorization. Without scanning the gate has
   # nothing to assert on and every image fails admission in production.
   enable_vulnerability_scanning = true
 

@@ -1,8 +1,9 @@
+<!-- mindclade-doc: canonical-pointer@1 -->
+
 # Mindclade domain portfolio
 
-- `mindclade.com`: company identity, employee email, trust, legal, careers, and status.
-- `mindclade.ai`: production product, API, application, console, and authentication.
-- `mindclade.dev`: developer documentation, SDKs, schemas, and examples.
-- `mindclade.studio`: isolated demos, playgrounds, and experimental experiences.
+The canonical domain portfolio, authoritative DNS ownership, registrar boundary, delegation
+sequence, and DNSSEC procedure are maintained in [DNS domains](dns-domains.md).
 
-Squarespace remains the registrar. Google Cloud DNS is the intended authoritative provider. Zone creation and registrar delegation are separate reviewed changes. Production apex records remain Terraform-owned; ExternalDNS may manage only explicitly delegated non-production subzones. DNSSEC is enabled only after nameserver migration is verified and the corresponding DS records are installed at the registrar.
+This filename is retained so existing links continue to resolve. Make content changes only in
+`dns-domains.md`.

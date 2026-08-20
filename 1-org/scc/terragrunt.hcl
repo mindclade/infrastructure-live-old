@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Security Command Center, notification config, and findings export.
 #
 # SCC's default state is the trap this unit exists to avoid: it is ON, it is generating

@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Shared defaults for a 4-projects/<env>/<domain> unit.
 #
 # One project per (domain, environment), and — since the split recorded in

@@ -12,15 +12,15 @@ format:
 	terragrunt hcl fmt
 
 plan-development:
-	./scripts/validate-account.py
+	./scripts/validate-account.py --runtime
 	TG_STRICT_MODE=true terragrunt run --all --working-dir 2-environments/development plan
 
 plan-staging:
-	./scripts/validate-account.py
+	./scripts/validate-account.py --runtime
 	TG_STRICT_MODE=true terragrunt run --all --working-dir 2-environments/staging plan
 
 plan-production:
-	./scripts/validate-account.py
+	./scripts/validate-account.py --runtime
 	TG_STRICT_MODE=true terragrunt run --all --working-dir 1-org plan
 	TG_STRICT_MODE=true terragrunt run --all --working-dir 2-environments/production plan
 

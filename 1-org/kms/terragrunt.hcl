@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Cloud KMS key ring for org-scoped consumers that belong to no environment.
 #
 # Was one unit holding all three environments' rings PLUS this one, in a single state file —

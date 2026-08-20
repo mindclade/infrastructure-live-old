@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # WORKED REFERENCE UNIT — copy this shape when filling in the stubs.
 #
 # It demonstrates the four things every real unit needs:

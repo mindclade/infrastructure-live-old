@@ -2,7 +2,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Plan only the units a PR actually touches.
 #
 # A repo-wide `run --all plan` across 70 units takes 30+ minutes and produces a comment
@@ -140,7 +140,7 @@ for unit in $(printf '%s\n' "${!selected[@]}" | sort); do
   if ! (cd "$unit" && terragrunt run \
     --provider-cache \
     --non-interactive \
-    -- plan -input=false -no-color -lock=false); then
+    -- plan -input=false -no-color -lock-timeout=20m); then
     echo "::error::plan failed in $unit"
     status=1
   fi

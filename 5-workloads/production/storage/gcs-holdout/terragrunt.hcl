@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Held-out evaluation data. IAM DENY policy on every training SA.
 #
 # THE MOST IMPORTANT BUCKET IN THE ESTATE, and the one whose failure is silent.

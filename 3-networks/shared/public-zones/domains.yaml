@@ -1,8 +1,9 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # MINDCLADE CONFIDENTIAL - PROPRIETARY AND TRADE SECRET
+---
 schema_version: 1
 registrar: squarespace
 authoritative_dns: google-cloud-dns

@@ -2,7 +2,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BOOTSTRAP_DIR="${BOOTSTRAP_DIR:-${1:-${ROOT}/../bootstrap}}"
@@ -24,6 +24,9 @@ tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
  printf 'export BOOTSTRAP_CICD_PROJECT_ID=%s\n' "$(q "$(value cicd_project_id)")"
  printf 'export BOOTSTRAP_CICD_PROJECT_NUMBER=%s\n' "$(q "$(value cicd_project_number)")"
  printf 'export GITHUB_WIF_POOL_NAME=%s\n' "$(q "$(value github_wif_pool_name)")"
+ printf 'export WIF_PROVIDER_SIGNER=%s\n' "$(q "$(value artifact_signer_wif_provider)")"
+ printf 'export ARTIFACT_SIGNER_PRINCIPAL=%s\n' "$(q "$(value artifact_signer_principal)")"
+ printf 'export ARTIFACT_SIGNER_JOB_WORKFLOW_REF=%s\n' "$(q "$(value artifact_signer_job_workflow_ref)")"
  printf 'export TFSTATE_BUCKET_DEVELOPMENT=%s\n' "$(q "$(jq -er '.["infrastructure-live-development"]' <<<"$state")")"
  printf 'export TFSTATE_BUCKET_STAGING=%s\n' "$(q "$(jq -er '.["infrastructure-live-staging"]' <<<"$state")")"
  printf 'export TFSTATE_BUCKET_PRODUCTION=%s\n' "$(q "$(jq -er '.["infrastructure-live-production"]' <<<"$state")")"

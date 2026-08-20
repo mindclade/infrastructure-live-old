@@ -2,7 +2,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Create and apply an exact, checksummed Terragrunt plan bundle for one privilege scope.
 set -euo pipefail
 
@@ -26,13 +26,14 @@ case "$SCOPE" in
   foundation) ROOTS=(
     "1-org"
     "3-networks/shared"
+    "5-workloads/shared"
     "5-workloads/development/vpc-sc-perimeter"
     "5-workloads/staging/vpc-sc-perimeter"
     "5-workloads/production/vpc-sc-perimeter"
   ) ;;
   development) ROOTS=("2-environments/development" "3-networks/development" "4-projects/development" "5-workloads/development") ;;
   staging) ROOTS=("2-environments/staging" "3-networks/staging" "4-projects/staging" "5-workloads/staging") ;;
-  production) ROOTS=("2-environments/production" "3-networks/production" "4-projects/production" "5-workloads/production" "5-workloads/shared") ;;
+  production) ROOTS=("2-environments/production" "3-networks/production" "4-projects/production" "5-workloads/production") ;;
   partners) ROOTS=("4-projects/partners" "5-workloads/partners") ;;
   *) usage ;;
 esac
@@ -110,7 +111,7 @@ run_root() {
       --out-dir "$plan_output" \
       --json-out-dir "$json_output" \
       "${filter_args[@]}" \
-      -- plan -input=false -no-color -lock=false
+      -- plan -input=false -no-color -lock-timeout=20m
   else
     nix develop .#ci --command terragrunt run --all \
       --provider-cache \
@@ -169,10 +170,14 @@ if [[ "$MODE" == plan ]]; then
   write_context
   python3 scripts/classify-plans.py "$PLAN_ROOT" --output "$PLAN_ROOT/PLAN_CLASSIFICATION.json"
   (
+    checksum_tmp="$(mktemp)"
+    trap 'rm -f "$checksum_tmp"' EXIT
     cd "$PLAN_ROOT"
     find . -type f ! -name PLAN_SHA256SUMS -print0 \
       | LC_ALL=C sort -z \
-      | xargs -0 sha256sum > PLAN_SHA256SUMS
+      | xargs -0 sha256sum > "$checksum_tmp"
+    mv "$checksum_tmp" PLAN_SHA256SUMS
+    trap - EXIT
   )
   [[ -s "$PLAN_ROOT/PLAN_SHA256SUMS" ]] || {
     echo "error: no saved plans were generated for scope $SCOPE" >&2

@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Project factory — security tooling and scanning.
 #
 # One property distinguishes this project from every other in 4-projects: what runs here
@@ -28,8 +28,8 @@ include "envcommon" {
 }
 
 dependency "folders" {
-  config_path = "../../../2-environments/development/folders"
-  mock_outputs = { folder_ids = { security = "folders/000000000000" } }
+  config_path                             = "../../../2-environments/development/folders"
+  mock_outputs                            = { folder_ids = { security = "folders/000000000000" } }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
@@ -55,7 +55,7 @@ inputs = {
   remove_default_service_account = true
 
   activate_apis = concat(include.envcommon.locals.base_services, [
-    # Container Analysis holds the vulnerability findings the vuln-scan attestor reads
+    # Container Analysis holds vulnerability findings consumed by qualification-attestor
     # before it will sign — see _envcommon/binauthz.hcl.
     "containeranalysis.googleapis.com",
     "ondemandscanning.googleapis.com",

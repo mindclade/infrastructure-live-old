@@ -2,7 +2,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Cost diff on every PR. The cloud-facing estimator cannot mutate the pull request; a
 # separate job publishes the already-produced diff.
 name: cost
@@ -27,8 +27,11 @@ env:
   BOOTSTRAP_SEED_PROJECT_ID: ${{ vars.BOOTSTRAP_SEED_PROJECT_ID }}
   BOOTSTRAP_CICD_PROJECT_ID: ${{ vars.BOOTSTRAP_CICD_PROJECT_ID }}
   BOOTSTRAP_CICD_PROJECT_NUMBER: ${{ vars.BOOTSTRAP_CICD_PROJECT_NUMBER }}
-  GITHUB_WIF_POOL_NAME: ${{ vars.GITHUB_WIF_POOL_NAME }}
+  GITHUB_WIF_POOL_NAME: ${{ vars.WIF_POOL_GITHUB_NAME }}
   BUILDKITE_WIF_POOL_NAME: ${{ vars.BUILDKITE_WIF_POOL_NAME }}
+  WIF_PROVIDER_SIGNER: ${{ vars.WIF_PROVIDER_SIGNER }}
+  ARTIFACT_SIGNER_PRINCIPAL: ${{ vars.ARTIFACT_SIGNER_PRINCIPAL }}
+  ARTIFACT_SIGNER_JOB_WORKFLOW_REF: ${{ vars.ARTIFACT_SIGNER_JOB_WORKFLOW_REF }}
   TFSTATE_BUCKET_DEVELOPMENT: ${{ vars.TFSTATE_BUCKET_DEVELOPMENT }}
   TFSTATE_BUCKET_STAGING: ${{ vars.TFSTATE_BUCKET_STAGING }}
   TFSTATE_BUCKET_PRODUCTION: ${{ vars.TFSTATE_BUCKET_PRODUCTION }}

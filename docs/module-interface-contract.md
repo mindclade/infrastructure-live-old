@@ -3,7 +3,7 @@
 # Terraform module interface contract
 
 `infrastructure-live` owns live Google Cloud desired state; reusable Terraform module
-implementation remains in `Mindclade/mindclade-internal-monorepo`, as required by the enterprise
+implementation remains in `mindclade/mindclade-internal-monorepo`, as required by the enterprise
 platform authority boundary.
 
 Every live unit pins its module to a protected full semantic release tag or a commit SHA. Before a

@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Live-only control-plane identity wiring. These resources connect the bootstrap-managed
 # GitHub WIF pool to normal, non-Ring-0 services owned by infrastructure-live. They are kept
 # here rather than in bootstrap so Ring 0 does not accumulate registry, GitOps, or secret
@@ -29,20 +29,20 @@ dependency "global_kms" {
 }
 
 dependency "development" {
-  config_path = "../../../2-environments/development/shared-projects"
-  mock_outputs = { project_ids = { platform = "mc-development-platform" } }
+  config_path                             = "../../../2-environments/development/shared-projects"
+  mock_outputs                            = { project_ids = { platform = "mc-development-platform" } }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
 dependency "staging" {
-  config_path = "../../../2-environments/staging/shared-projects"
-  mock_outputs = { project_ids = { platform = "mc-staging-platform" } }
+  config_path                             = "../../../2-environments/staging/shared-projects"
+  mock_outputs                            = { project_ids = { platform = "mc-staging-platform" } }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
 dependency "production" {
-  config_path = "../../../2-environments/production/shared-projects"
-  mock_outputs = { project_ids = { platform = "mc-production-platform" } }
+  config_path                             = "../../../2-environments/production/shared-projects"
+  mock_outputs                            = { project_ids = { platform = "mc-production-platform" } }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 

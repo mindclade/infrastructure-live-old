@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Shared GPU node-pool defaults.
 #
 # The expensive one. An A3 or A4 pool left running over a weekend costs more than most
@@ -55,8 +55,8 @@ inputs = {
   # customer-visible error; during a development experiment it is a retry.
   spot = local.environment != "production"
 
-  enable_gvnic          = true
-  enable_fast_socket    = true
+  enable_gvnic       = true
+  enable_fast_socket = true
   # Keep production on GKE's default qualified driver branch; lower environments exercise
   # the newest driver first.
   gpu_driver_version    = local.environment == "production" ? "DEFAULT" : "LATEST"

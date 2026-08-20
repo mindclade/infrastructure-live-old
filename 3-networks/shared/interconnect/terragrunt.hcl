@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Dedicated or Partner Interconnect, if and when on-prem or colo GPU exists.
 #
 # DELIBERATELY EXCLUDED, and this is the one unit in the repository where that is a permanent

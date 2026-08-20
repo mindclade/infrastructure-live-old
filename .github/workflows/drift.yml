@@ -2,7 +2,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 name: drift
 
 on:
@@ -27,13 +27,17 @@ env:
   BOOTSTRAP_SEED_PROJECT_ID: ${{ vars.BOOTSTRAP_SEED_PROJECT_ID }}
   BOOTSTRAP_CICD_PROJECT_ID: ${{ vars.BOOTSTRAP_CICD_PROJECT_ID }}
   BOOTSTRAP_CICD_PROJECT_NUMBER: ${{ vars.BOOTSTRAP_CICD_PROJECT_NUMBER }}
-  GITHUB_WIF_POOL_NAME: ${{ vars.GITHUB_WIF_POOL_NAME }}
+  GITHUB_WIF_POOL_NAME: ${{ vars.WIF_POOL_GITHUB_NAME }}
   BUILDKITE_WIF_POOL_NAME: ${{ vars.BUILDKITE_WIF_POOL_NAME }}
+  WIF_PROVIDER_SIGNER: ${{ vars.WIF_PROVIDER_SIGNER }}
+  ARTIFACT_SIGNER_PRINCIPAL: ${{ vars.ARTIFACT_SIGNER_PRINCIPAL }}
+  ARTIFACT_SIGNER_JOB_WORKFLOW_REF: ${{ vars.ARTIFACT_SIGNER_JOB_WORKFLOW_REF }}
   TFSTATE_BUCKET_DEVELOPMENT: ${{ vars.TFSTATE_BUCKET_DEVELOPMENT }}
   TFSTATE_BUCKET_STAGING: ${{ vars.TFSTATE_BUCKET_STAGING }}
   TFSTATE_BUCKET_PRODUCTION: ${{ vars.TFSTATE_BUCKET_PRODUCTION }}
   RESOURCE_PREFIX: ${{ vars.RESOURCE_PREFIX }}
   PRIMARY_REGION: ${{ vars.PRIMARY_REGION }}
+  GPU_ZONE: ${{ vars.GPU_ZONE || 'us-central1-b' }}
   STATE_LOCATION: ${{ vars.STATE_LOCATION }}
   DOMAIN: ${{ vars.DOMAIN }}
   MONOREPO_ORG: ${{ vars.MONOREPO_ORG }}
@@ -90,7 +94,7 @@ jobs:
             --provider-cache \
             --non-interactive \
             --queue-exclude-external \
-            -- plan -input=false -no-color -lock=false -detailed-exitcode 2>&1 | tee drift.txt
+            -- plan -input=false -no-color -lock-timeout=20m -detailed-exitcode 2>&1 | tee drift.txt
           code=${PIPESTATUS[0]}
           set -e
           if grep -qE 'Plan: [0-9]+ to add|[0-9]+ to change|[0-9]+ to destroy|must be replaced' drift.txt; then
@@ -107,7 +111,7 @@ jobs:
         with:
           name: drift-output-${{ github.run_id }}
           path: drift.txt
-          retention-days: 30
+          retention-days: 1
           if-no-files-found: error
 
   report:
@@ -119,12 +123,6 @@ jobs:
       contents: read
       issues: write
     steps:
-      - name: Download drift evidence
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5
-        continue-on-error: true
-        with:
-          name: drift-output-${{ github.run_id }}
-          path: artifacts
       - name: Reconcile drift issue
         env:
           GH_TOKEN: ${{ github.token }}
@@ -139,11 +137,7 @@ jobs:
           if [[ "$DRIFT_RESULT" != success ]]; then
             body="## Infrastructure drift scan failed\n\nThe read-only scan did not complete. Run: ${run_url}"
           elif [[ "$DRIFT_DETECTED" == true ]]; then
-            plan='(drift output artifact unavailable)'
-            if [[ -s artifacts/drift.txt ]]; then
-              plan="$(tail -c 45000 artifacts/drift.txt)"
-            fi
-            body="## Infrastructure drift detected\n\nThe live estate no longer matches Git. Review cloud audit logs before reconciling.\n\n\`\`\`terraform\n${plan}\n\`\`\`\n\nRun: ${run_url}"
+            body="## Infrastructure drift detected\n\nThe live estate no longer matches Git. Review cloud audit logs before reconciling. The detailed output can contain sensitive resource metadata and is retained for one day as an access-controlled workflow artifact.\n\nRun: ${run_url}"
           else
             if [[ -n "$existing" && "$existing" != null ]]; then
               gh issue close "$existing" --repo "$GITHUB_REPOSITORY" --reason completed

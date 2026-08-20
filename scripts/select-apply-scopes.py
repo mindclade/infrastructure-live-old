@@ -15,7 +15,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SCOPE_PREFIXES: dict[str, tuple[str, ...]] = {
-    "foundation": ("1-org/", "3-networks/shared/"),
+    "foundation": ("1-org/", "3-networks/shared/", "5-workloads/shared/"),
     "development": (
         "2-environments/development/",
         "3-networks/development/",
@@ -33,7 +33,6 @@ SCOPE_PREFIXES: dict[str, tuple[str, ...]] = {
         "3-networks/production/",
         "4-projects/production/",
         "5-workloads/production/",
-        "5-workloads/shared/",
     ),
     "partners": ("4-projects/partners/", "5-workloads/partners/"),
 }
@@ -91,6 +90,20 @@ def scope_for_path(path: str) -> set[str]:
     }
 
 
+def scope_has_live_units(scope: str) -> bool:
+    """Return whether a scope contains at least one executable Terragrunt unit."""
+    for prefix in SCOPE_PREFIXES[scope]:
+        root = ROOT / prefix.rstrip("/")
+        if root.is_file() and root.name == "terragrunt.hcl":
+            return True
+        if root.is_dir() and any(root.rglob("terragrunt.hcl")):
+            return True
+    return scope == "foundation" and any(
+        (ROOT / prefix.rstrip("/") / "terragrunt.hcl").is_file()
+        for prefix in FOUNDATION_SPECIAL_PREFIXES
+    )
+
+
 def changed_paths(before: str, after: str) -> list[str]:
     if not before or set(before) == {"0"}:
         command = ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", after]
@@ -110,6 +123,8 @@ def main() -> None:
 
     unit = normalize_unit(args.unit)
     if args.manual_scope:
+        if not scope_has_live_units(args.manual_scope):
+            fail(f"scope {args.manual_scope!r} contains no live Terragrunt units")
         scopes = {args.manual_scope}
         if unit and args.manual_scope not in scope_for_path(f"{unit}/"):
             fail(f"unit {unit!r} does not belong to scope {args.manual_scope!r}")
@@ -124,7 +139,7 @@ def main() -> None:
         "include": [
             {"scope": scope, "environment": ENVIRONMENT[scope], "unit": unit}
             for scope in ORDER
-            if scope in scopes
+            if scope in scopes and scope_has_live_units(scope)
         ]
     }
     print(json.dumps(matrix, separators=(",", ":")))

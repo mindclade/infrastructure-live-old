@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 locals {
   # These are repository-local direct workflows, so workflow_ref is the immutable claim to
   # authorize. job_workflow_ref exists only for jobs executing inside reusable workflows.

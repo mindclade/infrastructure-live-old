@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Org-wide sinks beyond the audit export: application logs, 400d hot / 7y cold.
 #
 # The organization layer exports AUDIT logs centrally — who did what — to BigQuery and GCS. This unit

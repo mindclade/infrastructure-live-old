@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Root Terragrunt configuration inherited by every live unit.
 locals {
   account_vars = read_terragrunt_config("${get_repo_root()}/account.hcl")
@@ -15,23 +15,23 @@ locals {
     local.account_vars.locals.region,
   )
 
-  org_id               = local.account_vars.locals.org_id
-  billing_account      = local.account_vars.locals.billing_account
-  domain               = local.account_vars.locals.domain
-  prefix               = local.account_vars.locals.prefix
-  seed_project_id      = local.account_vars.locals.seed_project_id
-  cicd_project_id      = local.account_vars.locals.cicd_project_id
-  cicd_project_number  = local.account_vars.locals.cicd_project_number
-  state_location       = local.account_vars.locals.state_location
-  github_org           = local.account_vars.locals.github_org
+  org_id              = local.account_vars.locals.org_id
+  billing_account     = local.account_vars.locals.billing_account
+  domain              = local.account_vars.locals.domain
+  prefix              = local.account_vars.locals.prefix
+  seed_project_id     = local.account_vars.locals.seed_project_id
+  cicd_project_id     = local.account_vars.locals.cicd_project_id
+  cicd_project_number = local.account_vars.locals.cicd_project_number
+  state_location      = local.account_vars.locals.state_location
+  github_org          = local.account_vars.locals.github_org
 
-  module_source_org  = "Mindclade"
+  module_source_org  = "mindclade"
   module_source_repo = "mindclade-internal-monorepo"
   module_source_base = "git::https://github.com/${local.module_source_org}/${local.module_source_repo}.git//infra/terraform/modules"
 
   # Organization/shared units use the production/foundation state bucket. Environment units
   # use their own bucket, matching the bootstrap-created plan/apply identities.
-  state_scope = contains(["development", "staging"], local.environment) ? local.environment : "production"
+  state_scope  = contains(["development", "staging"], local.environment) ? local.environment : "production"
   state_bucket = local.account_vars.locals.state_buckets[local.state_scope]
 
   relative_path = path_relative_to_include()
@@ -62,7 +62,7 @@ remote_state {
 generate "provider" {
   path      = "provider.tf"
   if_exists = "overwrite_terragrunt"
-  contents = <<-EOF
+  contents  = <<-EOF
     provider "google" {
       region         = "${local.region}"
       default_labels = ${jsonencode(local.common_labels)}
@@ -79,7 +79,7 @@ generate "provider" {
 generate "versions" {
   path      = "versions_override.tf"
   if_exists = "overwrite_terragrunt"
-  contents = <<-EOF
+  contents  = <<-EOF
     terraform {
       required_version = ">= 1.15.0, < 1.16.0"
       required_providers {

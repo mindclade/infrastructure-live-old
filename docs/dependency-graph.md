@@ -1,37 +1,36 @@
-# Dependency Graph and Apply Order
+<!-- mindclade-doc: reference@1 -->
+
+# Dependency graph and apply order
+
+> **Audience:** Infrastructure reviewers and operators  
+> **Outcome:** Identify legal dependency direction, apply order, and the scope that owns a
+> live unit.
 
 The numeric tree is an enforced dependency contract, not cosmetic organization.
 
-```text
-bootstrap (external Ring 0)
-   |
-   v
-1-org
-   |
-   v
-2-environments
-   |
-   v
-3-networks
-   |
-   v
-4-projects
-   |
-   v
-5-workloads
-   |
-   v
-gitops (external Kubernetes desired state)
+```mermaid
+flowchart TD
+    B["bootstrap<br/>external Ring 0"] --> L1["1-org"]
+    L1 --> L2["2-environments"]
+    L2 --> L3["3-networks"]
+    L3 --> L4["4-projects"]
+    L4 --> L5["5-workloads"]
+    L5 --> G["gitops<br/>external Kubernetes state"]
+
+    classDef managed fill:#e8f4ff,color:#0b1f33,stroke:#1677b8,stroke-width:1.5px;
+    classDef external fill:#f4f7fa,color:#0b1f33,stroke:#66788a,stroke-width:1.5px;
+    class L1,L2,L3,L4,L5 managed;
+    class B,G external;
 ```
 
-A dependency may point within its layer or to a lower numbered layer. Cross-environment
+A dependency may point within its layer or to a lower-numbered layer. Cross-environment
 references are prohibited except explicitly shared resources under `3-networks/shared` and
 organization/common resources under `1-org`.
 
 ## Key edges
 
 | Consumer | Dependency | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `1-org/common-projects` | `1-org/folders` | Place common projects in the common folder |
 | `2-environments/<env>/folders` | `1-org/folders` | Create domain child folders |
 | `2-environments/<env>/shared-projects` | `1-org/folders` | Create environment host/foundation projects |

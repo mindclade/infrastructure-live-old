@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Contacts beyond the bootstrap set, scoped per folder.
 #
 # bootstrap subscribes the organization-level contacts — the addresses that must receive a

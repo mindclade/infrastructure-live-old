@@ -17,6 +17,9 @@ REQUIRED={
  'BOOTSTRAP_CICD_PROJECT_NUMBER':r'^[0-9]+$',
  'GITHUB_WIF_POOL_NAME':r'^projects/[0-9]+/locations/global/workloadIdentityPools/[a-z0-9-]+$',
  'BUILDKITE_WIF_POOL_NAME':r'^projects/[0-9]+/locations/global/workloadIdentityPools/buildkite$',
+ 'WIF_PROVIDER_SIGNER':r'^projects/[0-9]+/locations/global/workloadIdentityPools/github/providers/gh-mindclade-internal-monorepo$',
+ 'ARTIFACT_SIGNER_PRINCIPAL':r'^principal://iam\.googleapis\.com/projects/[0-9]+/locations/global/workloadIdentityPools/github/subject/repo:mindclade/mindclade-internal-monorepo:environment:release$',
+ 'ARTIFACT_SIGNER_JOB_WORKFLOW_REF':r'^mindclade/\.github/\.github/workflows/reusable-binauthz-sign\.yml@refs/tags/v3\.0\.0$',
  'TFSTATE_BUCKET_DEVELOPMENT':r'^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$',
  'TFSTATE_BUCKET_STAGING':r'^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$',
  'TFSTATE_BUCKET_PRODUCTION':r'^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$',
@@ -28,7 +31,7 @@ REQUIRED={
 }
 OPTIONAL={
  'RESOURCE_PREFIX':'mc','PRIMARY_REGION':'us-central1','STATE_LOCATION':'US',
- 'DOMAIN':'mindclade.com','MONOREPO_ORG':'Mindclade',
+ 'GPU_ZONE':'us-central1-b','DOMAIN':'mindclade.com','MONOREPO_ORG':'mindclade',
 }
 
 def source_errors()->list[str]:
@@ -50,6 +53,8 @@ def runtime_values()->tuple[dict[str,str],list[str]]:
   if not re.fullmatch(pat,values[name]): errors.append(f'invalid or missing runtime account field: {name}')
  if not re.fullmatch(r'^[a-z][a-z0-9]{1,3}$',values['RESOURCE_PREFIX']): errors.append('invalid RESOURCE_PREFIX')
  if not re.fullmatch(r'^[a-z]+-[a-z0-9]+[0-9]$',values['PRIMARY_REGION']): errors.append('invalid PRIMARY_REGION')
+ if not re.fullmatch(r'^[a-z]+-[a-z0-9]+[0-9]-[a-z]$',values['GPU_ZONE']): errors.append('invalid GPU_ZONE')
+ if not values['GPU_ZONE'].startswith(values['PRIMARY_REGION'] + '-'): errors.append('GPU_ZONE must belong to PRIMARY_REGION')
  if not re.fullmatch(r'^[A-Za-z0-9.-]+$',values['DOMAIN']): errors.append('invalid DOMAIN')
  if not re.fullmatch(r'^[A-Za-z0-9_.-]+$',values['MONOREPO_ORG']): errors.append('invalid MONOREPO_ORG')
  return dict(sorted(values.items())),errors

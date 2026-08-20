@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Shared GKE defaults. Included by every 5-workloads/<env>/gke unit, which overrides only
 # what genuinely differs between environments.
 #
@@ -32,7 +32,7 @@ inputs = {
   # Private cluster. Nodes have no public IPs — which is enforced org-wide anyway by
   # compute.vmExternalIpAccess, so a public cluster would simply fail to create.
   enable_private_nodes    = true
-  enable_private_endpoint = true  # control plane is reachable only through private connectivity
+  enable_private_endpoint = true # control plane is reachable only through private connectivity
 
   # Shielded nodes: secure boot, integrity monitoring, vTPM. Costs nothing and blocks a
   # class of node-level persistence.

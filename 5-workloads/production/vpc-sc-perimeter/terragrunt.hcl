@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # VPC Service Controls perimeter and ingress/egress rules.
 #
 # The control that makes a stolen credential insufficient. IAM answers "may this identity
@@ -76,6 +76,38 @@ dependency "serving" {
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
+dependency "observability" {
+  config_path                             = "../../../4-projects/production/observability"
+  mock_outputs                            = { project_number = "000000000007" }
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+}
+
+dependency "security" {
+  config_path                             = "../../../4-projects/production/security"
+  mock_outputs                            = { project_number = "000000000008" }
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+}
+
+dependency "automation" {
+  config_path = "../../../1-org/automation-iam"
+  mock_outputs = { supply_chain_service_accounts = {
+    builder   = "sa-artifact-builder@mc-common-ci.iam.gserviceaccount.com"
+    qualifier = "sa-artifact-qualifier@mc-common-ci.iam.gserviceaccount.com"
+    signer    = "sa-artifact-signer@mc-common-ci.iam.gserviceaccount.com"
+    promoter  = "sa-artifact-promoter@mc-common-ci.iam.gserviceaccount.com"
+  } }
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+}
+
+dependency "control_plane" {
+  config_path = "../../shared/control-plane-identities"
+  mock_outputs = { service_accounts = {
+    gitops_render   = "sa-gitops-render@mc-common-security.iam.gserviceaccount.com"
+    gitops_verifier = "sa-gitops-verifier@mc-common-security.iam.gserviceaccount.com"
+  } }
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+}
+
 inputs = {
   org_id      = include.root.locals.org_id
   policy_name = "${include.root.locals.prefix}-access-policy"
@@ -87,13 +119,9 @@ inputs = {
     # ------------------------------------------------------------------------------------
     # DRY RUN
     # ------------------------------------------------------------------------------------
-    # Production enforces. This is the environment where a perimeter mistake should surface,
-    # and enforcing here is what makes staging and production's dry-run periods meaningful —
-    # they are rehearsing something already known to work.
-    #
-    # Staging and production set this to true until their violation logs are clean. See the
-    # header.
-    use_explicit_dry_run_spec = false
+    # Production remains in dry-run until development/staging enforcement has been rehearsed,
+    # the production violation log is clean, and the lockout recovery runbook is exercised.
+    use_explicit_dry_run_spec = true
 
     resources = [
       "projects/${dependency.shared.outputs.project_numbers["ops"]}",
@@ -101,6 +129,8 @@ inputs = {
       "projects/${dependency.research.outputs.project_number}",
       "projects/${dependency.data.outputs.project_number}",
       "projects/${dependency.serving.outputs.project_number}",
+      "projects/${dependency.observability.outputs.project_number}",
+      "projects/${dependency.security.outputs.project_number}",
     ]
 
     # The host project is deliberately OUTSIDE the perimeter. It holds no data — only the
@@ -143,7 +173,10 @@ inputs = {
       # lockout this rule exists to prevent.
       title = "terraform-apply"
       from = {
-        identities           = ["serviceAccount:${include.root.locals.account_vars.locals.infrastructure_live_service_accounts.foundation}"]
+        identities = [
+          "serviceAccount:${include.root.locals.account_vars.locals.infrastructure_live_service_accounts.foundation}",
+          "serviceAccount:${include.root.locals.account_vars.locals.infrastructure_live_service_accounts.production}",
+        ]
         identity_type        = null
         source_access_levels = ["*"]
       }
@@ -154,6 +187,7 @@ inputs = {
           "bigquery.googleapis.com"         = { methods = ["*"] }
           "secretmanager.googleapis.com"    = { methods = ["*"] }
           "artifactregistry.googleapis.com" = { methods = ["*"] }
+          "aiplatform.googleapis.com"       = { methods = ["*"] }
           "container.googleapis.com"        = { methods = ["*"] }
         }
       }
@@ -169,9 +203,38 @@ inputs = {
       to = {
         resources = ["*"]
         operations = {
-          "storage.googleapis.com"   = { methods = ["google.storage.buckets.get", "google.storage.buckets.list", "google.storage.objects.get", "google.storage.objects.list"] }
-          "bigquery.googleapis.com"  = { methods = ["*Get*", "*List*"] }
-          "container.googleapis.com" = { methods = ["*Get*", "*List*"] }
+          "storage.googleapis.com"          = { methods = ["google.storage.buckets.get", "google.storage.buckets.list", "google.storage.objects.get", "google.storage.objects.list"] }
+          "bigquery.googleapis.com"         = { methods = ["*Get*", "*List*"] }
+          "secretmanager.googleapis.com"    = { methods = ["*Get*", "*List*"] }
+          "artifactregistry.googleapis.com" = { methods = ["*Get*", "*List*"] }
+          "aiplatform.googleapis.com"       = { methods = ["*Get*", "*List*"] }
+          "container.googleapis.com"        = { methods = ["*Get*", "*List*"] }
+        }
+      }
+    },
+    {
+      title = "artifact-supply-chain"
+      from = {
+        identities           = [for email in values(dependency.automation.outputs.supply_chain_service_accounts) : "serviceAccount:${email}"]
+        source_access_levels = ["*"]
+      }
+      to = {
+        resources = ["projects/${dependency.shared.outputs.project_numbers["platform"]}"]
+        operations = {
+          "artifactregistry.googleapis.com" = { methods = ["*"] }
+        }
+      }
+    },
+    {
+      title = "gitops-artifact-verifier"
+      from = {
+        identities           = ["serviceAccount:${dependency.control_plane.outputs.service_accounts["gitops_verifier"]}"]
+        source_access_levels = ["*"]
+      }
+      to = {
+        resources = ["projects/${dependency.shared.outputs.project_numbers["platform"]}"]
+        operations = {
+          "artifactregistry.googleapis.com" = { methods = ["*Get*", "*List*", "*Download*"] }
         }
       }
     },
@@ -182,22 +245,9 @@ inputs = {
   # ---------------------------------------------------------------------------------------
   # What may be reached OUTSIDE the perimeter from inside it. This is the direction that
   # matters for exfiltration, and the list is deliberately almost empty.
-  egress_policies = [
-    {
-      # Reading the shared artifact registry in another environment's project is the one
-      # legitimate cross-perimeter read: an image promoted from production is pulled by
-      # staging, and the digest is the same object.
-      title = "pull-promoted-images"
-      from = {
-      }
-      to = {
-        resources = ["projects/${dependency.shared.outputs.project_numbers["platform"]}"]
-        operations = {
-          "artifactregistry.googleapis.com" = { methods = ["*Get*", "*List*", "*Download*"] }
-        }
-      }
-    },
-  ]
+  # Environment registries are inside their own perimeter. Promotion is performed by the
+  # external, IAM-scoped promoter through ingress, so no broad perimeter egress is required.
+  egress_policies = []
 
   # No access levels based on IP range. An IP-based access level is a perimeter that a VPN
   # defeats; identity is the only attribute here that means anything.

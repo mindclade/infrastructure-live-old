@@ -1,57 +1,32 @@
-# Runbooks
+<!-- mindclade-doc: runbook-index@1 -->
 
-Operational procedures for the live estate. Linked from `.github-private/profile/README.md`,
-which is where someone on call will look first.
+# Infrastructure Live runbooks
 
-A runbook is written for someone who is tired, under pressure, and did not build the thing.
-That means: exact commands, expected output, and what to do when the output differs.
+> **Platform Foundation · Incident recovery**  
+> Symptom-first procedures for restoring the Google Cloud estate while preserving state,
+> evidence, and protected apply boundaries.
 
-## What exists
+## Available runbooks
 
-| Runbook | For |
-|---|---|
-| _(none yet)_ | |
+| Runbook | Purpose |
+| --- | --- |
+| [Binary Authorization blocked deployment](binauthz-blocked-deploy.md) | Diagnose missing or invalid deployment evidence |
+| [Failed production apply](failed-production-apply.md) | Contain and recover a partial or failed live apply |
+| [GKE reconstruction](gke-reconstruction.md) | Recreate the cluster control plane and hand back to GitOps |
+| [State lock stuck](state-lock-stuck.md) | Verify ownership before force-unlocking state |
+| [VPC Service Controls denial](vpc-sc-denial.md) | Diagnose dry-run or enforced perimeter denials |
 
-## What to write first
+## Next runbooks
 
-Ordered by how likely you are to need it before you have written it:
-
-1. **`gke-node-pool-exhaustion.md`** — GPU capacity unavailable in a region. Which regions to
-   fail over to, how to move a Kueue queue, what to tell the affected team.
-2. **`vpc-sc-denial.md`** — A request blocked by the perimeter. How to read the denial in the
-   audit log, and how to distinguish a missing ingress rule from a genuine attack.
-3. **`binauthz-blocked-deploy.md`** — An image rejected at admission. Which attestor is
-   missing, how to verify the attestation exists, and the emergency exemption path.
-4. **`state-lock-stuck.md`** — Cleared after a cancelled apply, and how to be sure no other
-   apply is in flight before force-unlocking.
-5. **`cluster-upgrade.md`** — Control plane and node pool upgrades, including the checkpoint
-   sequence for in-flight training jobs.
-6. **`cost-spike.md`** — Budget alert fired. How to find what is running, and how to stop it
-   without taking production with it.
+Before production activation, add and drill GPU capacity exhaustion, cluster upgrade, cost
+spike, Cloud SQL restore, protected-bucket restore, organization-policy rollback, and failed
+DNS delegation procedures.
 
 ## Format
 
-Keep each one to this shape:
+Each runbook must cover symptoms, impact, read-only diagnosis, resolution, recovery or rollback,
+escalation, and prevention. Destructive or state-mutating commands must identify their approval
+gate and exact target.
 
-```markdown
-# <What is broken>
-
-## Symptoms
-What you saw that brought you here. Include the exact error text — that is what people
-paste into search.
-
-## Impact
-Who is affected, and how urgently this needs fixing.
-
-## Diagnosis
-Commands, with expected output. Say what each result means.
-
-## Resolution
-Numbered steps. Exact commands. Note which are irreversible.
-
-## Prevention
-What change would stop this recurring. Link the issue if one exists.
-```
-
-The **Prevention** section is the one that earns the runbook its place. A runbook used three
-times without that section being acted on is three incidents that were treated as weather.
+Runbooks do not grant authority. Production, destructive, state, and break-glass operations
+still require their configured identities and approvals.

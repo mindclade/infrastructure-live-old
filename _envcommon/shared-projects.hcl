@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Shared defaults for a 2-environments/<env>/shared-projects unit.
 #
 # Two projects per environment, created identically in all three so that staging is a

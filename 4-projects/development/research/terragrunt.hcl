@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Project factory — research workloads.
 #
 # Holds the training corpora, the checkpoints, and the experiment metadata. Not the compute:
@@ -25,8 +25,8 @@ include "envcommon" {
 }
 
 dependency "folders" {
-  config_path = "../../../2-environments/development/folders"
-  mock_outputs = { folder_ids = { research = "folders/000000000000" } }
+  config_path                             = "../../../2-environments/development/folders"
+  mock_outputs                            = { folder_ids = { research = "folders/000000000000" } }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 

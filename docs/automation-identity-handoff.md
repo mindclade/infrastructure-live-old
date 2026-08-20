@@ -7,6 +7,7 @@ The enterprise control plane uses a two-stage ownership model.
 Bootstrap creates:
 
 - the GitHub Workload Identity Federation pool and repository-isolated providers;
+- the signer-only monorepo provider condition and exact protected-release principal;
 - one read-only infrastructure plan service account;
 - foundation, development, staging, and production apply service accounts;
 - billing-user bindings required to attach projects;
@@ -19,6 +20,13 @@ Bootstrap does not grant the environment identities broad organization authority
 `1-org/automation-iam` runs with the foundation apply identity after the top-level folders
 exist. It grants each environment apply identity an inherited role set only on its matching
 folder. The identities cannot mutate another environment through those bindings.
+
+It also creates normal-plane builder, qualifier, signer, and promoter service accounts. The
+builder, qualifier, and promoter use narrowly selected Buildkite step principals. The signer
+does not: only bootstrap's exact
+`repo:mindclade/mindclade-internal-monorepo:environment:release` GitHub subject, executing the
+immutable `reusable-binauthz-sign.yml@refs/tags/v3.0.0` job workflow, may impersonate it.
+See [`supply-chain-signer-contract.md`](supply-chain-signer-contract.md).
 
 The foundation identity remains the only automation principal for:
 

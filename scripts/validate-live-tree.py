@@ -130,7 +130,7 @@ text = "\n".join(
 )
 for stale in (
     "mindclade-org",
-    "github.com/Mindclade/mindclade.git",
+    "github.com/mindclade/mindclade.git",
     "include.root.locals.folder_ids",
     "audit_project_id =",
     "3-networks/private-service-connect",

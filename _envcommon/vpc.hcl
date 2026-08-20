@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Shared VPC defaults.
 #
 # Unlike the other files in _envcommon, this one is NOT included from a per-environment
@@ -92,10 +92,11 @@ inputs = {
   # the org-wide external-IP denial in bootstrap.
   private_ip_google_access = true
 
-  # The default 0.0.0.0/0 route to the internet gateway is deleted at creation. Egress goes
-  # through the NAT in ../cloud-nat, which is the only path the firewall baseline permits and
-  # the only one that appears in flow logs with a stable source address.
-  delete_default_routes_on_create = true
+  # Keep the local 0.0.0.0/0 route whose next hop is the default internet gateway. Public
+  # Cloud NAT requires that route even for nodes without external addresses, and the
+  # private/restricted Google API VIPs use it as their next hop as well. The route is not an
+  # egress allow: firewall-baseline denies 0.0.0.0/0 after its explicit destination allows.
+  delete_default_routes_on_create = false
 
   labels = local.root.locals.common_labels
 }

@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Parallelstore or Filestore for training scratch.
 #
 # The shared POSIX filesystem a distributed run needs and GCS cannot be: mmap, random writes,
@@ -72,7 +72,7 @@ inputs = {
       # Zonal, and in the SAME zone as the GPU pools in ../../nodepools. A cross-zone mount
       # adds latency to every read in the training loop, which shows up as GPUs idling rather
       # than as a storage error.
-      location = "europe-west4-b"
+      location = include.root.locals.account_vars.locals.gpu_zone
 
       # 12 TiB is the minimum Parallelstore provisions. Development runs do not need more,
       # and the number to watch is not this one but whether the instance exists at all.

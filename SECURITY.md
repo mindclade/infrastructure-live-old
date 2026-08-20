@@ -4,7 +4,7 @@
 
 | Channel | For |
 |---|---|
-| [Private security advisory](https://github.com/Mindclade/infrastructure-live/security/advisories/new) | Anything in this repository. Preferred |
+| [Private security advisory](https://github.com/mindclade/infrastructure-live/security/advisories/new) | Anything in this repository. Preferred |
 | `security@mindclade.com` | The same, by email. PGP key in the canonical policy |
 | `biosecurity@mindclade.com` | Screening bypasses, unsafe model behaviour |
 
@@ -12,7 +12,7 @@ Acknowledgement within 2 business days, triage within 5. Good-faith research is 
 safe harbour.
 
 **The full policy — scope, SLAs, PGP key, safe-harbour text — is the canonical one:**
-[`Mindclade/.github/SECURITY.md`](https://github.com/Mindclade/.github/blob/main/SECURITY.md).
+[`mindclade/.github/SECURITY.md`](https://github.com/mindclade/.github/blob/main/SECURITY.md).
 
 This file exists because the `.github` repo is **internal**, and GitHub only inherits
 community health files from a *public* one. Nothing is inherited here, so every repository
@@ -39,7 +39,7 @@ It is defined once in `license-header.txt` at the workspace root:
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 ```
 
 The pre-commit hook enforces this header automatically:

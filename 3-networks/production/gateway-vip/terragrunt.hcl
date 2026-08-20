@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # The reserved internal address every application hostname resolves to.
 #
 # One per environment, and the single VIP behind `mindclade.studio`, `*.mindclade.ai`, and

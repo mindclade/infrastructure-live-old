@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Default-deny egress with an explicit allow list.
 #
 # Default-deny INGRESS is what GCP already does, and it is the easy half. This unit is about
@@ -115,9 +115,9 @@ locals {
       direction          = "EGRESS"
       priority           = 1200
       action             = "allow"
-      destination_ranges = ["199.36.153.8/30"] # private.googleapis.com
+      destination_ranges = ["199.36.153.4/30", "34.126.0.0/18"] # restricted.googleapis.com + direct connectivity
       allow              = [{ protocol = "tcp", ports = ["443"] }]
-      description        = "restricted/private.googleapis.com. Covers GCS, AR, Secret Manager, Logging."
+      description        = "restricted.googleapis.com and supported direct-connect API endpoints."
     }
 
     # DNS to the metadata server. Blocking it breaks name resolution before anything else
@@ -143,7 +143,7 @@ locals {
       direction          = "EGRESS"
       priority           = 65000
       action             = "deny"
-      destination_ranges = ["127.0.0.1/32"]
+      destination_ranges = ["0.0.0.0/0"]
       deny               = [{ protocol = "all" }]
       log_config         = { metadata = "INCLUDE_ALL_METADATA" }
       description        = "Default deny. Everything reachable is named in a rule above this one."

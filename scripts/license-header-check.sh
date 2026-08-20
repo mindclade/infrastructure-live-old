@@ -2,7 +2,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,18 +28,18 @@ fi
 HEADER_LINES=()
 while IFS= read -r header_line; do
   HEADER_LINES+=("${header_line}")
-done < <(sed -n '1,4p' "${HEADER_FILE}")
+done < <(sed -n '1,3p' "${HEADER_FILE}")
 
-if [[ "${#HEADER_LINES[@]}" -lt 4 ]]; then
-  echo "license header file does not contain the expected 4-line header block: ${HEADER_FILE}" >&2
+if [[ "${#HEADER_LINES[@]}" -lt 3 ]]; then
+  echo "license header file does not contain the expected 3-line header block: ${HEADER_FILE}" >&2
   exit 1
 fi
 
 for i in "${!HEADER_LINES[@]}"; do
-  HEADER_LINES[$i]="$(normalize_line "${HEADER_LINES[$i]}")"
- done
+  HEADER_LINES[i]="$(normalize_line "${HEADER_LINES[i]}")"
+done
 
-if [[ -z "${HEADER_LINES[0]}" || -z "${HEADER_LINES[1]}" || -z "${HEADER_LINES[2]}" || -z "${HEADER_LINES[3]}" ]]; then
+if [[ -z "${HEADER_LINES[0]}" || -z "${HEADER_LINES[1]}" || -z "${HEADER_LINES[2]}" ]]; then
   echo "Invalid proprietary header block in ${HEADER_FILE}." >&2
   exit 1
 fi
@@ -147,7 +147,7 @@ has_license_header() {
     [[ "${line1}" == "${HEADER_LINES[0]}" \
       && "${line2}" == "${HEADER_LINES[1]}" \
       && "${line3}" == "${HEADER_LINES[2]}" \
-      && "${line4}" == "${HEADER_LINES[3]}" ]]
+      && -z "${line4}" ]]
     return
   fi
 
@@ -158,7 +158,7 @@ has_license_header() {
   [[ "${line0}" == "${HEADER_LINES[0]}" \
     && "${line1}" == "${HEADER_LINES[1]}" \
     && "${line2}" == "${HEADER_LINES[2]}" \
-    && "${line3}" == "${HEADER_LINES[3]}" ]]
+    && -z "${line3}" ]]
 }
 
 is_mindclade_license_like() {
@@ -178,8 +178,7 @@ add_license_header() {
   tmp="$(mktemp)"
 
   if [[ "${first_line}" == "#!"* ]]; then
-    printf '%s
-' "${first_line}" > "${tmp}"
+    printf '%s\n' "${first_line}" > "${tmp}"
 
     local second_line
     second_line="$(line_in_file "${f}" 2)"
@@ -188,28 +187,24 @@ add_license_header() {
       start_from=6
     fi
 
-    printf '%s
-' "${HEADER_LINES[0]}" >> "${tmp}"
-    printf '%s
-' "${HEADER_LINES[1]}" >> "${tmp}"
-    printf '%s
-' "${HEADER_LINES[2]}" >> "${tmp}"
-    printf '%s
-' "${HEADER_LINES[3]}" >> "${tmp}"
+    {
+      printf '%s\n' "${HEADER_LINES[0]}"
+      printf '%s\n' "${HEADER_LINES[1]}"
+      printf '%s\n' "${HEADER_LINES[2]}"
+      printf '\n'
+    } >> "${tmp}"
     tail -n "+${start_from}" "${f}" >> "${tmp}"
   else
     if is_mindclade_license_like "${f}" "${first_line}"; then
       start_from=5
     fi
 
-    printf '%s
-' "${HEADER_LINES[0]}" > "${tmp}"
-    printf '%s
-' "${HEADER_LINES[1]}" >> "${tmp}"
-    printf '%s
-' "${HEADER_LINES[2]}" >> "${tmp}"
-    printf '%s
-' "${HEADER_LINES[3]}" >> "${tmp}"
+    {
+      printf '%s\n' "${HEADER_LINES[0]}"
+      printf '%s\n' "${HEADER_LINES[1]}"
+      printf '%s\n' "${HEADER_LINES[2]}"
+      printf '\n'
+    } > "${tmp}"
     tail -n "+${start_from}" "${f}" >> "${tmp}"
   fi
 
@@ -259,7 +254,7 @@ done
 if [[ "${CHECK_MODE}" == "check" && "${failed}" -eq 1 ]]; then
   echo "License header check failed." >&2
   echo "Expected header block (from ${HEADER_FILE}):" >&2
-  sed -n '1,4p' "${HEADER_FILE}" >&2
+  sed -n '1,3p' "${HEADER_FILE}" >&2
   exit 1
 fi
 

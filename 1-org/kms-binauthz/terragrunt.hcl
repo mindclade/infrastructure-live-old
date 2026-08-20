@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Cloud KMS key ring reserved for Binary Authorization attestor signing keys.
 #
 # The ring only. The KEYS in it are created by the `binauthz` module, not here, because each

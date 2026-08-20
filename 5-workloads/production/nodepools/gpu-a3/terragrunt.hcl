@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # A3 GPU node pool. Tainted; scheduled through Kueue.
 #
 # A3 High: 8× H100 80GB per node. The workhorse pool — most training and every evaluation
@@ -28,7 +28,7 @@ dependency "gke" {
 
   mock_outputs = {
     cluster_name = "mc-production"
-    location     = "europe-west4"
+    location     = "us-central1"
     project_id   = "mc-production-platform"
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
@@ -54,7 +54,7 @@ inputs = {
   # whichever zone has no H100 stock — which presents as a node pool that is "creating" for
   # forty minutes and then errors. Pinning the zone makes a capacity problem visible
   # immediately and makes a reservation possible.
-  node_locations = ["europe-west4-b"]
+  node_locations = [include.root.locals.account_vars.locals.gpu_zone]
 
   # GPUDirect-TCPX needs the multi-NIC layout the A3 shape provides. Without it, multi-node
   # training falls back to the standard network path and the all-reduce becomes the

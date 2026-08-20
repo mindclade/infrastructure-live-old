@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Cloud KMS key ring for staging — rotation schedules, HSM protection.
 #
 # Split out of the former single `1-org/kms` unit, which held all three environments plus the

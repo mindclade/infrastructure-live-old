@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 locals {
   # These permissions are inherited only by one environment folder. Organization-wide
   # policy, DNS, SCC, centralized logging, and shared networking remain exclusive to the
@@ -16,6 +16,7 @@ locals {
     "roles/compute.xpnAdmin",
     "roles/container.admin",
     "roles/iam.serviceAccountAdmin",
+    "roles/iam.roleAdmin",
     "roles/logging.configWriter",
     "roles/monitoring.admin",
     "roles/resourcemanager.folderAdmin",
@@ -47,29 +48,52 @@ resource "google_folder_iam_member" "environment_apply" {
 # Buildkite provider is bootstrap-owned, but the capabilities it can impersonate are normal
 # platform resources and can be rebuilt after bootstrap recovery.
 locals {
-  supply_chain_identities = {
-    builder   = { account = "artifact-builder",   step = "artifact-build" }
+  buildkite_supply_chain_identities = {
+    builder   = { account = "artifact-builder", step = "artifact-build" }
     qualifier = { account = "artifact-qualifier", step = "artifact-qualify" }
-    signer    = { account = "artifact-signer",    step = "artifact-sign" }
-    promoter  = { account = "artifact-promoter",  step = "artifact-promote" }
+    promoter  = { account = "artifact-promoter", step = "artifact-promote" }
   }
+  supply_chain_identities = merge(local.buildkite_supply_chain_identities, {
+    signer = { account = "artifact-signer", step = "github-protected-release" }
+  })
   buildkite_step_principals = {
-    for name, cfg in local.supply_chain_identities : name =>
+    for name, cfg in local.buildkite_supply_chain_identities : name =>
     "principalSet://iam.googleapis.com/${var.buildkite_wif_pool_name}/attribute.step_key/${cfg.step}"
   }
 }
 
 resource "google_service_account" "supply_chain" {
-  for_each = local.supply_chain_identities
+  for_each     = local.supply_chain_identities
   project      = var.ci_project_id
   account_id   = "sa-${each.value.account}"
   display_name = "Mindclade ${replace(each.value.account, "-", " ")}"
-  description  = "Keyless Buildkite identity for ${each.value.step}; static keys are prohibited."
+  description = (
+    each.key == "signer" ?
+    "Keyless GitHub protected-release identity for ${each.value.step}; static keys are prohibited." :
+    "Keyless Buildkite identity for ${each.value.step}; static keys are prohibited."
+  )
 }
 
-resource "google_service_account_iam_member" "supply_chain_wif" {
-  for_each = local.supply_chain_identities
+resource "google_service_account_iam_member" "supply_chain_buildkite_wif" {
+  for_each           = local.buildkite_supply_chain_identities
   service_account_id = google_service_account.supply_chain[each.key].name
   role               = "roles/iam.workloadIdentityUser"
   member             = local.buildkite_step_principals[each.key]
+}
+
+resource "google_service_account_iam_member" "artifact_signer_github_wif" {
+  service_account_id = google_service_account.supply_chain["signer"].name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = var.artifact_signer_principal
+}
+
+check "artifact_signer_trust_contract" {
+  assert {
+    condition = (
+      var.artifact_signer_wif_provider == "${var.github_wif_pool_name}/providers/gh-mindclade-internal-monorepo" &&
+      var.artifact_signer_principal == "principal://iam.googleapis.com/${var.github_wif_pool_name}/subject/repo:${var.github_org}/mindclade-internal-monorepo:environment:release" &&
+      var.artifact_signer_job_workflow_ref == "${var.github_org}/.github/.github/workflows/reusable-binauthz-sign.yml@refs/tags/v3.0.0"
+    )
+    error_message = "Artifact signer trust must match bootstrap's exact monorepo release subject and immutable reusable signer workflow."
+  }
 }

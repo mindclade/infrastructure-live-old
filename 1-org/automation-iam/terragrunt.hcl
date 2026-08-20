@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Live-only authority handoff. Bootstrap creates the keyless identities; this foundation
 # unit grants each environment apply identity permissions only within its own top-level
 # folder. The implementation is intentionally local because it binds state owners rather
@@ -25,14 +25,19 @@ dependency "folders" {
 }
 
 dependency "common_projects" {
-  config_path = "../common-projects"
-  mock_outputs = { project_ids = { ci = "mc-common-ci" } }
+  config_path                             = "../common-projects"
+  mock_outputs                            = { project_ids = { ci = "mc-common-ci" } }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
 inputs = {
-  ci_project_id           = dependency.common_projects.outputs.project_ids["ci"]
-  buildkite_wif_pool_name = include.root.locals.account_vars.locals.buildkite_wif_pool_name
+  ci_project_id                    = dependency.common_projects.outputs.project_ids["ci"]
+  buildkite_wif_pool_name          = include.root.locals.account_vars.locals.buildkite_wif_pool_name
+  github_wif_pool_name             = include.root.locals.account_vars.locals.github_wif_pool_name
+  github_org                       = include.root.locals.account_vars.locals.github_org
+  artifact_signer_wif_provider     = include.root.locals.account_vars.locals.artifact_signer_wif_provider
+  artifact_signer_principal        = include.root.locals.account_vars.locals.artifact_signer_principal
+  artifact_signer_job_workflow_ref = include.root.locals.account_vars.locals.artifact_signer_job_workflow_ref
 
   environment_folder_ids = {
     development = dependency.folders.outputs.folder_ids["development"]

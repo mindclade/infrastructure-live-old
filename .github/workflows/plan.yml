@@ -2,7 +2,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Three jobs, not one. Job ids here ARE the required-check contexts in
 # github-config/rulesets/required-checks-tf.tf — renaming one is a breaking change to that
 # ruleset, and the symptom is every merge blocking on a check that never reports.
@@ -21,6 +21,7 @@ name: plan
 
 on:
   pull_request:
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -42,13 +43,17 @@ env:
   BOOTSTRAP_SEED_PROJECT_ID: ${{ vars.BOOTSTRAP_SEED_PROJECT_ID }}
   BOOTSTRAP_CICD_PROJECT_ID: ${{ vars.BOOTSTRAP_CICD_PROJECT_ID }}
   BOOTSTRAP_CICD_PROJECT_NUMBER: ${{ vars.BOOTSTRAP_CICD_PROJECT_NUMBER }}
-  GITHUB_WIF_POOL_NAME: ${{ vars.GITHUB_WIF_POOL_NAME }}
+  GITHUB_WIF_POOL_NAME: ${{ vars.WIF_POOL_GITHUB_NAME }}
   BUILDKITE_WIF_POOL_NAME: ${{ vars.BUILDKITE_WIF_POOL_NAME }}
+  WIF_PROVIDER_SIGNER: ${{ vars.WIF_PROVIDER_SIGNER }}
+  ARTIFACT_SIGNER_PRINCIPAL: ${{ vars.ARTIFACT_SIGNER_PRINCIPAL }}
+  ARTIFACT_SIGNER_JOB_WORKFLOW_REF: ${{ vars.ARTIFACT_SIGNER_JOB_WORKFLOW_REF }}
   TFSTATE_BUCKET_DEVELOPMENT: ${{ vars.TFSTATE_BUCKET_DEVELOPMENT }}
   TFSTATE_BUCKET_STAGING: ${{ vars.TFSTATE_BUCKET_STAGING }}
   TFSTATE_BUCKET_PRODUCTION: ${{ vars.TFSTATE_BUCKET_PRODUCTION }}
   RESOURCE_PREFIX: ${{ vars.RESOURCE_PREFIX }}
   PRIMARY_REGION: ${{ vars.PRIMARY_REGION }}
+  GPU_ZONE: ${{ vars.GPU_ZONE || 'us-central1-b' }}
   STATE_LOCATION: ${{ vars.STATE_LOCATION }}
   DOMAIN: ${{ vars.DOMAIN }}
   MONOREPO_ORG: ${{ vars.MONOREPO_ORG }}
@@ -212,6 +217,10 @@ jobs:
           framework: terraform
           output_format: cli
           output_file_path: console
+          # This optional physical-interconnect Terragrunt unit is deliberately excluded and
+          # contains no Terraform source. Checkov's Terraform parser treats Terragrunt's
+          # `exclude` block as invalid Terraform; every active/local *.tf root remains scanned.
+          skip_path: 3-networks/shared/interconnect/terragrunt.hcl
           soft_fail: false
 
   dependency-review:
@@ -262,7 +271,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    # No `environment:`, so the apply identity is unreachable from a pull request.
+    # github-config scopes the plan WIF principal to this protected environment. The plan
+    # identity is read-only, but state and private-module access are still sensitive.
+    environment: plan
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -291,7 +302,7 @@ jobs:
             app_pem:${{ vars.SECRETS_PROJECT_ID }}/github-app-terraform-pem
 
       - id: app-token
-        # Modules live in Mindclade/mindclade-internal-monorepo — the same organization, but a separate repository
+        # Modules live in mindclade/mindclade-internal-monorepo — the same organization, but a separate repository
         # from this one. The App must be installed on both. See the README.
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2
         with:
@@ -303,7 +314,7 @@ jobs:
       - name: Check out module source for interface preflight
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          repository: Mindclade/mindclade-internal-monorepo
+          repository: mindclade/mindclade-internal-monorepo
           token: ${{ steps.app-token.outputs.token }}
           path: .module-source
           fetch-depth: 0
@@ -351,7 +362,8 @@ jobs:
         with:
           name: plan-output-${{ github.run_id }}
           path: plan-output.txt
-          retention-days: 14
+          retention-days: 1
+          if-no-files-found: error
 
   plan-comment:
     name: publish plan comment
@@ -363,16 +375,11 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Download plan output
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5
-        continue-on-error: true
-        with:
-          name: plan-output-${{ github.run_id }}
-          path: .
       - name: Comment on PR
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.number }}
+          PLAN_RESULT: ${{ needs.plan.result }}
         run: |
           # shellcheck disable=SC2016
           # Intentional: the literal $ belongs to the text being built (a markdown body or a jq program), not to the shell.
@@ -390,29 +397,13 @@ jobs:
           # with a syntax error rather than posting a comment.
           export MARKER="$marker"
 
-          if [ -f plan-output.txt ]; then
-            body="$(cat plan-output.txt)"
-          else
-            body='(no plan output produced)'
-          fi
-          LIMIT=58000
-          if [ "${#body}" -gt "$LIMIT" ]; then
-            body="$(printf '%s' "$body" | tail -c "$LIMIT")"
-            truncated_note='> Output truncated. Full plan is in the run artifacts.'
-          else
-            truncated_note=''
-          fi
-
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           comment="$marker"
           comment+='\n### Terragrunt plan — changed units'
           comment+='\n'
-          comment+='\nUnits whose own files changed, plus every unit that depends on one of them.'
-          if [ -n "$truncated_note" ]; then
-            comment+="\n$truncated_note"
-          fi
-          comment+='\n```terraform'
-          comment+="\n$body"
-          comment+='\n```'
+          comment+="\nResult: **${PLAN_RESULT}**"
+          comment+='\n'
+          comment+="\nThe full plan can contain sensitive resource metadata and is retained for one day as an access-controlled workflow artifact: ${run_url}"
 
           prior="$(gh api \
             "repos/$owner/$repo/issues/${ISSUE_NUMBER}/comments" \
@@ -431,7 +422,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     needs: [plan]
-    if: always()
+    if: ${{ always() && needs.plan.result != 'skipped' }}
     steps:
       - name: Download plan artifacts for audit
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5

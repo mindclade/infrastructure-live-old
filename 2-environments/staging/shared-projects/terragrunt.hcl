@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Per-environment shared projects and budgets. See _envcommon/shared-projects.hcl.
 #
 # Staging exists to be a rehearsal for production, so it overrides as little as possible:
@@ -29,6 +29,6 @@ dependency "folders" {
 }
 
 inputs = {
-  folder_id = dependency.folders.outputs.folder_ids["staging"]
+  folder_id     = dependency.folders.outputs.folder_ids["staging"]
   budget_amount = 12000
 }

@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Project factory — inference serving.
 #
 # The only domain in the estate carrying customer traffic, which changes two things: an
@@ -20,8 +20,8 @@ include "envcommon" {
 }
 
 dependency "folders" {
-  config_path = "../../../2-environments/production/folders"
-  mock_outputs = { folder_ids = { serving = "folders/000000000000" } }
+  config_path                             = "../../../2-environments/production/folders"
+  mock_outputs                            = { folder_ids = { serving = "folders/000000000000" } }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 

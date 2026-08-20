@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Admission policy. Default rule DENY, per-namespace allowlist.
 #
 # The control that makes everything the build pipeline does actually matter. Signing an image
@@ -39,6 +39,7 @@ dependency "gke" {
 dependency "automation" {
   config_path = "../../../1-org/automation-iam"
   mock_outputs = { supply_chain_service_accounts = {
+    builder   = "sa-artifact-builder@mc-common-ci.iam.gserviceaccount.com"
     qualifier = "sa-artifact-qualifier@mc-common-ci.iam.gserviceaccount.com"
     signer    = "sa-artifact-signer@mc-common-ci.iam.gserviceaccount.com"
   } }
@@ -89,26 +90,17 @@ inputs = {
       enforcement_mode = "DRYRUN_AUDIT_LOG_ONLY"
     }
 
-    # Staging-only. Researchers iterate on an image dozens of times before it is worth
-    # attesting, and requiring an attestation on every push would mean either a signing step
-    # in the inner loop or — far more likely — the whole policy being switched off.
-    #
-    # This exception does NOT exist in staging or production. That is the point of it being
-    # declared per environment rather than in _envcommon.
-    "research-scratch" = {
-      evaluation_mode  = "ALWAYS_ALLOW"
-      enforcement_mode = "DRYRUN_AUDIT_LOG_ONLY"
-    }
   }
 
   # ---------------------------------------------------------------------------------------
   # Attestation authority
   # ---------------------------------------------------------------------------------------
-  # Who may create an attestation. Separate from who may deploy: the signing identity is
-  # bound to the build pipeline in the monorepo, and nothing in this cluster can sign.
+  # One issuer per evidence stage. Production admission trusts only deployment-attestor, so
+  # builder or qualifier compromise alone cannot deploy. Nothing in this cluster can sign.
   attestor_signers = {
-    build-attestor     = ["serviceAccount:${dependency.automation.outputs.supply_chain_service_accounts["signer"]}"]
-    vuln-scan-attestor = ["serviceAccount:${dependency.automation.outputs.supply_chain_service_accounts["qualifier"]}"]
+    build-attestor         = ["serviceAccount:${dependency.automation.outputs.supply_chain_service_accounts["builder"]}"]
+    qualification-attestor = ["serviceAccount:${dependency.automation.outputs.supply_chain_service_accounts["qualifier"]}"]
+    deployment-attestor    = ["serviceAccount:${dependency.automation.outputs.supply_chain_service_accounts["signer"]}"]
 
     # Human signers only, and named in github-config's teams catalogue as @biosecurity. A
     # service account here would make the review automatable, which defeats the reason the

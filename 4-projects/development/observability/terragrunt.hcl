@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Project factory — metrics, logs, traces.
 #
 # Distinct from the shared `ops` project in 2-environments, and the split is worth stating
@@ -25,8 +25,8 @@ include "envcommon" {
 }
 
 dependency "folders" {
-  config_path = "../../../2-environments/development/folders"
-  mock_outputs = { folder_ids = { observability = "folders/000000000000" } }
+  config_path                             = "../../../2-environments/development/folders"
+  mock_outputs                            = { folder_ids = { observability = "folders/000000000000" } }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 

@@ -2,7 +2,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # MINDCLADE CONFIDENTIAL - PROPRIETARY AND TRADE SECRET
 # Copyright (c) 2026 Mindclade. All rights reserved.
 """Validate the Mindclade production repository contract.
@@ -32,10 +32,25 @@ def repository_paths() -> list[Path]:
 
 TRACKED_PATHS = repository_paths()
 TRACKED_RELATIVE = {p.relative_to(ROOT).as_posix() for p in TRACKED_PATHS}
+LEGACY_GITHUB_IDENTITIES = (
+    "Mind" + "clade/",
+    "github.com/" + "Mind" + "clade",
+    "/orgs/" + "Mind" + "clade",
+)
 
 def tracked_prefix_exists(relative: str) -> bool:
     prefix = relative.rstrip("/")
     return prefix in TRACKED_RELATIVE or any(path.startswith(prefix + "/") for path in TRACKED_RELATIVE)
+
+repository_contract = (ROOT / "contracts/repository.yaml").read_text("utf-8", errors="ignore")
+for canonical_url in (
+    "https://github.com/enterprises/mindclade",
+    "https://github.com/mindclade",
+    "https://github.com/orgs/mindclade/repositories",
+    f"https://github.com/mindclade/{REPOSITORY}",
+):
+    if canonical_url not in repository_contract:
+        error(f"repository contract omits canonical GitHub URL: {canonical_url}")
 
 for rel in CONTRACT["required_paths"]:
     if not (ROOT/rel).exists(): error(f"missing required path: {rel}")
@@ -48,13 +63,17 @@ for p in TRACKED_PATHS:
     if p.name.startswith("._") or ".tfstate" in p.name or p.suffix in {".pyc",".tfplan"}:
         error(f"generated/sensitive artifact is tracked: {relative}")
     if p.is_symlink(): error(f"symlink forbidden in delivery: {relative}")
+    if p.is_file() and p.stat().st_size <= 2_000_000:
+        text = p.read_text("utf-8", errors="ignore")
+        if any(legacy in text for legacy in LEGACY_GITHUB_IDENTITIES):
+            error(f"noncanonical GitHub organization identity in {relative}")
 
 # GitHub Actions must be immutable and least privilege.
 for p in (ROOT/".github/workflows").glob("*.y*ml") if (ROOT/".github/workflows").exists() else []:
     text=p.read_text("utf-8",errors="ignore")
     for use in re.findall(r"(?m)^\s*-?\s*uses:\s*([^#\s]+)",text):
         if use.startswith("./"): continue
-        if not (re.search(r"@[0-9a-f]{40}$",use) or re.search(r"@sha256:[0-9a-f]{64}$",use) or re.fullmatch(r"Mindclade/\.github/\.github/workflows/[^@]+@v[0-9]+\.[0-9]+\.[0-9]+",use)):
+        if not (re.search(r"@[0-9a-f]{40}$",use) or re.search(r"@sha256:[0-9a-f]{64}$",use) or re.fullmatch(r"mindclade/\.github/\.github/workflows/[^@]+@v[0-9]+\.[0-9]+\.[0-9]+",use)):
             error(f"workflow action is not immutable-pinned in {p.relative_to(ROOT)}: {use}")
     if "permissions:" not in text:
         error(f"workflow lacks explicit permissions: {p.relative_to(ROOT)}")
@@ -122,9 +141,94 @@ elif REPOSITORY=="infrastructure-live":
         for path in ROOT.rglob("*.hcl")
     ):
         error("legacy Ring-0 sa-attestor reference remains in live infrastructure")
+
+    automation_main = (ROOT / "1-org/automation-iam/main.tf").read_text("utf-8", errors="ignore")
+    automation_outputs = (ROOT / "1-org/automation-iam/outputs.tf").read_text("utf-8", errors="ignore")
+    if 'resource "google_service_account_iam_member" "artifact_signer_github_wif"' not in automation_main:
+        error("artifact signer is not bound to the bootstrap-exported GitHub principal")
+    if "member             = var.artifact_signer_principal" not in automation_main:
+        error("artifact signer WIF binding does not consume bootstrap's exact principal")
+    if re.search(r'(?m)^\s*signer\s*=\s*\{\s*account\s*=\s*"artifact-signer"\s*,?\s*step\s*=\s*"artifact-sign"', automation_main):
+        error("artifact signer remains impersonable by the Buildkite artifact-sign step")
+    if "for_each           = local.buildkite_supply_chain_identities" not in automation_main:
+        error("Buildkite federation is not limited to builder/qualifier/promoter identities")
+    for trust_value in (
+        "gh-mindclade-internal-monorepo",
+        "mindclade-internal-monorepo:environment:release",
+        "reusable-binauthz-sign.yml@refs/tags/v3.0.0",
+    ):
+        if trust_value not in automation_main:
+            error(f"artifact signer trust check omits: {trust_value}")
+    for output_name in (
+        "WIF_PROVIDER_SIGNER",
+        "SA_ARTIFACT_SIGNER",
+        "ARTIFACT_SIGNER_PRINCIPAL",
+        "ARTIFACT_SIGNER_JOB_WORKFLOW_REF",
+    ):
+        if output_name not in automation_outputs:
+            error(f"artifact signer identity output omits: {output_name}")
+
+    production_supply_chain = (ROOT / "5-workloads/production/supply-chain-iam/main.tf").read_text("utf-8", errors="ignore")
+    for role in (
+        "roles/artifactregistry.reader",
+        "roles/binaryauthorization.attestorsViewer",
+        "containeranalysis.occurrences.create",
+        "containeranalysis.occurrences.get",
+        "containeranalysis.occurrences.list",
+    ):
+        if role not in production_supply_chain:
+            error(f"production artifact signer IAM omits required role: {role}")
+    for forbidden_occurrence_permission in (
+        "roles/containeranalysis.occurrences.editor",
+        "containeranalysis.occurrences.delete",
+        "containeranalysis.occurrences.update",
+    ):
+        if forbidden_occurrence_permission in production_supply_chain:
+            error(f"attestation issuers retain unnecessary occurrence mutation: {forbidden_occurrence_permission}")
+    all_binauthz = "\n".join(
+        (ROOT / f"5-workloads/{env}/binary-authorization/terragrunt.hcl").read_text("utf-8", errors="ignore")
+        for env in ("development", "staging", "production")
+    )
+    attestor_issuers = {
+        "build-attestor": "builder",
+        "qualification-attestor": "qualifier",
+        "deployment-attestor": "signer",
+    }
+    for attestor, identity in attestor_issuers.items():
+        binding = re.search(
+            rf'(?m)^\s*{re.escape(attestor)}\s*=\s*\["serviceAccount:\$\{{dependency\.automation\.outputs\.supply_chain_service_accounts\["([a-z]+)"\]\}}"\]\s*$',
+            all_binauthz,
+        )
+        if not binding or binding.group(1) != identity:
+            error(f"{attestor} is not bound exclusively to the {identity} identity")
+    if "vuln-scan-attestor" in all_binauthz:
+        error("legacy vulnerability attestor remains; vulnerability belongs to independent qualification")
+    binauthz_defaults = (ROOT / "_envcommon/binauthz.hcl").read_text("utf-8", errors="ignore")
+    admission = re.search(
+        r"require_attestations_by\s*=\s*local\.environment\s*==\s*\"production\"\s*\?\s*\[(.*?)\]\s*:\s*\[(.*?)\]",
+        binauthz_defaults,
+        re.S,
+    )
+    if not admission:
+        error("Binary Authorization environment admission contract is not parseable")
+    else:
+        production_attestors = set(re.findall(r'\"([^\"]+-attestor)\"', admission.group(1)))
+        lower_attestors = set(re.findall(r'\"([^\"]+-attestor)\"', admission.group(2)))
+        if production_attestors != {"deployment-attestor"}:
+            error("global production admission must require deployment-attestor only")
+        if lower_attestors != {"build-attestor"}:
+            error("lower environments must rehearse build-attestor in dry-run")
+
     account_text = (ROOT / "account.hcl").read_text("utf-8", errors="ignore")
     if "buildkite_wif_pool_name" not in account_text:
         error("account contract does not require the bootstrap-managed Buildkite WIF pool")
+    for signer_field in (
+        "artifact_signer_wif_provider",
+        "artifact_signer_principal",
+        "artifact_signer_job_workflow_ref",
+    ):
+        if signer_field not in account_text:
+            error(f"account contract omits bootstrap signer field: {signer_field}")
     production_cpu = ROOT / "5-workloads/production/nodepools/cpu/terragrunt.hcl"
     if production_cpu.exists() and re.search(r"(?m)^\s*spot\s*=\s*true\s*$", production_cpu.read_text("utf-8", errors="ignore")):
         error("production CPU control-plane pool may not use Spot capacity")
@@ -134,8 +238,124 @@ elif REPOSITORY=="infrastructure-live":
     for p in ROOT.rglob("*.hcl"):
         text=p.read_text("utf-8",errors="ignore")
         if "ANY_IDENTITY" in text:error(f"VPC-SC ANY_IDENTITY escape in {p.relative_to(ROOT)}")
-        if re.search(r'(?<![0-9])0\.0\.0\.0/0(?![0-9])',text) and re.search(r'(?i)(master_authorized|control[_-]?plane|authorized[_-]?network)',text):
-            error(f"broad control-plane CIDR in live configuration: {p.relative_to(ROOT)}")
+
+    # Network egress must fail closed while retaining the default-internet-gateway route
+    # required by Public Cloud NAT and the restricted Google API VIP.
+    vpc_defaults = (ROOT / "_envcommon/vpc.hcl").read_text("utf-8", errors="ignore")
+    if not re.search(r"(?m)^\s*delete_default_routes_on_create\s*=\s*false\s*$", vpc_defaults):
+        error("VPC defaults remove the route required by Cloud NAT/private Google API routing")
+    for env in ("development", "staging", "production"):
+        firewall_path = ROOT / f"3-networks/{env}/firewall-baseline/terragrunt.hcl"
+        firewall = firewall_path.read_text("utf-8", errors="ignore")
+        deny = re.search(r"(?s)deny-egress-default\s*=\s*\{(.*?)\n\s*\}", firewall)
+        if not deny or not re.search(r'destination_ranges\s*=\s*\["0\.0\.0\.0/0"\]', deny.group(1)):
+            error(f"{env} firewall does not deny all unmatched IPv4 egress")
+        control_plane = re.search(r"(?s)allow-control-plane-webhooks\s*=\s*\{(.*?)\n\s*\}", firewall)
+        if control_plane and "0.0.0.0/0" in control_plane.group(1):
+            error(f"{env} firewall permits a broad control-plane CIDR")
+        if "199.36.153.4/30" not in firewall or "34.126.0.0/18" not in firewall:
+            error(f"{env} firewall lacks the restricted Google API/direct-connect ranges")
+
+    dns = (ROOT / "3-networks/shared/dns-hub/terragrunt.hcl").read_text("utf-8", errors="ignore")
+    for required in ('domain     = "googleapis.com."', 'rrdatas = ["restricted.googleapis.com."]', "199.36.153.4"):
+        if required not in dns:
+            error(f"restricted Google API DNS contract missing: {required}")
+    if "network_self_links" in dns:
+        error("DNS hub consumes stale network_self_links output instead of network_self_link")
+
+    org_policy = (ROOT / "1-org/org-policies/terragrunt.hcl").read_text("utf-8", errors="ignore")
+    if "https://agent.buildkite.com" not in org_policy:
+        error("organization WIF issuer policy omits the bootstrap-managed Buildkite issuer")
+
+    for env in ("staging", "production"):
+        binauthz = (ROOT / f"5-workloads/{env}/binary-authorization/terragrunt.hcl").read_text("utf-8", errors="ignore")
+        if '"research-scratch"' in binauthz:
+            error(f"{env} Binary Authorization retains a research-scratch bypass")
+        perimeter = (ROOT / f"5-workloads/{env}/vpc-sc-perimeter/terragrunt.hcl").read_text("utf-8", errors="ignore")
+        if not re.search(r"(?m)^\s*use_explicit_dry_run_spec\s*=\s*true\s*$", perimeter):
+            error(f"{env} VPC-SC must remain dry-run until its acceptance drill passes")
+        for project in ('dependency.observability.outputs.project_number', 'dependency.security.outputs.project_number'):
+            if project not in perimeter:
+                error(f"{env} VPC-SC omits protected project: {project}")
+
+    account_contract = (ROOT / "account.hcl").read_text("utf-8", errors="ignore")
+    if 'get_env("GPU_ZONE"' not in account_contract:
+        error("account contract lacks an explicit GPU/Parallelstore zone")
+    for env in ("development", "staging", "production"):
+        for pool in ("gpu-a3", "gpu-a4"):
+            gpu = (ROOT / f"5-workloads/{env}/nodepools/{pool}/terragrunt.hcl").read_text("utf-8", errors="ignore")
+            if "account_vars.locals.gpu_zone" not in gpu:
+                error(f"{env}/{pool} is not tied to the account GPU zone contract")
+
+    selector = (ROOT / "scripts/select-apply-scopes.py").read_text("utf-8", errors="ignore")
+    if '"foundation": ("1-org/", "3-networks/shared/", "5-workloads/shared/")' not in selector:
+        error("shared control-plane identities are not assigned to foundation authority")
+
+    for workflow_name in ("plan.yml", "drift.yml"):
+        workflow = (ROOT / f".github/workflows/{workflow_name}").read_text("utf-8", errors="ignore")
+        for days in re.findall(r"retention-days:\s*(\d+)", workflow):
+            if int(days) > 1:
+                error(f"{workflow_name} retains sensitive Terraform evidence longer than one day")
+    plan_workflow = (ROOT / ".github/workflows/plan.yml").read_text("utf-8", errors="ignore")
+    if "  merge_group:" not in plan_workflow:
+        error("plan workflow does not report a merge-queue check")
+    if "    environment: plan" not in plan_workflow:
+        error("cloud-backed PR plans are not gated by the plan environment")
+    if 'cat plan-output.txt' in plan_workflow:
+        error("plan workflow publishes sensitive raw plan output into pull requests")
+    terraform_version = (ROOT / ".terraform-version").read_text("utf-8", errors="ignore").strip()
+    if terraform_version != "1.15.9":
+        error("Terraform pin must name the current qualified 1.15.9 release")
+    for workflow_name in ("apply.yml", "cost.yml", "drift.yml", "plan.yml"):
+        workflow = (ROOT / f".github/workflows/{workflow_name}").read_text("utf-8", errors="ignore")
+        if f'TF_VERSION: "{terraform_version}"' not in workflow:
+            error(f"{workflow_name} Terraform version differs from .terraform-version")
+    flake = (ROOT / "flake.nix").read_text("utf-8", errors="ignore")
+    for terraform_pin in (
+        'terraformVersion = "1.15.9"',
+        'x86_64-linux = "76edd0b22d2f27d3d2e097cd793209646f719cf60f02ff3af626b07361137da1"',
+        'aarch64-darwin = "05b27586a5d7d84105690ecccc7edbbf48bc3d6d577745cb61f163ba990adf4f"',
+    ):
+        if terraform_pin not in flake:
+            error(f"Nix Terraform release contract omits: {terraform_pin}")
+
+    apply_workflow = (ROOT / ".github/workflows/apply.yml").read_text("utf-8", errors="ignore")
+    for apply_gate in (
+        "environment: plan",
+        'ACTUAL_REF: ${{ github.ref }}',
+        '"refs/heads/main"',
+        'ref: ${{ github.sha }}',
+    ):
+        if apply_gate not in apply_workflow:
+            error(f"apply workflow lacks exact-main/plan-identity gate: {apply_gate}")
+    drift_workflow = (ROOT / ".github/workflows/drift.yml").read_text("utf-8", errors="ignore")
+    if 'tail -c 45000 artifacts/drift.txt' in drift_workflow:
+        error("drift workflow publishes sensitive raw plan output into issues")
+    stateful_plan_paths = {
+        "scripts/terragrunt-scope.sh": (ROOT / "scripts/terragrunt-scope.sh").read_text("utf-8", errors="ignore"),
+        "scripts/plan-changed.sh": (ROOT / "scripts/plan-changed.sh").read_text("utf-8", errors="ignore"),
+        ".github/workflows/drift.yml": drift_workflow,
+    }
+    for path, text in stateful_plan_paths.items():
+        if "-lock=false" in text:
+            error(f"{path} disables Terraform state locking during plan")
+        if "-lock-timeout=20m" not in text:
+            error(f"{path} lacks the bounded Terraform state-lock timeout")
+
+    for required_doc in (
+        "docs/production-activation-gates.md",
+        "docs/supply-chain-signer-contract.md",
+        "docs/runbooks/binauthz-blocked-deploy.md",
+        "docs/runbooks/gke-reconstruction.md",
+        "docs/runbooks/state-lock-stuck.md",
+        "docs/runbooks/vpc-sc-denial.md",
+    ):
+        if not (ROOT / required_doc).is_file():
+            error(f"missing production operations document: {required_doc}")
+    activation_gates = (ROOT / "docs/production-activation-gates.md").read_text("utf-8", errors="ignore")
+    for ha_gate in ("standard profile", "node_locations", "total minimum of at least three", "topology-spread"):
+        if ha_gate not in activation_gates:
+            error(f"Argo CD HA activation gate omits: {ha_gate}")
 
 if ERRORS:
     for msg in sorted(set(ERRORS)): print(f"ERROR: {msg}",file=sys.stderr)

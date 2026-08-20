@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # A4 GPU node pool. Tainted; scheduled through Kueue.
 #
 # A4: 8× B200 per node. The largest shape in the estate, and the one where every number in
@@ -31,7 +31,7 @@ dependency "gke" {
 
   mock_outputs = {
     cluster_name = "mc-staging"
-    location     = "europe-west4"
+    location     = "us-central1"
     project_id   = "mc-staging-platform"
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
@@ -50,7 +50,7 @@ inputs = {
   # whole reason the pool exists in staging.
   max_node_count = 2
 
-  node_locations = ["europe-west4-b"]
+  node_locations = [include.root.locals.account_vars.locals.gpu_zone]
 
   # SPOT IS OFF, against the envcommon default of "spot in non-production".
   #

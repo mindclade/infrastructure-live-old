@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Egress NAT. Required because external IPs are denied org-wide.
 #
 # `compute.vmExternalIpAccess` is deny-all in bootstrap, so no node, no pod, and no VM has a

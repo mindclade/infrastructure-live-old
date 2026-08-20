@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 {
   description = "Toolchain for mindclade infrastructure-live";
 
@@ -45,8 +45,8 @@
         # fails the build loudly; there is no path where a mismatched binary runs.
         terragruntVersion = "1.1.2";
         terragruntSha = {
-          x86_64-linux = "d5da6a66741f4ee752aa3b502b57e47fd6d5c178942861b2507f14f083e7606e";
-          aarch64-darwin = "4bfb50d952f21d20271cb423b7c83a78af9ad0849884e8a831ffb7ace843f334";
+          x86_64-linux = "534070d5b261a0e65b3f490479f602a8f80a0ae115e399a3786802cce658aeaa";
+          aarch64-darwin = "f3e6418181699e14ea282257e36ea6be3949ff9ebd4854eff6bd2fe51130791a";
         };
         terragruntAsset = {
           x86_64-linux = "terragrunt_linux_amd64";

@@ -1,45 +1,69 @@
-# Mindclade Infrastructure Live
+<!-- mindclade-doc: repository-home@1 -->
 
-Authoritative Terraform/Terragrunt desired state for Mindclade's normal Google Cloud estate.
-Ring‑0 state, initial federation, and break-glass recovery remain in `bootstrap`; Kubernetes
-application state remains in `gitops`.
+# Mindclade · Infrastructure Live
 
-## Authority
+> **Platform Foundation · Google Cloud desired state**
+> Layered Terraform and Terragrunt for the normal Mindclade cloud estate after Ring 0.
 
-This repository owns:
+| Repository contract | Value |
+| --- | --- |
+| Enterprise | [`mindclade`](https://github.com/enterprises/mindclade) |
+| Organization | [`mindclade`](https://github.com/mindclade) |
+| Repository index | [Mindclade repositories](https://github.com/orgs/mindclade/repositories) |
+| Repository | [`mindclade/infrastructure-live`](https://github.com/mindclade/infrastructure-live) |
+| Class | `production-control` |
+| Visibility | `private` |
+| Owner | Infrastructure |
+| Production authority | Yes |
+| Change model | Pull request; affected plans; exact post-merge saved plans; protected apply |
+| Documentation | [`docs/README.md`](docs/README.md) |
 
-- organization folders, policies, logging, SCC, contacts, and common projects;
-- development, staging, production, and partner project foundations;
-- Shared VPC, DNS, NAT, firewall policy, PSC, and optional interconnect resources;
-- GKE, CPU/GPU node pools, registries, Binary Authorization, storage, databases, backups,
-  VPC Service Controls, Secret Manager resources, and cloud-side Argo CD prerequisites.
+This repository is authoritative for normal Google Cloud infrastructure. Ring-0 state,
+initial federation, and break-glass recovery remain in `bootstrap`; Kubernetes and Argo CD
+desired state remain in `gitops`.
 
-It does not install Argo CD or other Kubernetes applications and does not store secret values.
+## Authority boundary
 
-## Layering
+This repository owns organization controls, environment foundations, networks, workload
+projects, GKE, managed services, cloud-side identities, Binary Authorization, storage,
+databases, backups, VPC Service Controls, DNS, and Secret Manager resources. It does not
+install Argo CD or applications and does not store secret values.
 
-```text
-1-org          organization hierarchy and common controls
-2-environments environment foundations and child folders
-3-networks     shared and environment network infrastructure
-4-projects     domain and partner workload projects
-5-workloads    clusters and managed cloud services
+The diagram shows the enforced layer direction and the two external handoffs.
+
+```mermaid
+flowchart TD
+    B["bootstrap<br/>Ring-0 state and federation"] --> O["1-org<br/>hierarchy and common controls"]
+    O --> E["2-environments<br/>environment foundations"]
+    E --> N["3-networks<br/>shared and environment networking"]
+    N --> P["4-projects<br/>domain and partner projects"]
+    P --> W["5-workloads<br/>clusters and managed services"]
+    W --> G["gitops<br/>Kubernetes desired state"]
+
+    classDef authority fill:#0b1f33,color:#ffffff,stroke:#3aa3ff,stroke-width:2px;
+    classDef managed fill:#e8f4ff,color:#0b1f33,stroke:#1677b8,stroke-width:1.5px;
+    classDef external fill:#f4f7fa,color:#0b1f33,stroke:#66788a,stroke-width:1.5px;
+    class O,E,N,P,W managed;
+    class B,G external;
 ```
 
-Dependencies may point only from a higher numbered layer to the same or a lower numbered
-layer. Each Terragrunt unit has an independent state prefix.
+Dependencies may point within a layer or from a higher-numbered layer to the same or a
+lower-numbered layer. Every executable Terragrunt unit has an independent state prefix.
 
-## Environments
+## Repository map
 
-Development, staging, and production use the same architectural shape. Scale, availability,
-retention, and accelerator capacity differ intentionally through `env.hcl`; security and
-identity boundaries do not silently disappear in lower environments.
+| Path | Responsibility |
+| --- | --- |
+| `1-org/` | Organization hierarchy, policies, logging, security, and common projects |
+| `2-environments/` | Development, staging, and production foundations |
+| `3-networks/` | Shared VPC, DNS, NAT, firewall, PSC, and connectivity |
+| `4-projects/` | Domain and partner workload projects |
+| `5-workloads/` | GKE and managed cloud services |
+| `_envcommon/` | Reviewed shared Terragrunt configuration |
+| `scripts/` | Tree, dependency, plan, scope, account, and module-interface gates |
+| `docs/` | Architecture, contracts, activation gates, handoffs, and runbooks |
 
-The four public domains are hosted in separate Cloud DNS managed zones under
-`3-networks/shared/public-zones/`. Squarespace remains the registrar. See
-[`docs/dns-domains.md`](docs/dns-domains.md) before changing delegation or DNSSEC.
-
-## Toolchain
+## Toolchain and validation
 
 ```sh
 nix develop
@@ -47,10 +71,8 @@ make validate
 make plan-development
 ```
 
-The flake pins Terraform 1.15.9 and Terragrunt 1.1.2 by release checksum. CI enables
-Terragrunt strict mode.
-
-Generate a local, ignored `.account.env` only from verified `bootstrap` outputs:
+The flake and CI pin Terraform and Terragrunt. CI enables Terragrunt strict mode. Create a
+local ignored account contract only from verified bootstrap outputs:
 
 ```sh
 ./scripts/bootstrap-account.sh ../bootstrap
@@ -58,32 +80,25 @@ Generate a local, ignored `.account.env` only from verified `bootstrap` outputs:
 
 Do not hand-edit state bucket, WIF, project-number, or bootstrap project values.
 
-## Change flow
+## Exact apply model
 
-Pull requests run format, validation, policy/security checks, affected plans, cost analysis,
-and destructive-change classification. After merge, the apply workflow:
+Pull requests run formatting, validation, policy and security checks, affected plans, cost
+analysis, and destructive-change classification. After merge, `apply.yml` selects the
+minimum affected privilege scope, creates saved plans for the exact commit with the plan
+identity, stores them for one day with a checksum manifest, waits on the corresponding
+protected environment, then verifies and applies the same plans with a scope-specific apply
+identity.
 
-1. selects the minimum affected privilege scope;
-2. creates saved plans for the exact merged SHA using the plan identity;
-3. stores them for one day with a checksum manifest;
-4. waits on the corresponding protected GitHub environment;
-5. verifies and applies those exact plans using the scope-specific apply identity.
+Destructive plans require an explicit manual dispatch with `allow_destroy=true` and a
+`CHG-`, `INC-`, `SEC-`, or `DR-` change reference. Those inputs do not bypass environment
+approval, checksums, account-context validation, or commit matching.
 
-Direct production applies from developer machines are emergency-only and must be reconciled
-back to Git.
+## Start here
 
-## Reusable modules
-
-Modules are consumed from `mindclade-internal-monorepo/infra/terraform/modules` using immutable
-release references. The interface and qualification contract is documented in
-[`docs/module-interface-contract.md`](docs/module-interface-contract.md).
-
-## Operations
-
+- [Documentation index](docs/README.md)
 - [Architecture](docs/architecture.md)
-- [Dependency graph](docs/dependency-graph.md)
+- [Dependency graph and apply order](docs/dependency-graph.md)
 - [State boundaries](docs/state-boundaries.md)
-- [GitOps handoff](docs/gitops-handoff.md)
-- [Automation identity handoff](docs/automation-identity-handoff.md)
-- [Failed production apply](docs/runbooks/failed-production-apply.md)
-- [Enterprise blueprint](BLUEPRINT.md)
+- [Production activation gates](docs/production-activation-gates.md)
+- [Runbooks](docs/runbooks/README.md)
+- [Enterprise platform blueprint](BLUEPRINT.md)

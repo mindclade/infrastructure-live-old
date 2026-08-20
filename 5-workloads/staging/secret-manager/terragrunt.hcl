@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Workload secrets, replicated per residency requirement.
 #
 # Terraform creates the CONTAINERS, never the values — the same rule bootstrap follows, for

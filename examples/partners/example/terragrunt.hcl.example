@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # NON-LIVE EXAMPLE — partner tenancy. Own perimeter, own VPC-SC ingress rules.
 #
 # Not a project factory over three environments like its siblings. A partner tenancy exists

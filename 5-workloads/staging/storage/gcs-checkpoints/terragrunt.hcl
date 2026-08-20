@@ -1,7 +1,7 @@
 # Copyright © 2026 Mindclade, LLC. All Rights Reserved.
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
-#
+
 # Training checkpoints. Versioned, lifecycle to coldline.
 #
 # The bucket a training run writes to every few minutes and reads from exactly once — after
