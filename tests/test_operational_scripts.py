@@ -75,7 +75,7 @@ def release_identities(
             "workflow_ref": "mindclade/mindclade-internal-monorepo/.github/workflows/release.yml@refs/heads/main",
             "job_workflow_ref": (
                 f"mindclade/.github/.github/workflows/{workflow}@refs/tags/"
-                f"{'v5.0.0' if capability == 'promoter' else 'v4.0.0'}"
+                "v5.0.0"
             ),
         }
     return result
@@ -102,7 +102,7 @@ def dr_evidence_identity(
         "workload_identity_provider": f"{pool}/providers/gh-dr-evidence",
         "job_workflow_ref": (
             "mindclade/.github/.github/workflows/"
-            "reusable-dr-evidence.yml@refs/tags/v4.0.0"
+            "reusable-dr-evidence.yml@refs/tags/v5.0.0"
         ),
         "principals": principals,
     }

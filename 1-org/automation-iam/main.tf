@@ -73,11 +73,11 @@ locals {
     promoter             = "reusable-gitops-promote.yml"
   }
   artifact_release_versions = {
-    canary               = "v4.0.0"
-    builder              = "v4.0.0"
-    qualification-reader = "v4.0.0"
-    qualifier            = "v4.0.0"
-    signer               = "v4.0.0"
+    canary               = "v5.0.0"
+    builder              = "v5.0.0"
+    qualification-reader = "v5.0.0"
+    qualifier            = "v5.0.0"
+    signer               = "v5.0.0"
     promoter             = "v5.0.0"
   }
   artifact_release_subject_suffixes = {

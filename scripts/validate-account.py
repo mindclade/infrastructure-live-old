@@ -96,7 +96,7 @@ def release_identity_errors(payload: str, pool: str, organization: str) -> list[
         ):
             errors.append(f"artifact release caller differs: {capability}")
         job = identity.get("job_workflow_ref")
-        expected_version = "v5.0.0" if capability == "promoter" else "v4.0.0"
+        expected_version = "v5.0.0"
         if not isinstance(job, str) or not job.startswith(
             f"{organization}/.github/.github/workflows/reusable-"
         ) or not job.endswith(f"@refs/tags/{expected_version}"):
@@ -122,7 +122,7 @@ def dr_evidence_identity_errors(
         return ["DR evidence identity provider differs"]
     if identity["job_workflow_ref"] != (
         f"{organization}/.github/.github/workflows/"
-        "reusable-dr-evidence.yml@refs/tags/v4.0.0"
+        "reusable-dr-evidence.yml@refs/tags/v5.0.0"
     ):
         return ["DR evidence reusable workflow differs"]
     expected = {

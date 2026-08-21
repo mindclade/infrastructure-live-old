@@ -302,7 +302,6 @@ elif REPOSITORY == "infrastructure-live":
         'capability == "signer" ? "" : "arc-${capability}:"',
         "reusable-binauthz-sign.yml",
         "artifact_release_versions = {",
-        '"v4.0.0"',
         "reusable-gitops-promote.yml",
         "v5.0.0",
     ):

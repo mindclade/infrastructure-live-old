@@ -28,7 +28,7 @@ dependency "automation" {
       WIF_PROVIDER_DR_EVIDENCE = "projects/000000000001/locations/global/workloadIdentityPools/github/providers/gh-dr-evidence"
       SA_DR_EVIDENCE_WRITER    = "sa-dr-evidence-writer@mc-common-ci.iam.gserviceaccount.com"
       principals               = {}
-      job_workflow_ref         = "mindclade/.github/.github/workflows/reusable-dr-evidence.yml@refs/tags/v4.0.0"
+      job_workflow_ref         = "mindclade/.github/.github/workflows/reusable-dr-evidence.yml@refs/tags/v5.0.0"
     }
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]

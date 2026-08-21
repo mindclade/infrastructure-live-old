@@ -78,7 +78,7 @@ variable "dr_evidence_identity" {
   validation {
     condition = (
       can(regex("^projects/[0-9]+/locations/global/workloadIdentityPools/github/providers/gh-dr-evidence$", var.dr_evidence_identity.workload_identity_provider)) &&
-      var.dr_evidence_identity.job_workflow_ref == "mindclade/.github/.github/workflows/reusable-dr-evidence.yml@refs/tags/v4.0.0" &&
+      var.dr_evidence_identity.job_workflow_ref == "mindclade/.github/.github/workflows/reusable-dr-evidence.yml@refs/tags/v5.0.0" &&
       toset(keys(var.dr_evidence_identity.principals)) == toset([
         "bootstrap:scratch", "bootstrap:staging", "github-config:scratch", "github-config:staging",
         "infrastructure-live:scratch", "infrastructure-live:staging", "gitops:scratch", "gitops:staging",

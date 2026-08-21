@@ -135,7 +135,7 @@ def validated_release_identities(
             raise ValueError(f"artifact release identity {capability} has wrong caller")
         expected_job = (
             f"{github_org}/.github/.github/workflows/{workflow}@refs/tags/"
-            f"{'v5.0.0' if capability == 'promoter' else 'v4.0.0'}"
+                "v5.0.0"
         )
         if identity["job_workflow_ref"] != expected_job:
             raise ValueError(
@@ -159,7 +159,7 @@ def validated_dr_evidence_identity(
         raise ValueError("platform_contract DR evidence provider is wrong")
     expected_job = (
         f"{github_org}/.github/.github/workflows/"
-        "reusable-dr-evidence.yml@refs/tags/v4.0.0"
+        "reusable-dr-evidence.yml@refs/tags/v5.0.0"
     )
     if value["job_workflow_ref"] != expected_job:
         raise ValueError("platform_contract DR evidence reusable workflow is wrong")
