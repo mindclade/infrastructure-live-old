@@ -33,6 +33,7 @@ CANONICAL_POOL_PROFILES = {
     "gpu-a4": "gke-b200-a4-highgpu-8g",
 }
 SEMVER = re.compile(r"v\d+\.\d+\.\d+")
+IMMUTABLE_REF = re.compile(r"(?:v\d+\.\d+\.\d+|[0-9a-f]{40})")
 
 
 def git(repo: Path, *args: str) -> str:
@@ -72,8 +73,10 @@ def live_contract() -> tuple[str, dict[str, str], list[str]]:
     errors: list[str] = []
     common = (ROOT / "_envcommon/gpu-nodepool.hcl").read_text(encoding="utf-8")
     refs = re.findall(r'^\s*module_version\s*=\s*"([^"\r\n]+)"', common, re.M)
-    if len(refs) != 1 or not SEMVER.fullmatch(refs[0]):
-        errors.append("_envcommon/gpu-nodepool.hcl must select one full semantic module ref")
+    if len(refs) != 1 or not IMMUTABLE_REF.fullmatch(refs[0]):
+        errors.append(
+            "_envcommon/gpu-nodepool.hcl must select one immutable semantic tag or full SHA"
+        )
         ref = refs[0] if refs else ""
     else:
         ref = refs[0]

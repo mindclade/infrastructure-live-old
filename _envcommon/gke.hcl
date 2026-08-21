@@ -18,7 +18,7 @@ locals {
 
   # Protected release candidate. The tag is published only after repository and connected
   # plan evidence for the complete typed interface set is approved.
-  module_version = "v0.4.0"
+  module_version = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79"
 
   # Control-plane peering ranges are deliberately outside the VPC, Pod, Service, and ARC
   # allocations. Changing one recreates the private control-plane peering contract.

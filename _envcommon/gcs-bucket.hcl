@@ -10,7 +10,7 @@ locals {
   account_vars = read_terragrunt_config("${get_repo_root()}/account.hcl")
 
   environment    = local.env_vars.locals.environment
-  module_version = "v0.4.0"
+  module_version = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79"
 }
 
 terraform {

@@ -44,7 +44,7 @@ RECORD_NAME = re.compile(
     re.IGNORECASE,
 )
 BLOCKER = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-SEMVER_REF = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
+IMMUTABLE_REF = re.compile(r"^(?:v[0-9]+\.[0-9]+\.[0-9]+|[0-9a-f]{40})$")
 
 
 class InventoryError(ValueError):
@@ -111,8 +111,8 @@ def validate_inventory(
     if module.get("path") != EXPECTED_MODULE_PATH:
         errors.append(f"module path must be {EXPECTED_MODULE_PATH}")
     module_ref = module.get("ref")
-    if not isinstance(module_ref, str) or not SEMVER_REF.fullmatch(module_ref):
-        errors.append("module ref must be an immutable semantic version tag")
+    if not isinstance(module_ref, str) or not IMMUTABLE_REF.fullmatch(module_ref):
+        errors.append("module ref must be an immutable semantic tag or full SHA")
     allowed_types = set(_strings(module.get("allowed_public_record_types")))
     if allowed_types != MODULE_PUBLIC_TYPES:
         errors.append(

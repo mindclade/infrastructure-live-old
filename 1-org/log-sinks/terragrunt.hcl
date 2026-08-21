@@ -23,7 +23,7 @@ terraform {
 }
 
 locals {
-  module_version = "v0.4.0"
+  module_version = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79"
 
   # Excluded from every sink below. These are high-volume and answer nothing an incident
   # review asks: the load balancer's own health probes, and the readiness/liveness traffic

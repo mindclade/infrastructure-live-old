@@ -5,7 +5,7 @@
   "module_contract": {
     "repository": "mindclade/mindclade-internal-monorepo",
     "path": "infra/terraform/modules/dns",
-    "ref": "v0.4.0",
+    "ref": "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79",
     "allowed_public_record_types": [
       "CAA",
       "MX",

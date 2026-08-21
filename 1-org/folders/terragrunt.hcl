@@ -7,7 +7,7 @@ include "root" {
   expose = true
 }
 
-locals { module_version = "v0.4.0" }
+locals { module_version = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79" }
 terraform {
   source = "${include.root.locals.module_source_base}//folder_factory?ref=${local.module_version}"
 }

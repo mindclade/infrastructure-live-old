@@ -43,11 +43,16 @@ def source(profile: str, code: str) -> dict[str, str]:
 
 
 class CapacityContractTests(unittest.TestCase):
-    def write_live_contract(self, root: Path, second_profile: str) -> None:
+    def write_live_contract(
+        self,
+        root: Path,
+        second_profile: str,
+        module_ref: str = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79",
+    ) -> None:
         common = root / "_envcommon/gpu-nodepool.hcl"
         common.parent.mkdir(parents=True)
         common.write_text(
-            'locals {\n  module_version = "v0.4.0"\n}\n', encoding="utf-8"
+            f'locals {{\n  module_version = "{module_ref}"\n}}\n', encoding="utf-8"
         )
         for environment in CAPACITY.ENVIRONMENTS:
             for pool, profile in {
@@ -119,6 +124,18 @@ class CapacityContractTests(unittest.TestCase):
                 CAPACITY.ROOT = previous
         self.assertEqual(profiles, CAPACITY.CANONICAL_POOL_PROFILES)
         self.assertEqual(errors, [])
+
+    def test_live_contract_rejects_a_moving_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_live_contract(root, "gke-b200-a4-highgpu-8g", "main")
+            previous = CAPACITY.ROOT
+            CAPACITY.ROOT = root
+            try:
+                _, _, errors = CAPACITY.live_contract()
+            finally:
+                CAPACITY.ROOT = previous
+        self.assertTrue(any("immutable semantic tag or full SHA" in item for item in errors))
 
 
 if __name__ == "__main__":

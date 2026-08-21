@@ -44,41 +44,21 @@ resource "google_folder_iam_member" "environment_apply" {
   member = "serviceAccount:${var.environment_apply_service_accounts[each.value.environment]}"
 }
 
-# Normal build/qualification/signing identities intentionally live outside Ring 0. Bootstrap
-# owns only the exact capability providers; these service accounts are rebuildable normal-plane
-# resources and no identity can impersonate another capability.
+# Normal build/qualification/signing identities intentionally live outside Ring 0. The
+# Buildkite provider is bootstrap-owned, but the capabilities it can impersonate are normal
+# platform resources and can be rebuilt after bootstrap recovery.
 locals {
-  supply_chain_identities = {
-    canary               = { account = "arc-canary", capability = "canary" }
-    builder              = { account = "artifact-builder", capability = "builder" }
-    qualification_reader = { account = "artifact-qual-reader", capability = "qualification-reader" }
-    qualifier            = { account = "artifact-qualifier", capability = "qualifier" }
-    signer               = { account = "artifact-signer", capability = "signer" }
-    promoter             = { account = "artifact-promoter", capability = "promoter" }
-  }
-  artifact_release_provider_ids = {
-    canary               = "gh-arc-canary"
-    builder              = "gh-arc-builder"
-    qualification-reader = "gh-arc-qualification-reader"
-    qualifier            = "gh-arc-qualifier"
-    signer               = "gh-mindclade-internal-monorepo"
-    promoter             = "gh-arc-promoter"
-  }
-  artifact_release_workflows = {
-    canary               = "reusable-arc-wif-canary.yml"
-    builder              = "reusable-arc-oci-build.yml"
-    qualification-reader = "reusable-arc-oci-qualify.yml"
-    qualifier            = "reusable-arc-qualification-attest.yml"
-    signer               = "reusable-binauthz-sign.yml"
-    promoter             = "reusable-gitops-promote.yml"
-  }
-  artifact_release_subject_suffixes = {
-    canary               = "ref:refs/heads/main"
-    builder              = "ref:refs/heads/main"
-    qualification-reader = "ref:refs/heads/main"
-    qualifier            = "ref:refs/heads/main"
-    signer               = "environment:release"
-    promoter             = "environment:release"
+  buildkite_supply_chain_identities = var.buildkite_wif_enabled ? {
+    builder   = { account = "artifact-builder", step = "artifact-build" }
+    qualifier = { account = "artifact-qualifier", step = "artifact-qualify" }
+    promoter  = { account = "artifact-promoter", step = "artifact-promote" }
+  } : {}
+  supply_chain_identities = merge(local.buildkite_supply_chain_identities, {
+    signer = { account = "artifact-signer", step = "github-protected-release" }
+  })
+  buildkite_step_principals = {
+    for name, cfg in local.buildkite_supply_chain_identities : name =>
+    "principalSet://iam.googleapis.com/${var.buildkite_wif_pool_name}/attribute.step_key/${cfg.step}"
   }
 }
 
@@ -87,82 +67,36 @@ resource "google_service_account" "supply_chain" {
   project      = var.ci_project_id
   account_id   = "sa-${each.value.account}"
   display_name = "Mindclade ${replace(each.value.account, "-", " ")}"
-  description  = "Keyless ARC ${each.value.capability} identity; static keys are prohibited."
+  description = (
+    each.key == "signer" ?
+    "Keyless GitHub protected-release identity for ${each.value.step}; static keys are prohibited." :
+    "Keyless Buildkite identity for ${each.value.step}; static keys are prohibited."
+  )
 }
 
-resource "google_service_account_iam_member" "supply_chain_github_wif" {
-  for_each           = local.supply_chain_identities
+resource "google_service_account_iam_member" "supply_chain_buildkite_wif" {
+  for_each           = local.buildkite_supply_chain_identities
   service_account_id = google_service_account.supply_chain[each.key].name
   role               = "roles/iam.workloadIdentityUser"
-  member             = var.artifact_release_identities[each.value.capability].principal
+  member             = local.buildkite_step_principals[each.key]
 }
 
-resource "google_project_iam_member" "arc_builder_registry_writer" {
-  project = var.ci_project_id
-  role    = "roles/artifactregistry.writer"
-  member  = "serviceAccount:${google_service_account.supply_chain["builder"].email}"
-}
-
-resource "google_project_iam_member" "arc_qualification_registry_reader" {
-  project = var.ci_project_id
-  role    = "roles/artifactregistry.reader"
-  member  = "serviceAccount:${google_service_account.supply_chain["qualification_reader"].email}"
-}
-
-check "artifact_release_trust_contract" {
-  assert {
-    condition = alltrue([
-      for capability, identity in var.artifact_release_identities :
-      identity.workload_identity_provider == "${var.github_wif_pool_name}/providers/${local.artifact_release_provider_ids[capability]}" &&
-      can(regex(
-        "^repo:${var.github_org}@[0-9]+/mindclade-internal-monorepo@[0-9]+:${local.artifact_release_subject_suffixes[capability]}$",
-        identity.subject,
-      )) &&
-      identity.principal == "principal://iam.googleapis.com/${var.github_wif_pool_name}/subject/${capability == "signer" ? "" : "arc-${capability}:"}${identity.subject}" &&
-      identity.workflow_ref == "${var.github_org}/mindclade-internal-monorepo/.github/workflows/release.yml@refs/heads/main" &&
-      identity.job_workflow_ref == "${var.github_org}/.github/.github/workflows/${local.artifact_release_workflows[capability]}@refs/tags/v4.0.0"
-    ])
-    error_message = "ARC release trust must match bootstrap's exact capability inventory, trusted-main caller, and immutable v4 reusable workflows."
-  }
-}
-
-resource "google_service_account" "arc_system_nodes" {
-  project         = var.ci_project_id
-  account_id      = "sa-arc-system-nodes"
-  display_name    = "Mindclade ARC system nodes"
-  description     = "Dedicated VM identity for the private ARC GKE system node pool."
-  disabled        = false
-  deletion_policy = "PREVENT"
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-resource "google_service_account" "dr_evidence_writer" {
-  project         = var.ci_project_id
-  account_id      = "sa-dr-evidence-writer"
-  display_name    = "Mindclade DR evidence writer"
-  description     = "Keyless create-only writer for protected scratch and staging DR evidence."
-  disabled        = false
-  deletion_policy = "PREVENT"
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-resource "google_service_account_iam_member" "dr_evidence_github_wif" {
-  for_each = var.dr_evidence_identity.principals
-
-  service_account_id = google_service_account.dr_evidence_writer.name
+resource "google_service_account_iam_member" "artifact_signer_github_wif" {
+  service_account_id = google_service_account.supply_chain["signer"].name
   role               = "roles/iam.workloadIdentityUser"
-  member             = each.value
+  member             = var.artifact_signer_principal
 }
 
-resource "google_project_iam_member" "arc_system_nodes" {
-  for_each = toset(["roles/container.defaultNodeServiceAccount"])
-  project  = var.ci_project_id
-  role     = each.value
-  member   = "serviceAccount:${google_service_account.arc_system_nodes.email}"
+check "artifact_signer_trust_contract" {
+  assert {
+    condition = (
+      var.artifact_signer_wif_provider == "${var.github_wif_pool_name}/providers/gh-mindclade-internal-monorepo" &&
+      can(regex(
+        "^principal://iam\\.googleapis\\.com/${var.github_wif_pool_name}/subject/repo:${var.github_org}@[0-9]+/mindclade-internal-monorepo@[0-9]+:environment:release$",
+        var.artifact_signer_principal,
+      )) &&
+      var.artifact_signer_job_workflow_ref == "${var.github_org}/.github/.github/workflows/reusable-binauthz-sign.yml@refs/tags/v3.0.0"
+    )
+    error_message = "Artifact signer trust must match bootstrap's immutable-ID monorepo release subject and immutable reusable signer workflow."
+  }
 }
