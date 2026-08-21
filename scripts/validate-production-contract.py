@@ -472,10 +472,26 @@ elif REPOSITORY == "infrastructure-live":
         )
 
     account_text = (ROOT / "account.hcl").read_text("utf-8", errors="ignore")
-    if 'jsondecode(get_env("ARTIFACT_RELEASE_IDENTITIES_JSON"))' not in account_text:
-        error("account contract does not consume the exact ARC identity inventory")
-    if 'jsondecode(get_env("DR_EVIDENCE_IDENTITY_JSON"))' not in account_text:
-        error("account contract does not consume the exact DR evidence identity")
+    for local_name, variable, label in (
+        (
+            "artifact_release_identities",
+            "ARTIFACT_RELEASE_IDENTITIES_JSON",
+            "ARC identity inventory",
+        ),
+        (
+            "dr_evidence_identity",
+            "DR_EVIDENCE_IDENTITY_JSON",
+            "DR evidence identity",
+        ),
+    ):
+        guarded_decode = (
+            rf'{local_name}\s*=\s*jsondecode\(coalesce\('
+            rf'get_env\("{variable}",\s*""\),\s*"\{{\}}"\)\)'
+        )
+        if not re.search(guarded_decode, account_text):
+            error(
+                f"account contract does not consume the exact fail-closed {label}"
+            )
     if "BUILDKITE_WIF" in account_text:
         error("account contract retains retired Buildkite federation inputs")
     if 'get_env("CLOUD_IDENTITY_CUSTOMER_ID")' not in account_text:
