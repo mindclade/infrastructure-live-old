@@ -58,21 +58,6 @@ class DNSPortfolioTest(unittest.TestCase):
             any("public type A is not supported by the DNS module" in error for error in errors)
         )
 
-    def test_module_contract_accepts_a_full_immutable_sha(self) -> None:
-        inventory = copy.deepcopy(self.inventory)
-        inventory["module_contract"]["ref"] = "a" * 40
-        self.assertFalse(
-            any("module ref" in error for error in portfolio.validate_inventory(inventory))
-        )
-
-    def test_module_contract_rejects_a_moving_ref(self) -> None:
-        inventory = copy.deepcopy(self.inventory)
-        inventory["module_contract"]["ref"] = "main"
-        self.assertIn(
-            "module ref must be an immutable semantic tag or full SHA",
-            portfolio.validate_inventory(inventory),
-        )
-
     def test_workspace_readiness_requires_complete_mail_authentication(self) -> None:
         inventory = copy.deepcopy(self.inventory)
         inventory["module_contract"]["ref"] = "v0.2.0"

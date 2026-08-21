@@ -19,7 +19,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "infrastructure-live"
-QUARANTINE_MODULE_REF = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79"
 CONTRACT = json.loads(
     '{"authority": ["normal-gcp-organization-infrastructure", "folders", "org-policy", "environments", "networks", "projects", "gke", "managed-cloud-services"], "forbidden_authority": ["ring0-state-foundation", "argocd-installation", "kubernetes-desired-state", "application-source"], "forbidden_paths": [".terraform", ".terragrunt-cache", "5-workloads/development/argocd", "5-workloads/staging/argocd", "5-workloads/production/argocd"], "repository_class": "production-control", "required_paths": ["AGENTS.md", "1-org", "2-environments/development", "2-environments/staging", "2-environments/production", "3-networks", "4-projects", "5-workloads/development", "5-workloads/staging", "5-workloads/production", "root.hcl"], "visibility": "private"}'
 )
@@ -94,6 +93,8 @@ for required_make_contract in (
     'python3 scripts/validate-module-interfaces.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"',
     'python3 scripts/validate-capacity-contract.py --monorepo "$(MONOREPO)"',
     'python3 scripts/validate-capacity-contract.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"',
+    'python3 scripts/validate-workload-identity-contract.py --monorepo "$(MONOREPO)"',
+    'python3 scripts/validate-workload-identity-contract.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"',
 ):
     if required_make_contract not in makefile:
         error(
@@ -229,33 +230,12 @@ elif REPOSITORY == "infrastructure-live":
         if not (ROOT / f"5-workloads/{env}").is_dir():
             error(f"missing workload environment {env}")
 
-    module_refs: dict[str, str] = {}
-    for path in TRACKED_PATHS:
-        if path.suffix != ".hcl" or not path.is_file():
-            continue
-        match = re.search(
-            r'\bmodule_version\s*=\s*"([^"]+)"',
-            path.read_text("utf-8", errors="ignore"),
-        )
-        if match:
-            module_refs[path.relative_to(ROOT).as_posix()] = match.group(1)
-    if not module_refs:
-        error("live tree has no immutable module-version pins")
-    for relative, module_ref in sorted(module_refs.items()):
-        if module_ref != QUARANTINE_MODULE_REF:
-            error(
-                f"live module pin differs from quarantine bridge in {relative}: "
-                f"{module_ref}"
-            )
-    dns_inventory = json.loads(
-        (ROOT / "contracts/dns-domain-inventory.json").read_text("utf-8")
-    )
-    if dns_inventory.get("module_contract", {}).get("ref") != QUARANTINE_MODULE_REF:
-        error("DNS module contract differs from the quarantine bridge commit")
-
     required_supply_chain = [
         "1-org/automation-iam",
         "1-org/common-projects",
+        "5-workloads/development/supply-chain-iam",
+        "5-workloads/staging/supply-chain-iam",
+        "5-workloads/production/supply-chain-iam",
     ]
     for relative in required_supply_chain:
         if not (ROOT / relative).exists():
@@ -265,7 +245,9 @@ elif REPOSITORY == "infrastructure-live":
         for path in (ROOT / "1-org/automation-iam").rglob("*.tf")
     )
     for identity in (
+        "arc-canary",
         "artifact-builder",
+        "artifact-qual-reader",
         "artifact-qualifier",
         "artifact-signer",
         "artifact-promoter",
@@ -274,16 +256,6 @@ elif REPOSITORY == "infrastructure-live":
             error(
                 f"normal-plane supply-chain identity missing from automation-iam: {identity}"
             )
-    if "var.buildkite_wif_enabled ?" not in automation_text:
-        error("retired Buildkite identities are not fail-closed behind the v1.2 flag")
-    for deferred_identity in (
-        "arc-canary",
-        "artifact-qual-reader",
-        "artifact_release_identities",
-        "dr_evidence_identity",
-    ):
-        if deferred_identity in automation_text:
-            error(f"deferred v4 identity remains active in automation-iam: {deferred_identity}")
     if "sa-attestor@" in "\n".join(
         path.read_text("utf-8", errors="ignore") for path in ROOT.rglob("*.hcl")
     ):
@@ -318,20 +290,32 @@ elif REPOSITORY == "infrastructure-live":
     automation_outputs = (ROOT / "1-org/automation-iam/outputs.tf").read_text(
         "utf-8", errors="ignore"
     )
-    if 'resource "google_service_account_iam_member" "artifact_signer_github_wif"' not in automation_main:
-        error("v3 artifact signer is not bound to the bootstrap-exported GitHub principal")
+    if 'resource "google_service_account_iam_member" "supply_chain_github_wif"' not in automation_main:
+        error("ARC capabilities are not bound to bootstrap-exported GitHub principals")
+    if "member             = var.artifact_release_identities[each.value.capability].principal" not in automation_main:
+        error("ARC WIF bindings do not consume each bootstrap capability principal")
+    if "buildkite" in automation_main.lower():
+        error("retired Buildkite federation remains in normal-plane automation IAM")
     for trust_value in (
         "gh-mindclade-internal-monorepo",
+        "gh-arc-qualification-reader",
+        'capability == "signer" ? "" : "arc-${capability}:"',
         "reusable-binauthz-sign.yml",
-        "@refs/tags/v3.0.0",
+        "artifact_release_versions = {",
+        "reusable-gitops-promote.yml",
+        "v5.0.0",
     ):
         if trust_value not in automation_main:
-            error(f"v3 artifact signer trust check omits: {trust_value}")
+            error(f"ARC artifact trust check omits: {trust_value}")
     for output_name in (
         "WIF_PROVIDER_SIGNER",
         "SA_ARTIFACT_SIGNER",
         "ARTIFACT_SIGNER_PRINCIPAL",
         "ARTIFACT_SIGNER_JOB_WORKFLOW_REF",
+        "artifact_release_identity_contract",
+        "SA_ARC_CANARY",
+        "SA_ARTIFACT_QUALIFICATION_READER",
+        "SA_ARTIFACT_PROMOTER",
     ):
         if output_name not in automation_outputs:
             error(f"artifact signer identity output omits: {output_name}")
@@ -342,7 +326,14 @@ elif REPOSITORY == "infrastructure-live":
     identity_handoff_docs = (ROOT / "docs/automation-identity-handoff.md").read_text(
         "utf-8", errors="ignore"
     )
-    for output_name in ("SA_GITOPS_RENDER", "SA_GITOPS_VERIFIER"):
+    for output_name in (
+        "SA_GITOPS_RENDER",
+        "SA_GITOPS_VERIFIER",
+        "SA_PRODUCTION_QUALIFICATION_READER",
+        "SA_PRODUCTION_QUALIFICATION_WRITER",
+        "WIF_PROVIDER_PRODUCTION_QUALIFICATION",
+        "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET",
+    ):
         if output_name not in control_plane_outputs:
             error(f"GitOps control-plane identity output omits: {output_name}")
         if output_name not in identity_handoff_docs:
@@ -366,17 +357,20 @@ elif REPOSITORY == "infrastructure-live":
             "utf-8", errors="ignore"
         )
         for required_handoff_gate in (
-            "artifact_signer_identity_contract",
-            "SA_ARTIFACT_SIGNER",
+            "artifact_release_identity_contract",
+            "ARTIFACT_RELEASE_IDENTITIES_JSON",
+            "PRODUCTION_QUALIFICATION_IDENTITY_JSON",
+            "SA_ARC_CANARY",
+            "SA_ARTIFACT_QUALIFICATION_READER",
+            "SA_ARTIFACT_PROMOTER",
             "github_config_identity_handoff",
-            "SA_GITOPS_RENDER",
-            "SA_GITOPS_VERIFIER",
+            "production_qualification_identity_contract",
+            "qualification_evidence",
+            "PRODUCTION_QUALIFICATION_BUCKET",
             '"project_id"',
             '"attestor_names"',
             '"attestor_key_versions"',
-            '"DRYRUN_AUDIT_LOG_ONLY"',
-            '"binary_authorization": "audit-only"',
-            '"arc_activation": "disabled"',
+            '"ENFORCED_BLOCK_AND_AUDIT_LOG"',
             '"deployment-attestor"',
             "infrastructure-live source tree must be clean before export",
             "source commit differs from --expected-source-commit",
@@ -396,11 +390,34 @@ elif REPOSITORY == "infrastructure-live":
         error(
             "GitOps verifier cannot cryptographically validate deployment attestations"
         )
+    if "roles/binaryauthorization.policyViewer" not in control_plane_iam:
+        error("GitOps verifier cannot read the applied Binary Authorization policy")
     if "roles/binaryauthorization.attestorsViewer" in control_plane_iam:
         error("GitOps verifier retains list-only Binary Authorization access")
-    for environment in ("development", "staging", "production"):
-        if (ROOT / f"5-workloads/{environment}/supply-chain-iam").exists():
-            error(f"{environment} retains deferred artifact-release IAM activation")
+
+    production_supply_chain = (
+        ROOT / "5-workloads/production/supply-chain-iam/main.tf"
+    ).read_text("utf-8", errors="ignore")
+    for role in (
+        "roles/artifactregistry.reader",
+        "roles/binaryauthorization.attestorsVerifier",
+        "containeranalysis.occurrences.create",
+        "containeranalysis.occurrences.get",
+        "containeranalysis.occurrences.list",
+    ):
+        if role not in production_supply_chain:
+            error(f"production artifact signer IAM omits required role: {role}")
+    if "roles/binaryauthorization.attestorsViewer" in production_supply_chain:
+        error("attestation issuers cannot cryptographically validate occurrences")
+    for forbidden_occurrence_permission in (
+        "roles/containeranalysis.occurrences.editor",
+        "containeranalysis.occurrences.delete",
+        "containeranalysis.occurrences.update",
+    ):
+        if forbidden_occurrence_permission in production_supply_chain:
+            error(
+                f"attestation issuers retain unnecessary occurrence mutation: {forbidden_occurrence_permission}"
+            )
     all_binauthz = "\n".join(
         (ROOT / f"5-workloads/{env}/binary-authorization/terragrunt.hcl").read_text(
             "utf-8", errors="ignore"
@@ -411,18 +428,18 @@ elif REPOSITORY == "infrastructure-live":
         error("Binary Authorization live units retain unsupported pseudo-namespace cluster rules")
     if "ALWAYS_ALLOW" in all_binauthz:
         error("Binary Authorization live units retain an ALWAYS_ALLOW bypass")
-    for deferred_attestor in ("build-attestor", "qualification-attestor"):
-        if not re.search(
-            rf"(?m)^\s*{re.escape(deferred_attestor)}\s*=\s*\[\]\s*$",
+    attestor_issuers = {
+        "build-attestor": "builder",
+        "qualification-attestor": "qualifier",
+        "deployment-attestor": "signer",
+    }
+    for attestor, identity in attestor_issuers.items():
+        binding = re.search(
+            rf'(?m)^\s*{re.escape(attestor)}\s*=\s*\["serviceAccount:\$\{{dependency\.automation\.outputs\.supply_chain_service_accounts\["([a-z]+)"\]\}}"\]\s*$',
             all_binauthz,
-        ):
-            error(f"{deferred_attestor} must have no active issuer while v4 is deferred")
-    signer_binding = re.search(
-        r'(?m)^\s*deployment-attestor\s*=\s*\["serviceAccount:\$\{dependency\.automation\.outputs\.supply_chain_service_accounts\["([a-z]+)"\]\}"\]\s*$',
-        all_binauthz,
-    )
-    if not signer_binding or signer_binding.group(1) != "signer":
-        error("deployment-attestor is not bound exclusively to the retained v3 signer")
+        )
+        if not binding or binding.group(1) != identity:
+            error(f"{attestor} is not bound exclusively to the {identity} identity")
     if "vuln-scan-attestor" in all_binauthz:
         error(
             "legacy vulnerability attestor remains; vulnerability belongs to independent qualification"
@@ -446,9 +463,10 @@ elif REPOSITORY == "infrastructure-live":
         if forbidden in binauthz_defaults:
             error(f"Binary Authorization retains broad image exemption: {forbidden}")
     if not re.search(
-        r'enforcement_mode\s*=\s*"DRYRUN_AUDIT_LOG_ONLY"', binauthz_defaults
-    ) or "ENFORCED_BLOCK_AND_AUDIT_LOG" in binauthz_defaults:
-        error("Binary Authorization must remain audit-only while v4 is deferred")
+        r'enforcement_mode\s*=\s*local\.environment\s*==\s*"development"\s*\?\s*"DRYRUN_AUDIT_LOG_ONLY"\s*:\s*"ENFORCED_BLOCK_AND_AUDIT_LOG"',
+        binauthz_defaults,
+    ):
+        error("Binary Authorization must audit development and enforce staging/production")
     admission = re.search(
         r"require_attestations_by\s*=\s*local\.environment\s*==\s*\"production\"\s*\?\s*\[(.*?)\]\s*:\s*\[(.*?)\]",
         binauthz_defaults,
@@ -479,14 +497,28 @@ elif REPOSITORY == "infrastructure-live":
         )
 
     account_text = (ROOT / "account.hcl").read_text("utf-8", errors="ignore")
-    for deferred_variable in (
-        "ARTIFACT_RELEASE_IDENTITIES_JSON",
-        "DR_EVIDENCE_IDENTITY_JSON",
+    for local_name, variable, label in (
+        (
+            "artifact_release_identities",
+            "ARTIFACT_RELEASE_IDENTITIES_JSON",
+            "ARC identity inventory",
+        ),
+        (
+            "dr_evidence_identity",
+            "DR_EVIDENCE_IDENTITY_JSON",
+            "DR evidence identity",
+        ),
     ):
-        if deferred_variable in account_text:
-            error(f"account contract retains deferred v4 input: {deferred_variable}")
-    if 'get_env("BUILDKITE_WIF_ENABLED", "false")' not in account_text:
-        error("account contract does not default retired Buildkite federation to disabled")
+        guarded_decode = (
+            rf'{local_name}\s*=\s*jsondecode\(coalesce\('
+            rf'get_env\("{variable}",\s*""\),\s*"\{{\}}"\)\)'
+        )
+        if not re.search(guarded_decode, account_text):
+            error(
+                f"account contract does not consume the exact fail-closed {label}"
+            )
+    if "BUILDKITE_WIF" in account_text:
+        error("account contract retains retired Buildkite federation inputs")
     if 'get_env("CLOUD_IDENTITY_CUSTOMER_ID")' not in account_text:
         error("account contract omits the immutable Cloud Identity customer ID")
     if 'get_env("ORG_POLICY_ACTIVATION_PHASE", "baseline")' not in account_text:
@@ -497,15 +529,13 @@ elif REPOSITORY == "infrastructure-live":
         "utf-8", errors="ignore"
     )
     if (
-        "validated_buildkite" not in bootstrap_account
-        or 'contract.get("contract_version") != "1.2.0"' not in bootstrap_account
-        or '"WIF_PROVIDER_SIGNER"' not in bootstrap_account
-        or '"ARTIFACT_SIGNER_PRINCIPAL"' not in bootstrap_account
-        or '"ARTIFACT_SIGNER_JOB_WORKFLOW_REF"' not in bootstrap_account
-        or "ARTIFACT_RELEASE_IDENTITIES_JSON" in bootstrap_account
-        or "DR_EVIDENCE_IDENTITY_JSON" in bootstrap_account
+        "validated_retired_buildkite" not in bootstrap_account
+        or '"ARTIFACT_RELEASE_IDENTITIES_JSON"' not in bootstrap_account
+        or '"DR_EVIDENCE_IDENTITY_JSON"' not in bootstrap_account
+        or "validated_release_identities" not in bootstrap_account
+        or "validated_dr_evidence_identity" not in bootstrap_account
     ):
-        error("bootstrap account exporter differs from the deployed v1.2 signer contract")
+        error("bootstrap account exporter omits an exact v4 identity contract")
     initial_import = (ROOT / "docs/initial-import.md").read_text(
         "utf-8", errors="ignore"
     )
@@ -531,7 +561,7 @@ elif REPOSITORY == "infrastructure-live":
     if (
         '"platform_contract"' not in bootstrap_account
         or '"output"' not in bootstrap_account
-        or 'contract.get("contract_version") != "1.2.0"' not in bootstrap_account
+        or 'contract.get("contract_version") != "1.4.0"' not in bootstrap_account
     ):
         error(
             "bootstrap account exporter bypasses the versioned Ring-0 platform contract"
@@ -544,6 +574,8 @@ elif REPOSITORY == "infrastructure-live":
         error(
             "bootstrap account exporter does not preserve baseline-only policy adoption"
         )
+    if "artifact_release_identities" not in account_text:
+        error("account contract omits bootstrap ARC release identities")
     production_cpu = ROOT / "5-workloads/production/nodepools/cpu/terragrunt.hcl"
     if production_cpu.exists() and re.search(
         r"(?m)^\s*spot\s*=\s*true\s*$",
@@ -573,16 +605,13 @@ elif REPOSITORY == "infrastructure-live":
             r"(?m)^\s*create_default_internet_route\s*=\s*false\s*$", vpc
         ):
             error(f"{environment} VPC disables the protected default internet route")
-    for deferred_unit in (
-        "1-org/kms-dr-evidence",
-        "3-networks/ci/arc-vpc",
-        "5-workloads/ci/arc-gke",
-        "5-workloads/ci/binary-authorization",
-        "5-workloads/shared/dr-evidence-access-logs",
-        "5-workloads/shared/dr-evidence",
+    ci_vpc = (ROOT / "3-networks/ci/arc-vpc/terragrunt.hcl").read_text(
+        "utf-8", errors="ignore"
+    )
+    if not re.search(
+        r"(?m)^\s*create_default_internet_route\s*=\s*true\s*$", ci_vpc
     ):
-        if (ROOT / deferred_unit).exists():
-            error(f"deferred ARC/DR unit remains active: {deferred_unit}")
+        error("ARC CI VPC omits the protected route required by Cloud NAT")
     for env in ("development", "staging", "production"):
         firewall_path = ROOT / f"3-networks/{env}/firewall-baseline/terragrunt.hcl"
         firewall = firewall_path.read_text("utf-8", errors="ignore")
@@ -654,6 +683,7 @@ elif REPOSITORY == "infrastructure-live":
         "iam.disableServiceAccountKeyUpload",
         "iam.automaticIamGrantsForDefaultServiceAccounts",
         "iam.allowedPolicyMemberDomains",
+        "gcp.resourceLocations",
         "storage.uniformBucketLevelAccess",
         "storage.publicAccessPrevention",
         "compute.vmExternalIpAccess",
@@ -672,6 +702,8 @@ elif REPOSITORY == "infrastructure-live":
                 "organization policy uses a legacy equivalent instead of the live managed "
                 f"constraint: {legacy_constraint}"
             )
+    if 'allowed_values = ["in:us-locations"]' not in org_policy:
+        error("organization policy does not enforce the strict U.S. location value group")
     policy_module = (ROOT / "1-org/org-policies/module/main.tf").read_text(
         "utf-8", errors="ignore"
     )
@@ -719,6 +751,8 @@ elif REPOSITORY == "infrastructure-live":
         for required_variable in (
             "CLOUD_IDENTITY_CUSTOMER_ID",
             "ORG_POLICY_ACTIVATION_PHASE",
+            "ARTIFACT_RELEASE_IDENTITIES_JSON",
+            "DR_EVIDENCE_IDENTITY_JSON",
         ):
             if (
                 f"{required_variable}: ${{{{ vars.{required_variable} }}}}"
@@ -763,6 +797,27 @@ elif REPOSITORY == "infrastructure-live":
     account_contract = (ROOT / "account.hcl").read_text("utf-8", errors="ignore")
     if 'get_env("GPU_ZONE"' not in account_contract:
         error("account contract lacks an explicit GPU/Parallelstore zone")
+    for exact_residency_setting in (
+        'get_env("RESIDENCY_PROFILE", "us-only-v1")',
+        'get_env("PRIMARY_REGION", "us-central1")',
+        'get_env("GPU_ZONE", "${local.region}-b")',
+        'get_env("DR_REGION", "us-east4")',
+        'get_env("DR_GPU_ZONE", "${local.dr_region}-b")',
+        'get_env("STATE_LOCATION", "US")',
+    ):
+        if exact_residency_setting not in account_contract:
+            error(f"account contract omits U.S. residency setting: {exact_residency_setting}")
+
+    non_us_region = re.compile(
+        r'(?i)\b(?:asia|europe|australia|southamerica|northamerica|me|africa)-[a-z0-9-]+\b'
+    )
+    for hcl_path in ROOT.rglob("*.hcl"):
+        match = non_us_region.search(hcl_path.read_text("utf-8", errors="ignore"))
+        if match:
+            error(
+                f"non-U.S. deployable location in {hcl_path.relative_to(ROOT)}: "
+                f"{match.group(0)}"
+            )
     gpu_profiles = {
         "gpu-a3": "gke-h100-a3-megagpu-8g",
         # The directory name is a retained Terragrunt state address; the selected
@@ -792,6 +847,70 @@ elif REPOSITORY == "infrastructure-live":
                 r'enable_compact_placement\s*=\s*false', gpu
             ):
                 error(f"{env}/{pool} queued GPU capacity must disable compact placement")
+            if not re.search(r"(?m)^\s*total_max_nodes\s*=\s*1\s*$", gpu):
+                error(f"{env}/{pool} must remain bounded to one eight-GPU node")
+
+        kms_dr = (
+            ROOT / f"2-environments/{env}/kms-dr/terragrunt.hcl"
+        ).read_text("utf-8", errors="ignore")
+        for required in (
+            "location      = include.root.locals.dr_region",
+            'artifacts = { rotation_period_seconds = 7776000, protection_level = "HSM" }',
+            'secrets   = { rotation_period_seconds = 7776000, protection_level = "HSM" }',
+            'sql       = { rotation_period_seconds = 7776000, protection_level = "HSM" }',
+            'storage   = { rotation_period_seconds = 7776000, protection_level = "HSM" }',
+        ):
+            if required not in kms_dr:
+                error(f"{env} recovery-region KMS contract omits: {required}")
+
+        registry_dr = (
+            ROOT / f"5-workloads/{env}/artifact-registry-dr/terragrunt.hcl"
+        ).read_text("utf-8", errors="ignore")
+        for required in (
+            "location                 = include.root.locals.dr_region",
+            'repository_id            = "releases"',
+            'dependency.kms_dr.outputs.crypto_key_ids["artifacts"]',
+            "cleanup_policy_dry_run   = true",
+        ):
+            if required not in registry_dr:
+                error(f"{env} recovery registry contract omits: {required}")
+
+        backup_dr = (
+            ROOT / f"5-workloads/{env}/backup-dr/terragrunt.hcl"
+        ).read_text("utf-8", errors="ignore")
+        for required in (
+            "replica_region = include.root.locals.dr_region",
+            'config_path = "../../../2-environments/' + env + '/kms-dr"',
+            'encryption_key = dependency.kms_dr.outputs.crypto_key_ids["storage"]',
+            'schedule = "0 * * * *"',
+        ):
+            if required not in backup_dr:
+                error(f"{env} U.S. backup contract omits: {required}")
+        if env == "production" and 'cron_schedule = "0 * * * *"' not in backup_dr:
+            error("production GKE backup does not meet the hourly recovery contract")
+
+        cloud_sql = (
+            ROOT / f"5-workloads/{env}/cloud-sql/terragrunt.hcl"
+        ).read_text("utf-8", errors="ignore")
+        for required in (
+            "region       = include.root.locals.dr_region",
+            'kms_key_name = dependency.kms_dr.outputs.crypto_key_ids["sql"]',
+            'private_network              = dependency.vpc.outputs.network_self_link[local.env]',
+            'allocated_ip_range           = dependency.psa.outputs.allocated_ip_ranges[local.env]',
+        ):
+            if required not in cloud_sql:
+                error(f"{env} U.S. Cloud SQL recovery contract omits: {required}")
+
+        secrets = (
+            ROOT / f"5-workloads/{env}/secret-manager/terragrunt.hcl"
+        ).read_text("utf-8", errors="ignore")
+        for required in (
+            "location     = include.root.locals.region",
+            "location     = include.root.locals.dr_region",
+            'kms_key_name = dependency.kms_dr.outputs.crypto_key_ids["secrets"]',
+        ):
+            if required not in secrets:
+                error(f"{env} U.S. Secret Manager replication contract omits: {required}")
 
     gpu_defaults = (ROOT / "_envcommon/gpu-nodepool.hcl").read_text(
         "utf-8", errors="ignore"

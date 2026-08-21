@@ -22,14 +22,13 @@ terraform {
 }
 
 locals {
-  module_version = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79"
+  module_version = "v0.4.0"
   env_vars       = read_terragrunt_config(find_in_parent_folders("env.hcl"))
   env            = local.env_vars.locals.environment
 
-  # A different continent from the primary, matching the state replica in bootstrap. Same
-  # reasoning: the scenario this defends against includes an actor with credentials in the
-  # primary region.
-  replica_region = "us-central1"
+  # The independent U.S. recovery region. The recovery source stays inside the residency
+  # boundary while avoiding the primary region's failure domain.
+  replica_region = include.root.locals.dr_region
 }
 
 dependency "gke" {
@@ -37,19 +36,19 @@ dependency "gke" {
 
   mock_outputs = {
     cluster_name = "mc-production"
-    location     = "europe-west4"
+    location     = "us-central1"
     project_id   = "mc-production-platform"
-    cluster_id   = "projects/mc-production-platform/locations/europe-west4/clusters/mc-production"
+    cluster_id   = "projects/mc-production-platform/locations/us-central1/clusters/mc-production"
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
-dependency "kms" {
-  config_path = "../../../2-environments/production/kms"
+dependency "kms_dr" {
+  config_path = "../../../2-environments/production/kms-dr"
 
   mock_outputs = {
     crypto_key_ids = {
-      storage = "projects/mock/locations/europe-west4/keyRings/mock-production/cryptoKeys/storage"
+      storage = "projects/mock/locations/us-east4/keyRings/mock-production-dr/cryptoKeys/storage"
     }
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
@@ -74,9 +73,8 @@ inputs = {
     # The backup lives in the replica region, not beside the cluster.
     location = local.replica_region
 
-    # Daily in production. Production takes hourly, which is configured in its own unit —
-    # the trade-off is storage cost against how much accumulated state a restore loses.
-    cron_schedule = "0 3 * * *"
+    # Hourly production recovery points bound accumulated cluster-state loss.
+    cron_schedule = "0 * * * *"
 
     # Everything except the namespaces whose contents are entirely derived. Backing up
     # gatekeeper-system restores a Gatekeeper whose constraints came from git anyway, and
@@ -93,7 +91,7 @@ inputs = {
     include_volume_data = true
     include_secrets     = true
 
-    encryption_key = dependency.kms.outputs.crypto_key_ids["storage"]
+    encryption_key = dependency.kms_dr.outputs.crypto_key_ids["storage"]
 
     retention = {
       # 30 days of daily backups in production. The number that matters is not the count but
@@ -110,7 +108,7 @@ inputs = {
   # ---------------------------------------------------------------------------------------
   # Bucket replication
   # ---------------------------------------------------------------------------------------
-  # The data buckets, replicated to the other continent on a schedule. Same shape as the
+  # The data buckets, replicated to the independent U.S. recovery region on a schedule. Same shape as the
   # state replication in bootstrap/modules/state/replication.tf, and for the same reason.
   bucket_replication = {
     for name in ["checkpoints", "lake-raw"] : name => {
@@ -125,7 +123,7 @@ inputs = {
       delete_objects_from_source_after_transfer  = false
       overwrite_objects_already_existing_in_sink = true
 
-      schedule = "0 4 * * *"
+      schedule = "0 * * * *"
 
       # Longer retention on the replica than the source, again matching bootstrap: the
       # replica exists for the case where the primary was tampered with, and that is

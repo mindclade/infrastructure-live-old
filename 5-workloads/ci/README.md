@@ -1,10 +1,14 @@
-# Inert CI artifact prerequisite
+# ARC cloud foundation
 
-This subtree currently contains only the private artifact-registry prerequisite. The deferred ARC
-VPC, runner cluster, admission policy, runner IAM, and Kubernetes activation are intentionally
-absent. Nothing here is reachable from an Argo CD root or authorizes a release.
+This tree creates the private, regional GKE cluster and dedicated VPC used only by GitHub ARC
+artifact-authority runners. It owns cloud resources, node identity, networking, and IAM. The
+`gitops` repository exclusively owns the Kubernetes and Argo CD desired state installed on the
+cluster.
 
-The registry module uses the repository-wide immutable compatibility bridge documented in
-[`docs/module-interface-contract.md`](../../docs/module-interface-contract.md). A future ARC
-release must add its cloud, governance, GitOps, identity, and recovery contracts together through
-separately reviewed protected plans; source eligibility alone is never activation authority.
+The network and admission modules pin immutable qualified commit
+`164f2998f9540243a0df769dc78c96677134c70a`. The GKE and artifact-registry units remain
+fail-closed on the planned `v0.2.0` ref until secret synchronization and service-agent CMEK
+support are released. Apply neither path until
+bootstrap contract `1.3.0` is applied, GitHub App scopes match governance, and a reviewed
+connected plan proves that no public endpoint, public node IP, cross-capability impersonation,
+or retired Buildkite authority is created.

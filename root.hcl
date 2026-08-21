@@ -21,6 +21,9 @@ locals {
   org_policy_activation_phase = local.account_vars.locals.org_policy_activation_phase
   domain                      = local.account_vars.locals.domain
   prefix                      = local.account_vars.locals.prefix
+  residency_profile           = local.account_vars.locals.residency_profile
+  dr_region                   = local.account_vars.locals.dr_region
+  dr_gpu_zone                 = local.account_vars.locals.dr_gpu_zone
   seed_project_id             = local.account_vars.locals.seed_project_id
   cicd_project_id             = local.account_vars.locals.cicd_project_id
   cicd_project_number         = local.account_vars.locals.cicd_project_number

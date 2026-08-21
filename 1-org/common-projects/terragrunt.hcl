@@ -15,7 +15,7 @@ dependency "folders" {
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
-locals { module_version = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79" }
+locals { module_version = "v0.4.0" }
 terraform {
   source = "${include.root.locals.module_source_base}//project_factory?ref=${local.module_version}"
 }

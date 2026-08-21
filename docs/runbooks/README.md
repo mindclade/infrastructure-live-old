@@ -19,6 +19,7 @@
 | [Protected-bucket restore](protected-bucket-restore.md) | Recover versioned data without overwriting the protected source bucket |
 | [State lock stuck](state-lock-stuck.md) | Verify ownership before force-unlocking state |
 | [VPC Service Controls denial](vpc-sc-denial.md) | Diagnose dry-run or enforced perimeter denials |
+| [Workload identity and holdout qualification](workload-identity-holdout-qualification.md) | Prove exact KSA/GSA trust and evaluation-data denial |
 
 ## Next runbooks
 

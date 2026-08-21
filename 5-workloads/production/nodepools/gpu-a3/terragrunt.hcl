@@ -59,5 +59,5 @@ inputs = {
   node_service_account_email = dependency.node_identities.outputs.service_accounts["gpu_nodes"].email
   pod_secondary_range_name   = dependency.vpc.outputs.pods_range_names[include.envcommon.locals.environment]
   capacity_mode              = "ON_DEMAND"
-  total_max_nodes            = 8
+  total_max_nodes            = 1
 }

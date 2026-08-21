@@ -26,16 +26,16 @@ Kubernetes GPU contract and Kueue `ResourceFlavor` objects. It also requires mat
 namespaces, held queues, qualification jobs, and training overlays. This prevents a valid Terraform
 GPU pool and a valid Kubernetes tree from silently disagreeing on H100, H200, or B200 scheduling.
 
+The `scripts/validate-workload-identity-contract.py` gate applies the same immutable-ref rule to
+GKE identity. It requires every environment's typed KSA-to-GSA binding, the exact environment
+overlay annotation, the three holdout deny principals, and the evaluator's additive bucket-level
+object-viewer member to describe the same identities. Candidate mode
+checks the planned worktree only and cannot substitute for the protected module/Kubernetes tag.
+
 A missing module, a scaffold with no variables, an undeclared live input, or an omitted required
 input is a hard failure. The plan then performs Terraform's authoritative type, value, graph, and
 provider validation. This prevents `infrastructure-live` from silently getting ahead of the module
 release it consumes without moving reusable module ownership into this repository.
-
-The current quarantine pins every live module and the DNS module contract to protected-main commit
-`4d5c0105295bf4a01b770fb75f6a8db5c22c8f79`. The published `v0.2.0` tree does not contain all
-interfaces already consumed by the live estate, and its successor release remains deliberately
-unpublished. The full SHA is therefore an immutable compatibility bridge, not a release claim.
-`validate-production-contract.py` rejects any mixed module ref.
 
 During a coordinated cross-repository release, callers may point at the monorepo's one explicit
 `status = "planned"` contract version before its protected tag exists. The source-review gate reads
@@ -57,21 +57,21 @@ Run the interface preflight directly when diagnosing a mismatch:
 ```sh
 make validate-module-interfaces MONOREPO=../mindclade-internal-monorepo
 make validate-capacity-contract MONOREPO=../mindclade-internal-monorepo
+make validate-workload-identity-contract MONOREPO=../mindclade-internal-monorepo
 ```
 
-For a future coordinated source review, pass the proposed version explicitly to the separate
-candidate gate:
+For the planned v0.4.0 source review, run the separate candidate gate:
 
 ```sh
-make validate-module-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=vX.Y.Z
-make validate-capacity-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=vX.Y.Z
-nix develop .#ci --command make validate-source-integration MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=vX.Y.Z
+make validate-module-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
+make validate-capacity-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
+make validate-workload-identity-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
+nix develop .#ci --command make validate-source-integration MONOREPO=../mindclade-internal-monorepo
 ```
 
 A candidate pass must never be presented as an immutable-ref pass and must not authorize a plan or
-apply. No candidate version is selected by default. After a protected tag is published from its
-reviewed commit, remove reliance on candidate mode by updating every pin together and running the
-exact integration target:
+apply. After the protected tag is published from the reviewed commit, remove reliance on candidate
+mode by running the exact integration target:
 
 ```sh
 nix develop .#ci --command make validate-integration MONOREPO=../mindclade-internal-monorepo

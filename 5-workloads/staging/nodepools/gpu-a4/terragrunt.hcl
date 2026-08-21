@@ -64,5 +64,5 @@ inputs = {
   pod_secondary_range_name   = dependency.vpc.outputs.pods_range_names[include.envcommon.locals.environment]
   capacity_mode              = "QUEUED_PROVISIONING"
   enable_compact_placement   = false
-  total_max_nodes            = 4
+  total_max_nodes            = 1
 }

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import tempfile
@@ -35,6 +36,96 @@ HANDOFF = load(
     "export_applied_control_plane_handoff",
     "scripts/export-applied-control-plane-handoff.py",
 )
+MODULE_INTERFACES = load(
+    "validate_module_interfaces", "scripts/validate-module-interfaces.py"
+)
+
+
+def release_identities(
+    pool: str = "projects/123456789/locations/global/workloadIdentityPools/github",
+) -> dict[str, dict[str, str]]:
+    workflows = {
+        "canary": "reusable-arc-wif-canary.yml",
+        "builder": "reusable-arc-oci-build.yml",
+        "qualification-reader": "reusable-arc-oci-qualify.yml",
+        "qualifier": "reusable-arc-qualification-attest.yml",
+        "signer": "reusable-binauthz-sign.yml",
+        "promoter": "reusable-gitops-promote.yml",
+    }
+    result = {}
+    for capability, workflow in workflows.items():
+        subject = (
+            "repo:mindclade@316676129/mindclade-internal-monorepo@1333792222:"
+            + (
+                "environment:release"
+                if capability in {"signer", "promoter"}
+                else "ref:refs/heads/main"
+            )
+        )
+        provider = (
+            "gh-mindclade-internal-monorepo"
+            if capability == "signer"
+            else f"gh-arc-{capability}"
+        )
+        mapped_subject = subject if capability == "signer" else f"arc-{capability}:{subject}"
+        result[capability] = {
+            "workload_identity_provider": f"{pool}/providers/{provider}",
+            "principal": f"principal://iam.googleapis.com/{pool}/subject/{mapped_subject}",
+            "subject": subject,
+            "workflow_ref": "mindclade/mindclade-internal-monorepo/.github/workflows/release.yml@refs/heads/main",
+            "job_workflow_ref": (
+                f"mindclade/.github/.github/workflows/{workflow}@refs/tags/"
+                "v5.0.0"
+            ),
+        }
+    return result
+
+
+def dr_evidence_identity(
+    pool: str = "projects/123456789/locations/global/workloadIdentityPools/github",
+) -> dict[str, object]:
+    principals = {}
+    for repository in (
+        "bootstrap",
+        "github-config",
+        "infrastructure-live",
+        "gitops",
+    ):
+        for environment in ("scratch", "staging"):
+            key = f"{repository}:{environment}"
+            principals[key] = (
+                f"principal://iam.googleapis.com/{pool}/subject/dr-evidence:"
+                f"repo:mindclade@316676129/{repository}@1333792222:"
+                f"environment:{environment}"
+            )
+    return {
+        "workload_identity_provider": f"{pool}/providers/gh-dr-evidence",
+        "job_workflow_ref": (
+            "mindclade/.github/.github/workflows/"
+            "reusable-dr-evidence.yml@refs/tags/v5.0.0"
+        ),
+        "principals": principals,
+    }
+
+
+def production_qualification_identity(
+    pool: str = "projects/123456789/locations/global/workloadIdentityPools/github",
+) -> dict[str, str]:
+    subject = (
+        "repo:mindclade@316676129/gitops@1333792222:environment:production"
+    )
+    return {
+        "workload_identity_provider": f"{pool}/providers/gh-production-qualification",
+        "principal": (
+            f"principal://iam.googleapis.com/{pool}/subject/"
+            f"production-qualification:{subject}"
+        ),
+        "subject": subject,
+        "workflow_ref": (
+            "mindclade/gitops/.github/workflows/"
+            "production-qualification-evidence.yml@refs/heads/main"
+        ),
+    }
 
 
 class PlanSafetyTest(unittest.TestCase):
@@ -74,58 +165,70 @@ class PlanSafetyTest(unittest.TestCase):
             ACCOUNT.validated_customer_id("")
         self.assertEqual(ACCOUNT.validated_customer_id("C01234567"), "C01234567")
 
-    def test_disabled_buildkite_contract_requires_null_resources(self) -> None:
-        self.assertEqual(
-            ACCOUNT.validated_buildkite(
+    def test_retired_buildkite_contract_requires_null_resources(self) -> None:
+        self.assertIsNone(
+            ACCOUNT.validated_retired_buildkite(
                 {
                     "enabled": False,
                     "workload_identity_pool": None,
                     "workload_identity_provider": None,
-                },
-                "123456789",
-            ),
-            (False, None),
+                }
+            )
         )
         with self.assertRaises(ValueError):
-            ACCOUNT.validated_buildkite(
+            ACCOUNT.validated_retired_buildkite(
                 {
-                    "enabled": False,
+                    "enabled": True,
                     "workload_identity_pool": "projects/123456789/locations/global/workloadIdentityPools/buildkite",
-                    "workload_identity_provider": None,
-                },
-                "123456789",
+                    "workload_identity_provider": "projects/123456789/locations/global/workloadIdentityPools/buildkite/providers/buildkite",
+                }
             )
 
-    def test_enabled_buildkite_contract_requires_exact_pool_and_provider(self) -> None:
-        pool = "projects/123456789/locations/global/workloadIdentityPools/buildkite"
+    def test_release_identity_contract_is_capability_exact(self) -> None:
+        pool = "projects/123456789/locations/global/workloadIdentityPools/github"
+        identities = release_identities(pool)
         self.assertEqual(
-            ACCOUNT.validated_buildkite(
-                {
-                    "enabled": True,
-                    "workload_identity_pool": pool,
-                    "workload_identity_provider": f"{pool}/providers/buildkite",
-                },
-                "123456789",
-            ),
-            (True, pool),
+            ACCOUNT.validated_release_identities(identities, pool, "mindclade"),
+            identities,
         )
-        with self.assertRaises(ValueError):
-            ACCOUNT.validated_buildkite(
-                {
-                    "enabled": True,
-                    "workload_identity_pool": pool,
-                    "workload_identity_provider": None,
-                },
-                "123456789",
+        self.assertEqual(
+            ACCOUNT_VALIDATOR.release_identity_errors(
+                json.dumps(identities), pool, "mindclade"
+            ),
+            [],
+        )
+        identities["builder"]["principal"] = identities["qualifier"]["principal"]
+        with self.assertRaisesRegex(ValueError, "builder has wrong principal"):
+            ACCOUNT.validated_release_identities(identities, pool, "mindclade")
+        self.assertTrue(
+            ACCOUNT_VALIDATOR.release_identity_errors(
+                json.dumps(identities), pool, "mindclade"
             )
+        )
 
-    def test_runtime_buildkite_validation_is_mode_aware(self) -> None:
-        pool = "projects/123456789/locations/global/workloadIdentityPools/buildkite"
-        self.assertEqual(ACCOUNT_VALIDATOR.buildkite_errors("false", ""), [])
-        self.assertEqual(ACCOUNT_VALIDATOR.buildkite_errors("true", pool), [])
-        self.assertTrue(ACCOUNT_VALIDATOR.buildkite_errors("false", pool))
-        self.assertTrue(ACCOUNT_VALIDATOR.buildkite_errors("true", ""))
-        self.assertTrue(ACCOUNT_VALIDATOR.buildkite_errors("yes", ""))
+    def test_dr_evidence_identity_contract_is_caller_exact(self) -> None:
+        pool = "projects/123456789/locations/global/workloadIdentityPools/github"
+        identity = dr_evidence_identity(pool)
+        self.assertEqual(
+            ACCOUNT.validated_dr_evidence_identity(identity, pool, "mindclade"),
+            identity,
+        )
+        self.assertEqual(
+            ACCOUNT_VALIDATOR.dr_evidence_identity_errors(
+                json.dumps(identity), pool, "mindclade"
+            ),
+            [],
+        )
+        identity["principals"]["gitops:staging"] = identity["principals"][
+            "bootstrap:staging"
+        ]
+        with self.assertRaisesRegex(ValueError, "gitops:staging"):
+            ACCOUNT.validated_dr_evidence_identity(identity, pool, "mindclade")
+        self.assertTrue(
+            ACCOUNT_VALIDATOR.dr_evidence_identity_errors(
+                json.dumps(identity), pool, "mindclade"
+            )
+        )
 
     def test_state_prefix_accepts_only_exact_no_object_result(self) -> None:
         self.assertEqual(STATE_PREFIX.classify(0, ""), "existing-or-empty")
@@ -144,6 +247,82 @@ class PlanSafetyTest(unittest.TestCase):
 
 
 class ImportRuntimeContractTest(unittest.TestCase):
+    def test_module_interface_contract_distinguishes_required_variables(self) -> None:
+        declared, required = MODULE_INTERFACES.variable_contract(
+            '''
+            variable "required_string" {
+              type = string
+            }
+            variable "optional_null" {
+              type    = string
+              default = null
+            }
+            variable "optional_object" {
+              type = object({
+                enabled = bool
+              })
+              default = {
+                enabled = false
+              }
+            }
+            '''
+        )
+        self.assertEqual(
+            declared, {"required_string", "optional_null", "optional_object"}
+        )
+        self.assertEqual(required, {"required_string"})
+
+    def test_candidate_module_policy_requires_one_matching_planned_version(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            policy = repo / "infra/terraform/governance/version.toml"
+            policy.parent.mkdir(parents=True)
+            policy.write_text(
+                'contract_version = "0.4.0"\nstatus = "planned"\n',
+                encoding="utf-8",
+            )
+
+            MODULE_INTERFACES.validate_candidate_version(repo, "v0.4.0")
+            with self.assertRaisesRegex(RuntimeError, "planned contract version"):
+                MODULE_INTERFACES.validate_candidate_version(repo, "v0.4.1")
+
+            policy.write_text(
+                'contract_version = "0.4.0"\nstatus = "released"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "planned contract version"):
+                MODULE_INTERFACES.validate_candidate_version(repo, "v0.4.0")
+
+    def test_candidate_module_is_read_only_from_the_planned_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            module = repo / "infra/terraform/modules/example"
+            module.mkdir(parents=True)
+            (module / "variables.tf").write_text(
+                'variable "required" { type = string }\n', encoding="utf-8"
+            )
+
+            source = MODULE_INTERFACES.module_tf(
+                repo, "v0.4.0", "example", "v0.4.0"
+            )
+            self.assertIn('variable "required"', source)
+
+    def test_candidate_policy_rejects_duplicate_control_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            policy = repo / "infra/terraform/governance/version.toml"
+            policy.parent.mkdir(parents=True)
+            policy.write_text(
+                'contract_version = "0.4.0"\n'
+                'contract_version = "0.4.1"\n'
+                'status = "planned"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "exactly one string"):
+                MODULE_INTERFACES.validate_candidate_version(repo, "v0.4.0")
+
     def test_every_provider_lock_uses_terraform_115_normalized_constraints(
         self,
     ) -> None:
@@ -151,9 +330,7 @@ class ImportRuntimeContractTest(unittest.TestCase):
         unit_directories = {
             path.parent
             for path in ROOT.rglob("terragrunt.hcl")
-            if not any(
-                part in {".terraform", ".terragrunt-cache"} for part in path.parts
-            )
+            if not any(part in {".terraform", ".terragrunt-cache"} for part in path.parts)
         }
         self.assertEqual({lock.parent for lock in locks}, unit_directories | {ROOT})
         for lock in locks:
@@ -234,55 +411,58 @@ class ImportRuntimeContractTest(unittest.TestCase):
 
 class AppliedControlPlaneHandoffTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.previous = {
-            name: os.environ.get(name)
-            for name in (
-                "WIF_PROVIDER_SIGNER",
-                "ARTIFACT_SIGNER_PRINCIPAL",
-                "ARTIFACT_SIGNER_JOB_WORKFLOW_REF",
-            )
-        }
-        os.environ["WIF_PROVIDER_SIGNER"] = (
-            "projects/123456789/locations/global/workloadIdentityPools/github/"
-            "providers/mindclade-internal-monorepo"
+        self.previous = os.environ.get("ARTIFACT_RELEASE_IDENTITIES_JSON")
+        self.previous_qualification = os.environ.get(
+            "PRODUCTION_QUALIFICATION_IDENTITY_JSON"
         )
-        os.environ["ARTIFACT_SIGNER_PRINCIPAL"] = (
-            "principal://iam.googleapis.com/projects/123456789/locations/global/"
-            "workloadIdentityPools/github/subject/repo:mindclade@316676129/"
-            "mindclade-internal-monorepo@1333792222:environment:release"
+        os.environ["ARTIFACT_RELEASE_IDENTITIES_JSON"] = json.dumps(
+            release_identities(), sort_keys=True, separators=(",", ":")
         )
-        os.environ["ARTIFACT_SIGNER_JOB_WORKFLOW_REF"] = (
-            "mindclade/.github/.github/workflows/reusable-binauthz-sign.yml@"
-            "refs/tags/v3.0.0"
+        os.environ["PRODUCTION_QUALIFICATION_IDENTITY_JSON"] = json.dumps(
+            production_qualification_identity(),
+            sort_keys=True,
+            separators=(",", ":"),
         )
 
     def tearDown(self) -> None:
-        for name, value in self.previous.items():
-            if value is None:
-                os.environ.pop(name, None)
-            else:
-                os.environ[name] = value
+        if self.previous is None:
+            os.environ.pop("ARTIFACT_RELEASE_IDENTITIES_JSON", None)
+        else:
+            os.environ["ARTIFACT_RELEASE_IDENTITIES_JSON"] = self.previous
+        if self.previous_qualification is None:
+            os.environ.pop("PRODUCTION_QUALIFICATION_IDENTITY_JSON", None)
+        else:
+            os.environ["PRODUCTION_QUALIFICATION_IDENTITY_JSON"] = (
+                self.previous_qualification
+            )
 
     @staticmethod
     def output(value, sensitive: bool = False):
         return {"sensitive": sensitive, "type": "dynamic", "value": value}
 
     def fixtures(self):
+        accounts = {
+            "canary": "sa-arc-canary",
+            "builder": "sa-artifact-builder",
+            "qualification-reader": "sa-artifact-qual-reader",
+            "qualifier": "sa-artifact-qualifier",
+            "signer": "sa-artifact-signer",
+            "promoter": "sa-artifact-promoter",
+        }
+        applied_release_identities = {
+            capability: {
+                **identity,
+                "service_account": (
+                    f"{accounts[capability]}@mc-common-ci.iam.gserviceaccount.com"
+                ),
+            }
+            for capability, identity in release_identities().items()
+        }
         automation = {
-            "artifact_signer_identity_contract": self.output(
-                {
-                    "WIF_PROVIDER_SIGNER": os.environ["WIF_PROVIDER_SIGNER"],
-                    "SA_ARTIFACT_SIGNER": (
-                        "sa-artifact-signer@mc-common-ci.iam.gserviceaccount.com"
-                    ),
-                    "ARTIFACT_SIGNER_PRINCIPAL": os.environ[
-                        "ARTIFACT_SIGNER_PRINCIPAL"
-                    ],
-                    "ARTIFACT_SIGNER_JOB_WORKFLOW_REF": os.environ[
-                        "ARTIFACT_SIGNER_JOB_WORKFLOW_REF"
-                    ],
-                }
-            )
+            "artifact_release_identity_contract": self.output(
+                applied_release_identities
+            ),
+            "ci_project_id": self.output("mc-common-ci"),
         }
         gitops = {
             "github_config_identity_handoff": self.output(
@@ -294,7 +474,27 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
                         "sa-gitops-verifier@mc-common-security.iam.gserviceaccount.com"
                     ),
                 }
-            )
+            ),
+            "production_qualification_identity_handoff": self.output(
+                {
+                    "WIF_PROVIDER_PRODUCTION_QUALIFICATION": production_qualification_identity()[
+                        "workload_identity_provider"
+                    ],
+                    "SA_PRODUCTION_QUALIFICATION_READER": (
+                        "sa-prod-qual-reader@mc-common-security.iam.gserviceaccount.com"
+                    ),
+                    "SA_PRODUCTION_QUALIFICATION_WRITER": (
+                        "sa-prod-qual-writer@mc-common-security.iam.gserviceaccount.com"
+                    ),
+                    "PRODUCTION_QUALIFICATION_PROJECT": "mc-common-security",
+                    "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET": (
+                        "github-app-production-qualification-reader-pem"
+                    ),
+                }
+            ),
+            "production_qualification_identity_contract": self.output(
+                production_qualification_identity()
+            ),
         }
         binauthz = {
             "project_id": self.output("mc-production-platform"),
@@ -308,83 +508,132 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
                     )
                 }
             ),
-            "enforcement_mode": self.output("DRYRUN_AUDIT_LOG_ONLY"),
+            "enforcement_mode": self.output("ENFORCED_BLOCK_AND_AUDIT_LOG"),
         }
-        return automation, gitops, binauthz
+        qualification = {
+            "bucket": self.output(
+                {
+                    "id": "mc-production-qualification-evidence",
+                    "name": "mc-production-qualification-evidence",
+                    "self_link": "https://storage.invalid/bucket",
+                    "url": "gs://mc-production-qualification-evidence",
+                }
+            )
+        }
+        return automation, gitops, binauthz, qualification
 
     def test_compiles_only_exact_applied_values(self) -> None:
-        automation, gitops, binauthz = self.fixtures()
-        contract = HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+        automation, gitops, binauthz, qualification = self.fixtures()
+        contract = HANDOFF.compile_contract(
+            automation, gitops, binauthz, qualification, "a" * 40
+        )
         self.assertEqual(contract["environment"], "production")
         self.assertEqual(
             contract["variables"]["BINAUTHZ_DEPLOYMENT_ATTESTOR"],
             "deployment-attestor",
         )
-        self.assertEqual(len(contract["variables"]), 10)
-        self.assertEqual(
-            contract["posture"],
-            {
-                "release_workflow": "v3.0.0",
-                "binary_authorization": "audit-only",
-                "arc_activation": "disabled",
-            },
-        )
+        self.assertEqual(len(contract["variables"]), 22)
+        self.assertEqual(contract["contract_version"], "1.2.0")
         self.assertFalse(contract["credential_material_included"])
 
     def test_sensitive_output_is_rejected(self) -> None:
-        automation, gitops, binauthz = self.fixtures()
+        automation, gitops, binauthz, qualification = self.fixtures()
         binauthz["project_id"]["sensitive"] = True
         with self.assertRaises(ValueError):
-            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
 
     def test_mock_and_wrong_environment_outputs_are_rejected(self) -> None:
-        automation, gitops, binauthz = self.fixtures()
+        automation, gitops, binauthz, qualification = self.fixtures()
         binauthz["project_id"]["value"] = "mock-production-platform"
         with self.assertRaises(ValueError):
-            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
-        automation, gitops, binauthz = self.fixtures()
-        binauthz["enforcement_mode"]["value"] = "ENFORCED_BLOCK_AND_AUDIT_LOG"
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
+        automation, gitops, binauthz, qualification = self.fixtures()
+        binauthz["enforcement_mode"]["value"] = "DRYRUN_AUDIT_LOG_ONLY"
         with self.assertRaises(ValueError):
-            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
-        automation, gitops, binauthz = self.fixtures()
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
+        automation, gitops, binauthz, qualification = self.fixtures()
         binauthz["project_id"]["value"] = "mc-staging-platform"
         with self.assertRaises(ValueError):
-            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
 
     def test_identity_names_and_project_trust_domains_are_exact(self) -> None:
-        automation, gitops, binauthz = self.fixtures()
-        automation["artifact_signer_identity_contract"]["value"][
-            "SA_ARTIFACT_SIGNER"
+        automation, gitops, binauthz, qualification = self.fixtures()
+        automation["artifact_release_identity_contract"]["value"]["signer"][
+            "service_account"
         ] = "sa-artifact-builder@mc-common-ci.iam.gserviceaccount.com"
         with self.assertRaises(ValueError):
-            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
-        automation, gitops, binauthz = self.fixtures()
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
+        automation, gitops, binauthz, qualification = self.fixtures()
         gitops["github_config_identity_handoff"]["value"]["SA_GITOPS_RENDER"] = (
             "sa-gitops-render@mc-production-platform.iam.gserviceaccount.com"
         )
         with self.assertRaises(ValueError):
-            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
 
     def test_mutable_key_and_bootstrap_identity_drift_are_rejected(self) -> None:
-        automation, gitops, binauthz = self.fixtures()
+        automation, gitops, binauthz, qualification = self.fixtures()
         binauthz["attestor_key_versions"]["value"]["deployment-attestor"] = (
             "projects/mc-common-security/locations/us/keyRings/r/cryptoKeys/k"
         )
         with self.assertRaises(ValueError):
-            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
-        automation, gitops, binauthz = self.fixtures()
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
+        automation, gitops, binauthz, qualification = self.fixtures()
         binauthz["attestor_key_versions"]["value"]["deployment-attestor"] = (
             "projects/mc-common-security/locations/us/keyRings/r/cryptoKeys/"
             "attestor-build-attestor/cryptoKeyVersions/1"
         )
         with self.assertRaises(ValueError):
-            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
-        automation, gitops, binauthz = self.fixtures()
-        automation["artifact_signer_identity_contract"]["value"][
-            "ARTIFACT_SIGNER_JOB_WORKFLOW_REF"
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
+        automation, gitops, binauthz, qualification = self.fixtures()
+        automation["artifact_release_identity_contract"]["value"]["signer"][
+            "job_workflow_ref"
         ] = "mindclade/.github/.github/workflows/reusable-binauthz-sign.yml@main"
         with self.assertRaises(ValueError):
-            HANDOFF.compile_contract(automation, gitops, binauthz, "a" * 40)
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
+
+    def test_qualification_identity_bucket_and_role_split_are_exact(self) -> None:
+        automation, gitops, binauthz, qualification = self.fixtures()
+        gitops["production_qualification_identity_contract"]["value"][
+            "subject"
+        ] = "repo:mindclade@316676129/gitops@1333792222:environment:staging"
+        with self.assertRaisesRegex(ValueError, "differs from bootstrap"):
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
+
+        automation, gitops, binauthz, qualification = self.fixtures()
+        qualification["bucket"]["value"]["name"] = "unexpected-evidence"
+        with self.assertRaisesRegex(ValueError, "bucket name is not exact"):
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
+
+        automation, gitops, binauthz, qualification = self.fixtures()
+        gitops["production_qualification_identity_handoff"]["value"][
+            "SA_PRODUCTION_QUALIFICATION_WRITER"
+        ] = "sa-prod-qual-reader@mc-common-security.iam.gserviceaccount.com"
+        with self.assertRaisesRegex(ValueError, "wrong service account"):
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
 
     def test_write_is_private_outside_repo_and_never_overwrites(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

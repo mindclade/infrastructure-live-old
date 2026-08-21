@@ -74,7 +74,7 @@ class ArgoImageExceptionContractTest(unittest.TestCase):
                     value["exceptions"].pop()
                 self.assertTrue(self.errors(value))
 
-    def test_live_policy_has_no_bypass_and_remains_audit_only(self) -> None:
+    def test_live_policy_has_no_bypass_and_enforces_staging(self) -> None:
         live = "\n".join(
             (
                 ROOT
@@ -85,8 +85,10 @@ class ArgoImageExceptionContractTest(unittest.TestCase):
         self.assertNotIn("cluster_admission_rules", live)
         self.assertNotIn("ALWAYS_ALLOW", live)
         defaults = (ROOT / "_envcommon/binauthz.hcl").read_text("utf-8")
-        self.assertIn('enforcement_mode = "DRYRUN_AUDIT_LOG_ONLY"', defaults)
-        self.assertNotIn("ENFORCED_BLOCK_AND_AUDIT_LOG", defaults)
+        self.assertIn(
+            'local.environment == "development" ? "DRYRUN_AUDIT_LOG_ONLY" : "ENFORCED_BLOCK_AND_AUDIT_LOG"',
+            defaults,
+        )
         self.assertIn("exempt_images", defaults)
         for wildcard in ("/*", "/**"):
             self.assertNotIn(wildcard, defaults)

@@ -23,7 +23,7 @@ terraform {
 }
 
 locals {
-  module_version = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79"
+  module_version = "v0.4.0"
   env_vars       = read_terragrunt_config(find_in_parent_folders("env.hcl"))
   env            = local.env_vars.locals.environment
 }
@@ -47,7 +47,18 @@ dependency "kms" {
 
   mock_outputs = {
     crypto_key_ids = {
-      secrets = "projects/mock/locations/europe-west4/keyRings/mock-production/cryptoKeys/secrets"
+      secrets = "projects/mock/locations/us-central1/keyRings/mock-production/cryptoKeys/secrets"
+    }
+  }
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+}
+
+dependency "kms_dr" {
+  config_path = "../../../2-environments/production/kms-dr"
+
+  mock_outputs = {
+    crypto_key_ids = {
+      secrets = "projects/mock/locations/us-east4/keyRings/mock-production-dr/cryptoKeys/secrets"
     }
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
@@ -77,6 +88,10 @@ inputs = {
       {
         location     = include.root.locals.region
         kms_key_name = dependency.kms.outputs.crypto_key_ids["secrets"]
+      },
+      {
+        location     = include.root.locals.dr_region
+        kms_key_name = dependency.kms_dr.outputs.crypto_key_ids["secrets"]
       },
     ]
   }

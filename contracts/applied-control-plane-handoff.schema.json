@@ -8,47 +8,50 @@
     "producer",
     "source_commit",
     "environment",
-    "posture",
     "source_units",
     "variables",
     "credential_material_included"
   ],
   "properties": {
-    "contract_version": { "const": "1.1.0" },
+    "contract_version": { "const": "1.2.0" },
     "producer": { "const": "mindclade/infrastructure-live" },
     "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "environment": { "const": "production" },
-    "posture": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["release_workflow", "binary_authorization", "arc_activation"],
-      "properties": {
-        "release_workflow": { "const": "v3.0.0" },
-        "binary_authorization": { "const": "audit-only" },
-        "arc_activation": { "const": "disabled" }
-      }
-    },
     "source_units": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "automation_iam",
         "gitops_identities",
-        "binary_authorization"
+        "binary_authorization",
+        "qualification_evidence"
       ],
       "properties": {
         "automation_iam": { "const": "1-org/automation-iam" },
         "gitops_identities": { "const": "5-workloads/shared/control-plane-identities" },
-        "binary_authorization": { "const": "5-workloads/production/binary-authorization" }
+        "binary_authorization": { "const": "5-workloads/production/binary-authorization" },
+        "qualification_evidence": { "const": "5-workloads/shared/production-qualification-evidence" }
       }
     },
     "variables": {
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "CI_PROJECT_ID",
+        "SA_ARC_CANARY",
+        "SA_ARTIFACT_BUILDER",
+        "SA_ARTIFACT_QUALIFICATION_READER",
+        "SA_ARTIFACT_QUALIFIER",
         "SA_ARTIFACT_SIGNER",
+        "SA_ARTIFACT_PROMOTER",
         "SA_GITOPS_RENDER",
         "SA_GITOPS_VERIFIER",
+        "WIF_PROVIDER_PRODUCTION_QUALIFICATION",
+        "SA_PRODUCTION_QUALIFICATION_READER",
+        "SA_PRODUCTION_QUALIFICATION_WRITER",
+        "PRODUCTION_QUALIFICATION_PROJECT",
+        "PRODUCTION_QUALIFICATION_BUCKET",
+        "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET",
         "BINAUTHZ_BUILD_ATTESTOR_PROJECT",
         "BINAUTHZ_BUILD_ATTESTOR",
         "BINAUTHZ_QUALIFICATION_ATTESTOR_PROJECT",
@@ -58,9 +61,33 @@
         "BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION"
       ],
       "properties": {
+        "CI_PROJECT_ID": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*-common-ci$"
+        },
+        "SA_ARC_CANARY": {
+          "type": "string",
+          "pattern": "^sa-arc-canary@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
+        "SA_ARTIFACT_BUILDER": {
+          "type": "string",
+          "pattern": "^sa-artifact-builder@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
+        "SA_ARTIFACT_QUALIFICATION_READER": {
+          "type": "string",
+          "pattern": "^sa-artifact-qual-reader@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
+        "SA_ARTIFACT_QUALIFIER": {
+          "type": "string",
+          "pattern": "^sa-artifact-qualifier@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
         "SA_ARTIFACT_SIGNER": {
           "type": "string",
           "pattern": "^sa-artifact-signer@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
+        "SA_ARTIFACT_PROMOTER": {
+          "type": "string",
+          "pattern": "^sa-artifact-promoter@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
         },
         "SA_GITOPS_RENDER": {
           "type": "string",
@@ -69,6 +96,21 @@
         "SA_GITOPS_VERIFIER": {
           "type": "string",
           "pattern": "^sa-gitops-verifier@[a-z][a-z0-9-]*-common-security\\.iam\\.gserviceaccount\\.com$"
+        },
+        "WIF_PROVIDER_PRODUCTION_QUALIFICATION": {
+          "type": "string",
+          "pattern": "^projects/[0-9]+/locations/global/workloadIdentityPools/github/providers/gh-production-qualification$"
+        },
+        "SA_PRODUCTION_QUALIFICATION_READER": {
+          "const": "sa-prod-qual-reader@mc-common-security.iam.gserviceaccount.com"
+        },
+        "SA_PRODUCTION_QUALIFICATION_WRITER": {
+          "const": "sa-prod-qual-writer@mc-common-security.iam.gserviceaccount.com"
+        },
+        "PRODUCTION_QUALIFICATION_PROJECT": { "const": "mc-common-security" },
+        "PRODUCTION_QUALIFICATION_BUCKET": { "const": "mc-production-qualification-evidence" },
+        "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET": {
+          "const": "github-app-production-qualification-reader-pem"
         },
         "BINAUTHZ_BUILD_ATTESTOR_PROJECT": { "$ref": "#/$defs/productionProjectId" },
         "BINAUTHZ_BUILD_ATTESTOR": { "const": "build-attestor" },

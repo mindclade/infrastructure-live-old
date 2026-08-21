@@ -9,29 +9,26 @@ capability; it is not an invitation to infer a safe default.
 
 | Capability | Repository evidence | Status before a production apply |
 |---|---|---|
-| Private module interfaces | Every remote module and the DNS contract use protected-main commit `4d5c0105295bf4a01b770fb75f6a8db5c22c8f79`; CI rejects mixed refs and runs read-only interface and capacity preflights | **Quarantined:** the SHA is an immutable compatibility bridge because `v0.2.0` is incomplete for the existing live interfaces; replace it only in one coordinated published release |
+| Private module interfaces | Candidate source validation checks declared and required variables for the planned v0.4.0 worktree while preserving exact Git-tree validation for every released tag/SHA | **Blocked on release provenance:** planned-source validation passes the live module callers, but the exact-ref gate intentionally rejects the unpublished v0.4.0 tag. No affected scope may plan or apply until a protected tag is published from the reviewed commit, exact validation passes, and a credentialed saved plan is retained |
+| U.S. residency | `RESIDENCY_PROFILE=us-only-v1` fixes the primary region/zone to `us-central1`/`us-central1-b`, recovery to `us-east4`/`us-east4-b`, state to `US`, and organization policy to `in:us-locations`; source validation rejects deployable non-U.S. region literals | **Source complete, activation blocked:** retain exact variables and review Policy Simulator output plus credentialed plans before applying the location constraint or any regional resource |
 | Organization-policy baseline | `1-org/org-policies` is the sole owner for key prohibition, domain-restricted sharing, uniform bucket access, public-access prevention, external-IP, contact-domain, and workload constraints; its local v2 implementation represents parameterized managed constraints without legacy aliases | **Unknown:** retain cataloged `baseline` phase while importing Google's seven auto-provisioned policies and proving a zero-change saved plan; switch to `extended` only in a later reviewed change after Policy Simulator/dry-run and lockout recovery qualify every additional constraint |
 | Essential Contacts | `1-org/essential-contacts` declares governed organization and folder group routes | **Unknown:** confirm each group exists, test every subscription route, and verify the allowed-domain policy before depending on notifications |
 | KMS ownership | Normal and Binary Authorization keys currently reference the bootstrap seed project | **Proposed migration:** move normal KMS authority to an infrastructure-owned common security project with state moves and decrypt/sign verification; never recreate a key in place |
 | VPC Service Controls | Staging and production are dry-run; development is configured to enforce | **Unknown:** retain dry-run until denial logs, CI/developer paths, ingress/egress tests, and the denial runbook have been qualified |
-| DR geography and encryption | Backup units currently use the primary region and the production SQL replica has a different-region/no-key contract | **Proposed:** approve a secondary region, create matching regional KMS keys, validate residency, and complete restore drills before claiming regional DR |
-| Workload identities and holdout data | Holdout policy names training/preprocessing identities that are not created in this tree | **Unknown:** bind real GKE workload principals, prove training denial and evaluation-only access, and remove placeholder principals |
-| Supply-chain signer | The retained v3 GitHub deployment signer is exact; Buildkite federation and build/qualification issuers are disabled; all Binary Authorization policies are audit-only | **Quarantined:** exporting applied identities does not activate admission; enable independent issuers and blocking policy only in a later coordinated release with negative-test evidence |
-| GPU capacity | A3/A4 pools are zonal, tainted, bounded, and scale to zero | **Unknown:** obtain quota/capacity evidence and reservations for critical serving; a configured pool is not capacity assurance |
-| Production paging | Metrics and alert policies are declared | **Unknown:** connect production alerts to a staffed paging route and exercise notification delivery |
+| DR geography and encryption | Every environment declares independent `us-east4` HSM keys, an immutable recovery registry, region-local Backup for GKE CMEK, hourly raw/checkpoint replication, two-region Secret Manager replicas, and a CMEK-protected Cloud SQL recovery replica; production GKE backups are hourly | **Source complete, activation blocked:** prove supported service locations, key/service-agent access, image parity, replication lag, point-in-time recovery, regional restore, and DNS/failover behavior through connected drills before claiming regional DR |
+| Workload identities and holdout data | Each environment creates separate, keyless preprocessing, H100-training, B200-training, and holdout-evaluator GSAs with zero project-wide roles; exact KSA bindings are cross-checked against environment overlays, the holdout deny consumes the three training service-account outputs, and the evaluator receives one additive bucket-scoped object-viewer grant | **Blocked on release and connected evidence:** publish the reviewed v0.4.0 module ref, retain credentialed plans, prove each KSA can impersonate only its selected GSA, prove all three training identities are denied holdout reads, and qualify the dedicated evaluation-only reader using the [qualification runbook](runbooks/workload-identity-holdout-qualification.md) before activating evaluation |
+| Supply-chain signer | ARC build, ARC qualification, and protected GitHub deployment attestors use separate capability identities; global production admission requires deployment trust | **Unknown:** qualify exact note/key IAM, applied identity outputs, all six WIF paths, and cross-identity negative tests before publishing variables |
+| GPU capacity | Terraform is the sole capacity authority for zonal H100 A3 Mega and B200 A4 High pools; each expensive pool scales from zero and is bounded to one eight-GPU node, while topology-aware Kueue flavors, quotas, and qualification jobs remain held | **Unknown:** qualify current regional support, reservations or queued capacity, quota, driver/fabric/topology, checkpoint/restart, and cost before raising Kubernetes and Kueue quotas |
+| Production paging | The reusable SLO/burn-alert module exists, but the legacy live unit does not match it and runtime good/total request metrics plus tested channel resource names are not yet available | **Blocked:** implement bounded runtime metrics and pre-existing staffed channel resources, then apply the exact module contract and exercise open/recovery delivery |
 | Initial apply ordering | Terragrunt dependencies model resource dataflow | **Proposed:** apply clean-room layers in documented order; do not assume a multi-scope workflow matrix establishes first-build sequencing |
-
-Every correction plan must be tied to the exact merged SHA. Stop on an unexpected delete,
-replacement, WIF/IAM change, or production activation. A human reviewer—not the preparing agent—
-must approve the protected environment. Follow the successful apply with an exact-main no-op plan.
 
 ## Argo CD high-availability gate
 
-**Current disposition: standard profile.** The production GKE control plane is regional, but
-the live inputs do not prove at least three schedulable system nodes across three zones. The
-default pool has a minimum of one; the untainted CPU pool has a minimum of two and does not
-declare `node_locations`. Private module behavior and the resulting plan are unavailable in
-this checkout.
+**Current disposition: standard profile.** The production source target now uses the hardened
+regional GKE module with a protected three-node minimum system pool and an on-demand CPU pool
+declaring three zones. Static source is not evidence of actual zone distribution, quota,
+autoscaler behavior, or failure tolerance, and the resulting credentialed plan is unavailable
+in this checkout.
 
 Changing GitOps production to the HA profile requires all of the following evidence:
 

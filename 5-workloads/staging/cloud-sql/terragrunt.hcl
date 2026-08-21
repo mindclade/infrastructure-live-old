@@ -32,7 +32,7 @@ terraform {
 }
 
 locals {
-  module_version = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79"
+  module_version = "v0.4.0"
   env_vars       = read_terragrunt_config(find_in_parent_folders("env.hcl"))
   env            = local.env_vars.locals.environment
 }
@@ -74,7 +74,18 @@ dependency "kms" {
 
   mock_outputs = {
     crypto_key_ids = {
-      sql = "projects/mock/locations/europe-west4/keyRings/mock-staging/cryptoKeys/sql"
+      sql = "projects/mock/locations/us-central1/keyRings/mock-staging/cryptoKeys/sql"
+    }
+  }
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+}
+
+dependency "kms_dr" {
+  config_path = "../../../2-environments/staging/kms-dr"
+
+  mock_outputs = {
+    crypto_key_ids = {
+      sql = "projects/mock/locations/us-east4/keyRings/mock-staging-dr/cryptoKeys/sql"
     }
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
@@ -178,9 +189,9 @@ inputs = {
   # an oversight discovered during one.
   read_replicas = {
     dr = {
-      region       = "europe-west1"
+      region       = include.root.locals.dr_region
       tier         = "db-custom-2-7680"
-      kms_key_name = null
+      kms_key_name = dependency.kms_dr.outputs.crypto_key_ids["sql"]
     }
   }
 

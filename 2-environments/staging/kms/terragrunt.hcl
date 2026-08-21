@@ -30,7 +30,16 @@ terraform {
 }
 
 locals {
-  module_version = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79"
+  module_version = "v0.4.0"
+}
+
+dependency "shared" {
+  config_path = "../shared-projects"
+
+  mock_outputs = {
+    project_numbers = { platform = "100000000002" }
+  }
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
 inputs = {
@@ -97,6 +106,12 @@ inputs = {
       algorithm        = "RSA_SIGN_PKCS1_2048_SHA256"
       protection_level = "HSM"
     }
+  }
+
+  encrypter_decrypters = {
+    gke     = ["serviceAccount:service-${dependency.shared.outputs.project_numbers["platform"]}@container-engine-robot.iam.gserviceaccount.com"]
+    secrets = ["serviceAccount:service-${dependency.shared.outputs.project_numbers["platform"]}@gcp-sa-secretmanager.iam.gserviceaccount.com"]
+    sql     = ["serviceAccount:service-${dependency.shared.outputs.project_numbers["platform"]}@gcp-sa-cloud-sql.iam.gserviceaccount.com"]
   }
 
   labels = include.root.locals.common_labels

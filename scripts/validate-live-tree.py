@@ -64,7 +64,9 @@ for environment in ("development", "staging", "production"):
     required = (
         "gke",
         "artifact-registry",
+        "artifact-registry-dr",
         "binary-authorization",
+        "workload-identities",
         "secret-manager",
         "observability",
         "backup-dr",
@@ -74,6 +76,10 @@ for environment in ("development", "staging", "production"):
             "5-workloads", environment, unit, "terragrunt.hcl"
         ).is_file():
             errors.append(f"missing {environment} workload unit: {unit}")
+    if not ROOT.joinpath(
+        "2-environments", environment, "kms-dr", "terragrunt.hcl"
+    ).is_file():
+        errors.append(f"missing {environment} recovery-region KMS unit")
     if ROOT.joinpath("5-workloads", environment, "argocd", "terragrunt.hcl").exists():
         errors.append(f"Terraform still owns Argo CD installation in {environment}")
     prereq = ROOT / "5-workloads" / environment / "argocd-prereqs"

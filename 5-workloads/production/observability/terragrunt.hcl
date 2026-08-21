@@ -22,7 +22,7 @@ terraform {
 }
 
 locals {
-  module_version = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79"
+  module_version = "v0.4.0"
   env_vars       = read_terragrunt_config(find_in_parent_folders("env.hcl"))
   env            = local.env_vars.locals.environment
 }
@@ -32,7 +32,7 @@ dependency "gke" {
 
   mock_outputs = {
     cluster_name = "mc-production"
-    location     = "europe-west4"
+    location     = "us-central1"
     project_id   = "mc-production-platform"
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]

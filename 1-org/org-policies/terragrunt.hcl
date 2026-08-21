@@ -128,6 +128,14 @@ inputs = {
       allowed_values = [include.root.locals.cloud_identity_customer_id]
       denied_values  = []
     }
+
+    # The residency boundary is an organization guardrail, not a convention in individual
+    # modules. The Google-maintained value group includes current and future U.S. locations
+    # without opening Europe, Asia, or an unrestricted multi-region.
+    "gcp.resourceLocations" = {
+      allowed_values = ["in:us-locations"]
+      denied_values  = []
+    }
     }, include.root.locals.org_policy_activation_phase == "extended" ? {
 
     # No VM receives a public address by default. The isolated sandbox override below is the
