@@ -271,6 +271,16 @@ elif REPOSITORY == "infrastructure-live":
         error(
             "scheduled/manual drift authentication is not restricted to protected main"
         )
+    if (
+        "INFRASTRUCTURE_CONNECTED_DRIFT" not in drift_workflow
+        or drift_workflow.count(
+            "needs.readiness.outputs.enabled == 'true'"
+        )
+        != 3
+    ):
+        error(
+            "connected drift does not retain the explicit post-bootstrap activation boundary"
+        )
 
     automation_main = (ROOT / "1-org/automation-iam/main.tf").read_text(
         "utf-8", errors="ignore"

@@ -47,8 +47,28 @@ env:
   SA_TF_LIVE_PLAN: ${{ vars.SA_TF_LIVE_PLAN }}
 
 jobs:
+  readiness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.activation.outputs.enabled }}
+    steps:
+      - id: activation
+        name: Check connected-drift activation
+        env:
+          CONNECTED_DRIFT_ENABLED: ${{ vars.INFRASTRUCTURE_CONNECTED_DRIFT }}
+        run: |
+          set -euo pipefail
+          if [[ "$CONNECTED_DRIFT_ENABLED" == true ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Connected drift is staged until bootstrap identities and protected variables are applied."
+          fi
+
   drift:
-    if: github.ref == 'refs/heads/main'
+    needs: [readiness]
+    if: github.ref == 'refs/heads/main' && needs.readiness.outputs.enabled == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:
@@ -120,8 +140,8 @@ jobs:
           if-no-files-found: error
 
   report:
-    needs: [drift]
-    if: always()
+    needs: [readiness, drift]
+    if: always() && needs.readiness.outputs.enabled == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -157,8 +177,8 @@ jobs:
           fi
 
   drift-artifact-verify:
-    needs: [drift]
-    if: always()
+    needs: [readiness, drift]
+    if: always() && needs.readiness.outputs.enabled == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
