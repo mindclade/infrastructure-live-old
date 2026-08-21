@@ -42,7 +42,6 @@ dependency "access_logs" {
 
 locals {
   module_version = "v0.4.0"
-  writer_member  = "serviceAccount:${dependency.automation.outputs.dr_evidence_identity_contract.SA_DR_EVIDENCE_WRITER}"
 }
 
 terraform {
@@ -72,8 +71,11 @@ inputs = {
     storage_class = null
     with_state    = null
   }]
-  object_creators = [local.writer_member]
-  object_viewers  = [local.writer_member]
+  # Terragrunt evaluates `locals` before it resolves `dependency` blocks, so the writer member is
+  # built here rather than hoisted into a local — a local that references a dependency output
+  # fails HCL evaluation outright with "dependency is not defined".
+  object_creators = ["serviceAccount:${dependency.automation.outputs.dr_evidence_identity_contract.SA_DR_EVIDENCE_WRITER}"]
+  object_viewers  = ["serviceAccount:${dependency.automation.outputs.dr_evidence_identity_contract.SA_DR_EVIDENCE_WRITER}"]
   labels = merge(include.root.locals.common_labels, {
     purpose = "dr-evidence"
   })
