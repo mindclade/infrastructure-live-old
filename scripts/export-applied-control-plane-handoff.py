@@ -3,7 +3,7 @@
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
 
-"""Export exact applied GitOps and supply-chain identities for github-config."""
+"""Export exact applied GitOps and quarantined supply-chain identities for github-config."""
 
 from __future__ import annotations
 
@@ -25,17 +25,6 @@ UNITS = {
     "binary_authorization": ROOT / "5-workloads/production/binary-authorization",
 }
 ATTESTORS = ("build-attestor", "qualification-attestor", "deployment-attestor")
-CAPABILITY_SERVICE_ACCOUNTS = {
-    "canary": ("SA_ARC_CANARY", "sa-arc-canary"),
-    "builder": ("SA_ARTIFACT_BUILDER", "sa-artifact-builder"),
-    "qualification-reader": (
-        "SA_ARTIFACT_QUALIFICATION_READER",
-        "sa-artifact-qual-reader",
-    ),
-    "qualifier": ("SA_ARTIFACT_QUALIFIER", "sa-artifact-qualifier"),
-    "signer": ("SA_ARTIFACT_SIGNER", "sa-artifact-signer"),
-    "promoter": ("SA_ARTIFACT_PROMOTER", "sa-artifact-promoter"),
-}
 SERVICE_ACCOUNT = re.compile(
     r"^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$"
 )
@@ -159,73 +148,23 @@ def compile_contract(
 ) -> dict[str, Any]:
     if re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
         raise ValueError("source commit must be an immutable full SHA")
-    release_identities = require_mapping(
+    signer = require_mapping(
         output_value(
-            automation_outputs,
-            "artifact_release_identity_contract",
-            "automation_iam",
+            automation_outputs, "artifact_signer_identity_contract", "automation_iam"
         ),
-        "artifact_release_identity_contract",
+        "artifact_signer_identity_contract",
     )
-    try:
-        bootstrap_identities = json.loads(
-            require_string(
-                os.environ.get("ARTIFACT_RELEASE_IDENTITIES_JSON"),
-                "environment ARTIFACT_RELEASE_IDENTITIES_JSON",
+    for name in (
+        "WIF_PROVIDER_SIGNER",
+        "ARTIFACT_SIGNER_PRINCIPAL",
+        "ARTIFACT_SIGNER_JOB_WORKFLOW_REF",
+    ):
+        applied = require_string(signer.get(name), name)
+        expected = require_string(os.environ.get(name), f"environment {name}")
+        if applied != expected:
+            raise ValueError(
+                f"applied {name} differs from the bootstrap account contract"
             )
-        )
-    except json.JSONDecodeError as error:
-        raise ValueError(
-            "environment ARTIFACT_RELEASE_IDENTITIES_JSON is not valid JSON"
-        ) from error
-    if not isinstance(bootstrap_identities, dict) or (
-        set(bootstrap_identities) != set(CAPABILITY_SERVICE_ACCOUNTS)
-        or set(release_identities) != set(CAPABILITY_SERVICE_ACCOUNTS)
-    ):
-        raise ValueError("ARC release identity capability inventory is not exact")
-    release_service_accounts: dict[str, str] = {}
-    for capability, (variable_name, account_id) in CAPABILITY_SERVICE_ACCOUNTS.items():
-        applied = require_mapping(
-            release_identities[capability],
-            f"artifact_release_identity_contract.{capability}",
-        )
-        bootstrap_identity = require_mapping(
-            bootstrap_identities[capability],
-            f"bootstrap artifact release identity {capability}",
-        )
-        for field in (
-            "workload_identity_provider",
-            "principal",
-            "subject",
-            "workflow_ref",
-            "job_workflow_ref",
-        ):
-            if require_string(applied.get(field), f"{capability}.{field}") != (
-                require_string(bootstrap_identity.get(field), f"bootstrap {capability}.{field}")
-            ):
-                raise ValueError(
-                    f"applied {capability}.{field} differs from the bootstrap contract"
-                )
-        release_service_accounts[variable_name] = require_service_account(
-            applied.get("service_account"),
-            variable_name,
-            expected_account=account_id,
-            project_suffix="-common-ci",
-        )
-
-    ci_project_id = require_string(
-        output_value(automation_outputs, "ci_project_id", "automation_iam"),
-        "automation_iam.ci_project_id",
-    )
-    if PROJECT_ID.fullmatch(ci_project_id) is None or not ci_project_id.endswith(
-        "-common-ci"
-    ):
-        raise ValueError("automation_iam.ci_project_id belongs to the wrong trust domain")
-    if any(
-        not account.endswith(f"@{ci_project_id}.iam.gserviceaccount.com")
-        for account in release_service_accounts.values()
-    ):
-        raise ValueError("ARC service accounts disagree with automation_iam.ci_project_id")
 
     identities = require_mapping(
         output_value(
@@ -255,8 +194,8 @@ def compile_contract(
         output_value(binauthz_outputs, "enforcement_mode", "binary_authorization"),
         "binary_authorization.enforcement_mode",
     )
-    if enforcement != "ENFORCED_BLOCK_AND_AUDIT_LOG":
-        raise ValueError("production Binary Authorization is not blocking")
+    if enforcement != "DRYRUN_AUDIT_LOG_ONLY":
+        raise ValueError("production Binary Authorization is not in quarantine audit mode")
 
     exact_attestors: dict[str, str] = {}
     for name in ATTESTORS:
@@ -272,8 +211,12 @@ def compile_contract(
         raise ValueError("deployment attestor key is not an immutable KMS key version")
 
     variables = {
-        "CI_PROJECT_ID": ci_project_id,
-        **release_service_accounts,
+        "SA_ARTIFACT_SIGNER": require_service_account(
+            signer.get("SA_ARTIFACT_SIGNER"),
+            "SA_ARTIFACT_SIGNER",
+            expected_account="sa-artifact-signer",
+            project_suffix="-common-ci",
+        ),
         "SA_GITOPS_RENDER": require_service_account(
             identities.get("SA_GITOPS_RENDER"),
             "SA_GITOPS_RENDER",
@@ -299,6 +242,11 @@ def compile_contract(
         "producer": "mindclade/infrastructure-live",
         "source_commit": source_commit,
         "environment": "production",
+        "posture": {
+            "release_workflow": "v3.0.0",
+            "binary_authorization": "audit-only",
+            "arc_activation": "disabled",
+        },
         "source_units": {
             name: str(path.relative_to(ROOT)) for name, path in UNITS.items()
         },

@@ -2,7 +2,7 @@ SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := validate
 MONOREPO ?= ../mindclade-internal-monorepo
 GITOPS ?= ../gitops
-CANDIDATE_MODULE_VERSION ?= v0.4.0
+CANDIDATE_MODULE_VERSION ?=
 
 .PHONY: validate validate-integration validate-source-integration validate-module-interfaces validate-module-candidate validate-capacity-contract validate-capacity-candidate validate-gitops-integration validate-argocd-image-exceptions validate-dns-portfolio validate-repository-home test format plan-development plan-staging plan-production
 validate: validate-production-contract validate-repository-home validate-argocd-image-exceptions validate-dns-portfolio test

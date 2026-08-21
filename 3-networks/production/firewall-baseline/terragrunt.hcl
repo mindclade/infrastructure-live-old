@@ -54,7 +54,7 @@ dependency "vpc" {
 
 locals {
   environment    = include.root.locals.environment
-  module_version = "v0.4.0"
+  module_version = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79"
 
   # Priorities. Spaced so a rule can be inserted between two without renumbering — GCP
   # evaluates lowest first, and renumbering a live firewall is a window during which the

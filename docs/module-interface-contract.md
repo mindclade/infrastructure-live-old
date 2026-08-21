@@ -31,6 +31,12 @@ input is a hard failure. The plan then performs Terraform's authoritative type, 
 provider validation. This prevents `infrastructure-live` from silently getting ahead of the module
 release it consumes without moving reusable module ownership into this repository.
 
+The current quarantine pins every live module and the DNS module contract to protected-main commit
+`4d5c0105295bf4a01b770fb75f6a8db5c22c8f79`. The published `v0.2.0` tree does not contain all
+interfaces already consumed by the live estate, and its successor release remains deliberately
+unpublished. The full SHA is therefore an immutable compatibility bridge, not a release claim.
+`validate-production-contract.py` rejects any mixed module ref.
+
 During a coordinated cross-repository release, callers may point at the monorepo's one explicit
 `status = "planned"` contract version before its protected tag exists. The source-review gate reads
 only callers at that exact candidate version from the local monorepo worktree; all older tags and
@@ -53,17 +59,19 @@ make validate-module-interfaces MONOREPO=../mindclade-internal-monorepo
 make validate-capacity-contract MONOREPO=../mindclade-internal-monorepo
 ```
 
-For the planned v0.4.0 source review, run the separate candidate gate:
+For a future coordinated source review, pass the proposed version explicitly to the separate
+candidate gate:
 
 ```sh
-make validate-module-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
-make validate-capacity-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
-nix develop .#ci --command make validate-source-integration MONOREPO=../mindclade-internal-monorepo
+make validate-module-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=vX.Y.Z
+make validate-capacity-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=vX.Y.Z
+nix develop .#ci --command make validate-source-integration MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=vX.Y.Z
 ```
 
 A candidate pass must never be presented as an immutable-ref pass and must not authorize a plan or
-apply. After the protected tag is published from the reviewed commit, remove reliance on candidate
-mode by running the exact integration target:
+apply. No candidate version is selected by default. After a protected tag is published from its
+reviewed commit, remove reliance on candidate mode by updating every pin together and running the
+exact integration target:
 
 ```sh
 nix develop .#ci --command make validate-integration MONOREPO=../mindclade-internal-monorepo

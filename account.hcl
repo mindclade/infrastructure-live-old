@@ -15,23 +15,19 @@ locals {
   region                      = get_env("PRIMARY_REGION", "us-central1")
   gpu_zone                    = get_env("GPU_ZONE", "${local.region}-b")
 
-  seed_project_id      = get_env("BOOTSTRAP_SEED_PROJECT_ID")
-  cicd_project_id      = get_env("BOOTSTRAP_CICD_PROJECT_ID")
-  cicd_project_number  = get_env("BOOTSTRAP_CICD_PROJECT_NUMBER")
-  state_location       = get_env("STATE_LOCATION", "US")
-  github_wif_pool_name = get_env("GITHUB_WIF_POOL_NAME")
-  # Bootstrap owns provider conditions. This repository creates the six normal-plane service
-  # accounts and binds each only to the matching exact principal in this contract.
-  # `plan.yml` maps these from repository variables, so the process always carries the names —
-  # an unset variable arrives as the empty string, not as an absent one, and `get_env`'s own
-  # default therefore never fires. coalesce() covers both, which is what lets the credential-free
-  # `validate` job parse every unit instead of failing before it reads a single resource.
-  #
-  # This does not relax the contract. 1-org/automation-iam types and validates both values, so an
-  # empty decode is rejected there: plan and apply still fail closed until the applied bootstrap
-  # outputs are exported.
-  artifact_release_identities = jsondecode(coalesce(get_env("ARTIFACT_RELEASE_IDENTITIES_JSON", ""), "{}"))
-  dr_evidence_identity        = jsondecode(coalesce(get_env("DR_EVIDENCE_IDENTITY_JSON", ""), "{}"))
+  seed_project_id         = get_env("BOOTSTRAP_SEED_PROJECT_ID")
+  cicd_project_id         = get_env("BOOTSTRAP_CICD_PROJECT_ID")
+  cicd_project_number     = get_env("BOOTSTRAP_CICD_PROJECT_NUMBER")
+  state_location          = get_env("STATE_LOCATION", "US")
+  github_wif_pool_name    = get_env("GITHUB_WIF_POOL_NAME")
+  buildkite_wif_enabled   = lower(get_env("BUILDKITE_WIF_ENABLED", "false")) == "true"
+  buildkite_wif_pool_name = get_env("BUILDKITE_WIF_POOL_NAME", "")
+
+  # Bootstrap owns the issuer/provider condition; infrastructure-live owns the normal-plane
+  # signer service account and binds only this exact protected-release principal to it.
+  artifact_signer_wif_provider     = get_env("WIF_PROVIDER_SIGNER")
+  artifact_signer_principal        = get_env("ARTIFACT_SIGNER_PRINCIPAL")
+  artifact_signer_job_workflow_ref = get_env("ARTIFACT_SIGNER_JOB_WORKFLOW_REF")
 
   infrastructure_live_service_accounts = {
     plan        = get_env("SA_TF_LIVE_PLAN")

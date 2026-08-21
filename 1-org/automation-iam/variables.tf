@@ -40,51 +40,31 @@ variable "ci_project_id" {
   description = "Normal-plane common CI project that owns supply-chain service accounts."
 }
 
+variable "buildkite_wif_enabled" {
+  type        = bool
+  description = "Whether the deployed bootstrap contract enables Buildkite federation."
+  default     = false
+}
+
+variable "buildkite_wif_pool_name" {
+  type        = string
+  description = "Bootstrap-managed Buildkite workload identity pool resource name."
+  default     = ""
+  validation {
+    condition = (
+      (!var.buildkite_wif_enabled && var.buildkite_wif_pool_name == "") ||
+      (var.buildkite_wif_enabled && can(regex("^projects/[0-9]+/locations/global/workloadIdentityPools/buildkite$", var.buildkite_wif_pool_name)))
+    )
+    error_message = "buildkite_wif_pool_name must be empty when disabled or the exact bootstrap-managed pool when enabled."
+  }
+}
+
 variable "github_wif_pool_name" {
   type        = string
   description = "Bootstrap-managed GitHub workload identity pool resource name."
   validation {
     condition     = can(regex("^projects/[0-9]+/locations/global/workloadIdentityPools/github$", var.github_wif_pool_name))
     error_message = "github_wif_pool_name must be the bootstrap-managed GitHub WIF pool."
-  }
-}
-
-variable "artifact_release_identities" {
-  description = "Bootstrap-exported capability-specific ARC provider/principal contracts."
-  type = map(object({
-    workload_identity_provider = string
-    principal                  = string
-    subject                    = string
-    workflow_ref               = string
-    job_workflow_ref           = string
-  }))
-
-  validation {
-    condition = toset(keys(var.artifact_release_identities)) == toset([
-      "canary", "builder", "qualification-reader", "qualifier", "signer", "promoter"
-    ])
-    error_message = "artifact_release_identities must contain exactly the six ARC release capabilities."
-  }
-}
-
-variable "dr_evidence_identity" {
-  description = "Bootstrap-exported WIF provider and exact scratch/staging principals for DR evidence publication."
-  type = object({
-    workload_identity_provider = string
-    job_workflow_ref           = string
-    principals                 = map(string)
-  })
-
-  validation {
-    condition = (
-      can(regex("^projects/[0-9]+/locations/global/workloadIdentityPools/github/providers/gh-dr-evidence$", var.dr_evidence_identity.workload_identity_provider)) &&
-      var.dr_evidence_identity.job_workflow_ref == "mindclade/.github/.github/workflows/reusable-dr-evidence.yml@refs/tags/v4.0.0" &&
-      toset(keys(var.dr_evidence_identity.principals)) == toset([
-        "bootstrap:scratch", "bootstrap:staging", "github-config:scratch", "github-config:staging",
-        "infrastructure-live:scratch", "infrastructure-live:staging", "gitops:scratch", "gitops:staging",
-      ])
-    )
-    error_message = "dr_evidence_identity must match bootstrap contract 1.4.0 and contain exactly eight protected caller principals."
   }
 }
 
@@ -95,4 +75,19 @@ variable "github_org" {
     condition     = can(regex("^[A-Za-z0-9-]+$", var.github_org))
     error_message = "github_org must be a GitHub organization login."
   }
+}
+
+variable "artifact_signer_wif_provider" {
+  type        = string
+  description = "Bootstrap signer-only WIF provider published to GitHub as WIF_PROVIDER_SIGNER."
+}
+
+variable "artifact_signer_principal" {
+  type        = string
+  description = "Bootstrap output for the exact monorepo release-environment WIF subject."
+}
+
+variable "artifact_signer_job_workflow_ref" {
+  type        = string
+  description = "Exact immutable reusable signer workflow enforced by the WIF provider."
 }

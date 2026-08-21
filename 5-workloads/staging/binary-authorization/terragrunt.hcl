@@ -48,9 +48,7 @@ dependency "shared" {
 dependency "automation" {
   config_path = "../../../1-org/automation-iam"
   mock_outputs = { supply_chain_service_accounts = {
-    builder   = "sa-artifact-builder@mc-common-ci.iam.gserviceaccount.com"
-    qualifier = "sa-artifact-qualifier@mc-common-ci.iam.gserviceaccount.com"
-    signer    = "sa-artifact-signer@mc-common-ci.iam.gserviceaccount.com"
+    signer = "sa-artifact-signer@mc-common-ci.iam.gserviceaccount.com"
   } }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
@@ -80,8 +78,8 @@ inputs = {
   # One issuer per evidence stage. Production admission trusts only deployment-attestor, so
   # builder or qualifier compromise alone cannot deploy. Nothing in this cluster can sign.
   attestor_signers = {
-    build-attestor         = ["serviceAccount:${dependency.automation.outputs.supply_chain_service_accounts["builder"]}"]
-    qualification-attestor = ["serviceAccount:${dependency.automation.outputs.supply_chain_service_accounts["qualifier"]}"]
+    build-attestor         = []
+    qualification-attestor = []
     deployment-attestor    = ["serviceAccount:${dependency.automation.outputs.supply_chain_service_accounts["signer"]}"]
 
     # Human signers only, and named in github-config's teams catalogue as @biosecurity. A

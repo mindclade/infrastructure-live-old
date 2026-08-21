@@ -15,7 +15,7 @@ locals {
   account_vars = read_terragrunt_config("${get_repo_root()}/account.hcl")
 
   environment    = local.env_vars.locals.environment
-  module_version = "v0.4.0"
+  module_version = "4d5c0105295bf4a01b770fb75f6a8db5c22c8f79"
 
   # Terraform's Binary Authorization resource has no Kubernetes-namespace-rule interface.
   # Upstream GitOps control-plane images therefore use a reviewed exact-digest contract rather
@@ -32,14 +32,13 @@ terraform {
 }
 
 inputs = {
-  # Deny by default. Development audits the rule; staging and production enforce it so staging
-  # supplies real admission evidence before production approval.
+  # Source-only quarantine: every environment audits and none blocks admission until the
+  # deferred artifact-authority release and its independent attestation evidence exist.
   default_admission_rule = {
     evaluation_mode  = "REQUIRE_ATTESTATION"
-    enforcement_mode = local.environment == "development" ? "DRYRUN_AUDIT_LOG_ONLY" : "ENFORCED_BLOCK_AND_AUDIT_LOG"
-    # The protected deployment signer verifies independent ARC build and qualification
-    # attestations before it issues deployment-attestor. Requiring build-attestor directly in
-    # production would let the builder satisfy admission without the independent gate.
+    enforcement_mode = "DRYRUN_AUDIT_LOG_ONLY"
+    # The retained v3 signer contract remains the only production trust candidate. These
+    # requirements collect audit evidence but cannot activate admission enforcement.
     require_attestations_by = local.environment == "production" ? [
       "deployment-attestor",
       ] : [
@@ -54,12 +53,12 @@ inputs = {
 
   attestors = {
     build-attestor = {
-      description       = "The authoritative ARC builder produced and published this image."
+      description       = "The staged builder produced and published this image."
       kms_protection    = "HSM"
       kms_key_algorithm = "RSA_SIGN_PKCS1_4096_SHA512"
     }
     qualification-attestor = {
-      description       = "Independent ARC qualification, security, and numerical gates passed."
+      description       = "Independent qualification, security, and numerical gates passed."
       kms_protection    = "HSM"
       kms_key_algorithm = "RSA_SIGN_PKCS1_4096_SHA512"
     }
