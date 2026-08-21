@@ -16,23 +16,9 @@ locals {
 
   environment = local.env_vars.locals.environment
 
-  # Protected release candidate. The tag is published only after repository and connected
-  # plan evidence for the complete typed interface set is approved.
-  module_version = "v0.4.0"
-
-  # Control-plane peering ranges are deliberately outside the VPC, Pod, Service, and ARC
-  # allocations. Changing one recreates the private control-plane peering contract.
-  master_ipv4_cidrs = {
-    development = "10.240.0.0/28"
-    staging     = "10.241.0.0/28"
-    production  = "10.242.0.0/28"
-  }
-
-  node_cidrs = {
-    development = "10.16.0.0/20"
-    staging     = "10.32.0.0/20"
-    production  = "10.48.0.0/20"
-  }
+  # Bumping this is a reviewable one-line change that says exactly which module version
+  # moved. That is the whole reason modules are pinned by tag rather than tracked by branch.
+  module_version = "v0.1.1"
 }
 
 terraform {
@@ -40,31 +26,42 @@ terraform {
 }
 
 inputs = {
-  name   = "${local.account_vars.locals.prefix}-${local.environment}"
-  region = local.account_vars.locals.region
+  name     = "${local.account_vars.locals.prefix}-${local.environment}"
+  location = local.account_vars.locals.region
 
-  master_ipv4_cidr_block = local.master_ipv4_cidrs[local.environment]
-  master_authorized_networks = [{
-    cidr_block   = local.node_cidrs[local.environment]
-    display_name = "${local.environment}-private-nodes"
-  }]
+  # Private cluster. Nodes have no public IPs — which infrastructure-live's organization
+  # policy also enforces, so a public cluster would fail to create.
+  enable_private_nodes    = true
+  enable_private_endpoint = true # control plane is reachable only through private connectivity
 
-  rbac_security_group = "gke-security-groups@${local.account_vars.locals.domain}"
-  environment         = local.environment
-  owner               = "platform"
-  data_classification = "confidential"
+  # Shielded nodes: secure boot, integrity monitoring, vTPM. Costs nothing and blocks a
+  # class of node-level persistence.
+  enable_shielded_nodes = true
 
-  # Development receives upgrades first. Staging and production remain on the same qualified
-  # channel so staging is a faithful rehearsal instead of a different lifecycle policy.
-  release_channel = local.environment == "development" ? "RAPID" : "REGULAR"
-  channel_policy  = local.environment == "development" ? "CANARY" : "QUALIFIED"
+  # Workload Identity. The Kubernetes-side equivalent of the WIF rule in bootstrap: pods get
+  # short-lived tokens for a Google service account instead of a mounted key.
+  enable_workload_identity = true
 
-  # NOVA mounts model artifacts through generation-bound object APIs. GCS Fuse remains off
-  # until an independently qualified platform lock says otherwise.
-  enable_gcs_fuse_csi_driver    = false
-  enable_backup_agent           = true
-  enable_secret_sync            = true
-  secret_sync_rotation_interval = "120s"
+  # Policy Controller (Gatekeeper). The gitops repo's policy/ directory is inert without it.
+  enable_policy_controller = true
+
+  # Binary Authorization is configured per-environment in its own unit; this switch is what
+  # makes the cluster consult it at admission time.
+  enable_binary_authorization = true
+
+  release_channel = local.environment == "development" ? "RAPID" : local.environment == "staging" ? "REGULAR" : "STABLE"
+
+  # Deletion protection on production. Terraform will otherwise delete and recreate a
+  # cluster to resolve certain diffs, and the first anyone knows is that the workloads are
+  # gone.
+  deletion_protection = local.environment == "production"
+
+  enable_managed_prometheus = true
+  logging_components        = ["SYSTEM_COMPONENTS", "WORKLOADS", "APISERVER", "CONTROLLER_MANAGER", "SCHEDULER"]
+  monitoring_components     = ["SYSTEM_COMPONENTS", "APISERVER", "CONTROLLER_MANAGER", "SCHEDULER"]
+
+  # Application-layer secrets encryption with a CMEK from 1-org/kms.
+  database_encryption_state = "ENCRYPTED"
 
   maintenance_window = {
     # Production maintains at the weekend; everything else on weekday nights, so a surprise
@@ -74,14 +71,5 @@ inputs = {
     recurrence = local.environment == "production" ? "FREQ=WEEKLY;BYDAY=SA,SU" : "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH"
   }
 
-  system_node_pool_machine_type      = "n2-standard-8"
-  system_node_pool_total_min_nodes   = 3
-  system_node_pool_total_max_nodes   = local.environment == "production" ? 12 : 6
-  system_node_pool_max_pods_per_node = 64
-  system_node_pool_boot_disk_size_gb = 100
-
-  resource_labels = merge(local.root.locals.common_labels, {
-    authority = "terraform"
-    workload  = "platform"
-  })
+  labels = local.root.locals.common_labels
 }

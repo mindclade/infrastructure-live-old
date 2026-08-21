@@ -24,7 +24,7 @@ terraform {
 }
 
 locals {
-  module_version = "v0.4.0"
+  module_version = "v0.1.1"
 }
 
 inputs = {
@@ -43,10 +43,6 @@ inputs = {
       protection_level        = "HSM"
     }
     ci_secrets = {
-      rotation_period_seconds = 7776000 # 90 days
-      protection_level        = "HSM"
-    }
-    ci_artifacts = {
       rotation_period_seconds = 7776000 # 90 days
       protection_level        = "HSM"
     }

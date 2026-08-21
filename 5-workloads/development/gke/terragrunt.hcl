@@ -78,17 +78,6 @@ dependency "kms" {
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
-dependency "node_identities" {
-  config_path = "../node-identities"
-
-  mock_outputs = {
-    service_accounts = {
-      system_nodes = { email = "sa-system-nodes@mc-development-platform.iam.gserviceaccount.com" }
-    }
-  }
-  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
-}
-
 # ---------------------------------------------------------------------------------------
 # Inputs
 # ---------------------------------------------------------------------------------------
@@ -100,11 +89,18 @@ inputs = {
   # directory it lives in. Copying this file to ../../staging/gke needs no edit here.
   project_id = dependency.shared.outputs.project_ids["platform"]
 
-  network                      = dependency.vpc.outputs.network_self_link[include.envcommon.locals.environment]
-  subnetwork                   = dependency.vpc.outputs.subnetwork_names[include.envcommon.locals.environment]
-  pod_secondary_range_name     = dependency.vpc.outputs.pods_range_names[include.envcommon.locals.environment]
-  service_secondary_range_name = dependency.vpc.outputs.services_range_names[include.envcommon.locals.environment]
+  network         = dependency.vpc.outputs.network_self_link[include.envcommon.locals.environment]
+  subnetwork      = dependency.vpc.outputs.subnetwork_names[include.envcommon.locals.environment]
+  host_project_id = dependency.vpc.outputs.host_project_ids[include.envcommon.locals.environment]
 
-  system_node_service_account_email = dependency.node_identities.outputs.service_accounts["system_nodes"].email
-  database_encryption_key_name      = dependency.kms.outputs.crypto_key_ids["gke"]
+  ip_range_pods     = dependency.vpc.outputs.pods_range_names[include.envcommon.locals.environment]
+  ip_range_services = dependency.vpc.outputs.services_range_names[include.envcommon.locals.environment]
+
+  database_encryption_key = dependency.kms.outputs.crypto_key_ids["gke"]
+
+  # Small default pool. Real workloads run on the taint-guarded pools in ../nodepools.
+  initial_node_count = 1
+  min_node_count     = 1
+  max_node_count     = 5
+  machine_type       = "e2-standard-4"
 }

@@ -7,7 +7,7 @@ include "root" {
   expose = true
 }
 
-locals { module_version = "v0.4.0" }
+locals { module_version = "v0.1.0" }
 terraform {
   source = "${include.root.locals.module_source_base}//dns?ref=${local.module_version}"
 }

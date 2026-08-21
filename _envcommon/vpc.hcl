@@ -24,7 +24,7 @@ locals {
 
   prefix         = local.account_vars.locals.prefix
   region         = local.account_vars.locals.region
-  module_version = "v0.4.0"
+  module_version = "v0.1.1"
 
   # ---------------------------------------------------------------------------------------
   # Per-environment settings
@@ -73,4 +73,30 @@ locals {
 
 terraform {
   source = "${local.root.locals.module_source_base}//network?ref=${local.module_version}"
+}
+
+inputs = {
+  # Custom subnets only. Auto-mode creates a subnet in every region with predictable ranges,
+  # which both wastes address space and quietly places resources outside the residency
+  # allowlist in gcp.resourceLocations.
+  auto_create_subnetworks = false
+  routing_mode            = "REGIONAL"
+
+  region = local.region
+
+  enable_flow_logs  = true
+  flow_log_interval = "INTERVAL_10_MIN"
+  flow_log_metadata = "INCLUDE_ALL_METADATA"
+
+  # Private Google Access: reach Google APIs without an external IP, which is mandatory given
+  # the org-wide external-IP denial in bootstrap.
+  private_ip_google_access = true
+
+  # Keep the local 0.0.0.0/0 route whose next hop is the default internet gateway. Public
+  # Cloud NAT requires that route even for nodes without external addresses, and the
+  # private/restricted Google API VIPs use it as their next hop as well. The route is not an
+  # egress allow: firewall-baseline denies 0.0.0.0/0 after its explicit destination allows.
+  delete_default_routes_on_create = false
+
+  labels = local.root.locals.common_labels
 }

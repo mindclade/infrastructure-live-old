@@ -18,11 +18,11 @@ include "root" {
 }
 
 terraform {
-  source = "${include.root.locals.module_source_base}//environment_alerting?ref=${local.module_version}"
+  source = "${include.root.locals.module_source_base}//monitoring?ref=${local.module_version}"
 }
 
 locals {
-  module_version = "v0.4.0"
+  module_version = "v0.1.0"
   env_vars       = read_terragrunt_config(find_in_parent_folders("env.hcl"))
   env            = local.env_vars.locals.environment
 }
@@ -168,7 +168,17 @@ inputs = {
   # Defined in staging as well as production, deliberately. An SLO written for the first
   # time against production is an SLO nobody has ever seen fire, and the first thing it
   # teaches you is that the query was wrong.
-  # SLO creation is blocked until service owners supply explicit project-scoped good and
-  # total metric filters. A goal without those filters is not an enforceable SLO contract.
+  slos = {
+    runtime-gateway-availability = {
+      display_name = "Runtime gateway availability"
+      goal         = 0.99
+      rolling_days = 28
+      service      = "serving-runtime-gateway"
+      # Staging targets two nines rather than production's four. A staging SLO at
+      # production's target burns its entire budget in the first week and stops meaning
+      # anything.
+    }
+  }
+
   labels = include.root.locals.common_labels
 }

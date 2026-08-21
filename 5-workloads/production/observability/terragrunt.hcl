@@ -18,11 +18,11 @@ include "root" {
 }
 
 terraform {
-  source = "${include.root.locals.module_source_base}//environment_alerting?ref=${local.module_version}"
+  source = "${include.root.locals.module_source_base}//monitoring?ref=${local.module_version}"
 }
 
 locals {
-  module_version = "v0.4.0"
+  module_version = "v0.1.0"
   env_vars       = read_terragrunt_config(find_in_parent_folders("env.hcl"))
   env            = local.env_vars.locals.environment
 }
@@ -67,9 +67,9 @@ inputs = {
   # ---------------------------------------------------------------------------------------
   # Notification routing
   # ---------------------------------------------------------------------------------------
-  # Source-complete routing currently delivers to the platform email channel. This is not a
-  # paging claim: production activation remains blocked until a staffed escalation channel is
-  # configured and its delivery is exercised through the protected qualification path.
+  # Production pages nobody. Every alert here lands in a channel that is read during working
+  # hours, because the point of alerting in production is to catch a bad rule before it
+  # reaches an environment where it would page — not to wake anyone.
   notification_channels = {
     platform-email = {
       type  = "email"
@@ -135,9 +135,9 @@ inputs = {
       documentation = "Usually accelerator stock in the pinned zone. See node_locations in ../nodepools/gpu-a3."
     }
 
-    # Admission denials. Production Binary Authorization and Gatekeeper policy block; a spike
-    # therefore indicates a broken release, a policy regression, or hostile activity rather
-    # than a successful workload that can be ignored.
+    # Admission denials. Expected in production, where binary-authorization runs DRYRUN —
+    # but a spike means a workload is about to fail in production, where the same policy
+    # blocks.
     admission-denials-rising = {
       display_name = "Binary Authorization or Gatekeeper denials rising"
       severity     = "WARNING"
@@ -154,10 +154,10 @@ inputs = {
       }
 
       documentation = <<-EOT
-        Production enforces Binary Authorization and Gatekeeper policy. These records are
-        blocked admission attempts. Correlate the exact image digest, attestation, constraint,
-        namespace, and release evidence before retrying; do not weaken admission to clear the
-        alert.
+        Production runs Binary Authorization in DRYRUN, so these are denials that were
+        LOGGED rather than enforced. Production enforces the same policy.
+
+        This is the alert that gives you warning before a promotion fails.
       EOT
     }
   }
@@ -165,10 +165,20 @@ inputs = {
   # ---------------------------------------------------------------------------------------
   # SLOs
   # ---------------------------------------------------------------------------------------
-  # This is the production SLO source contract, not evidence that its query or notification
-  # route has been exercised. Burn-rate behavior and escalation delivery remain connected
-  # activation gates.
-  # SLO creation is blocked until service owners supply explicit project-scoped good and
-  # total metric filters. A goal without those filters is not an enforceable SLO contract.
+  # Defined in production as well as production, deliberately. An SLO written for the first
+  # time against production is an SLO nobody has ever seen fire, and the first thing it
+  # teaches you is that the query was wrong.
+  slos = {
+    runtime-gateway-availability = {
+      display_name = "Runtime gateway availability"
+      goal         = 0.99
+      rolling_days = 28
+      service      = "serving-runtime-gateway"
+      # Production targets two nines rather than production's four. A production SLO at
+      # production's target burns its entire budget in the first week and stops meaning
+      # anything.
+    }
+  }
+
   labels = include.root.locals.common_labels
 }

@@ -53,8 +53,7 @@ dependency "vpc" {
 }
 
 locals {
-  environment    = include.root.locals.environment
-  module_version = "v0.4.0"
+  environment = include.root.locals.environment
 
   # Priorities. Spaced so a rule can be inserted between two without renumbering — GCP
   # evaluates lowest first, and renumbering a live firewall is a window during which the
@@ -150,10 +149,6 @@ locals {
       description        = "Default deny. Everything reachable is named in a rule above this one."
     }
   }
-}
-
-terraform {
-  source = "${include.root.locals.module_source_base}//firewall?ref=${local.module_version}"
 }
 
 inputs = {

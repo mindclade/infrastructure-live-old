@@ -37,17 +37,14 @@ weaken admission merely to make the rollout progress.
    protected release environment, or revert the GitOps reference to a previously qualified
    digest.
 2. Do not create an attestation manually with a human or builder identity.
-3. Do not add an `ALWAYS_ALLOW` rule, namespace-shaped cluster rule, registry prefix, or mutable
-   image exception. Mindclade-produced application images have no exception path. Reviewed
-   upstream Argo control-plane images may use only the exact-digest contract in
-   `contracts/argocd-image-exceptions.json`, with platform ownership, protected security review,
-   staging proof, and an expiry of at most 90 days.
+3. Do not add an `ALWAYS_ALLOW` rule or mutable image exception. A true emergency exception
+   needs a critical change record, exact scope, expiry, two qualified approvals, and
+   immediate removal after containment.
 4. Confirm GKE admits the exact digest and preserve the resulting audit linkage.
 
 ## Verify recovery
 
-- GKE admits a Mindclade-produced digest through its qualified attestation, or an approved
-  upstream Argo digest through the exact applied contract—never through a broad rule.
+- GKE admits the exact qualified digest without a policy exception.
 - The attestation resolves to the approved note and enabled KMS key version.
 - GitOps reports the intended revision healthy and synchronized.
 - The incident/change record links source, SBOM, provenance, qualification, signer, GitOps, and
@@ -60,7 +57,7 @@ policy decision, key version, timestamps, and relevant audit events to security.
 
 Escalate unverifiable evidence or key/policy drift to security with the exact digest, environment,
 attestor note, KMS key version, policy decision, source/release commits, signer run, timestamps, and
-audit events. Do not attach secret values or grant a new admission exception for diagnosis.
+audit events. Do not attach secret values or grant an admission exception for diagnosis.
 
 ## Prevention
 

@@ -29,7 +29,7 @@ locals {
   # `remove_default_service_account`. Both are controls these units already declared and the
   # module could not accept — see docs/module-interface-contract.md. Cut the tag in the monorepo
   # before applying anything here; the pin is deliberate and must not be relaxed to a branch.
-  module_version = "v0.4.0"
+  module_version = "v0.1.2"
 
   # Enabled in every domain project, in every environment. A service missing in one
   # environment means the first deploy there fails on an API that was never turned on, which

@@ -16,26 +16,13 @@ platform authority boundary.
 Every live unit pins its module to a protected full semantic release tag or a commit SHA. Before a
 PR plan or an exact merged-SHA plan can run, CI checks out the monorepo as **data** and runs
 `scripts/validate-module-interfaces.py`. The preflight verifies that each exact pinned ref contains
-the requested module, every Terragrunt input key is declared by that module, and every module
-variable without a default is supplied by the unit or its `_envcommon` contract. It executes no
+the requested module and that every Terragrunt input key is declared by that module. It executes no
 monorepo code.
 
-The companion `scripts/validate-capacity-contract.py` gate verifies that the accelerator profiles
-selected by every live environment are exactly the profiles exposed by the same monorepo ref's
-Kubernetes GPU contract and Kueue `ResourceFlavor` objects. It also requires matching capacity
-namespaces, held queues, qualification jobs, and training overlays. This prevents a valid Terraform
-GPU pool and a valid Kubernetes tree from silently disagreeing on H100, H200, or B200 scheduling.
-
-A missing module, a scaffold with no variables, an undeclared live input, or an omitted required
-input is a hard failure. The plan then performs Terraform's authoritative type, value, graph, and
-provider validation. This prevents `infrastructure-live` from silently getting ahead of the module
-release it consumes without moving reusable module ownership into this repository.
-
-During a coordinated cross-repository release, callers may point at the monorepo's one explicit
-`status = "planned"` contract version before its protected tag exists. The source-review gate reads
-only callers at that exact candidate version from the local monorepo worktree; all older tags and
-SHAs are still read from their immutable Git trees. This proves source compatibility, not release
-provenance. The exact-ref gate remains fail-closed until the release operator publishes the tag.
+A missing module, a scaffold with no variables, or a live input that is not part of the module's
+published interface is a hard failure. The plan then performs Terraform's authoritative semantic
+validation. This prevents `infrastructure-live` from silently getting ahead of the module release
+it consumes without moving reusable module ownership into this repository.
 
 | Change | Required first action |
 |---|---|
@@ -49,24 +36,13 @@ provenance. The exact-ref gate remains fail-closed until the release operator pu
 Run the interface preflight directly when diagnosing a mismatch:
 
 ```sh
-make validate-module-interfaces MONOREPO=../mindclade-internal-monorepo
-make validate-capacity-contract MONOREPO=../mindclade-internal-monorepo
+python3 scripts/validate-module-interfaces.py
 ```
 
-For the planned v0.4.0 source review, run the separate candidate gate:
+Then run the complete repository contract:
 
 ```sh
-make validate-module-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
-make validate-capacity-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
-nix develop .#ci --command make validate-source-integration MONOREPO=../mindclade-internal-monorepo
-```
-
-A candidate pass must never be presented as an immutable-ref pass and must not authorize a plan or
-apply. After the protected tag is published from the reviewed commit, remove reliance on candidate
-mode by running the exact integration target:
-
-```sh
-nix develop .#ci --command make validate-integration MONOREPO=../mindclade-internal-monorepo
+nix develop .#ci --command make validate
 ```
 
 The preflight is structural; a successful Terraform plan is still the authoritative semantic and

@@ -15,9 +15,9 @@ dependency "folders" {
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
-locals { module_version = "v0.4.0" }
+locals { module_version = "v0.1.1" }
 terraform {
-  source = "${include.root.locals.module_source_base}//project_factory?ref=${local.module_version}"
+  source = "${include.root.locals.module_source_base}//project?ref=${local.module_version}"
 }
 
 inputs = {
@@ -72,18 +72,10 @@ inputs = {
       project_id = "${include.root.locals.prefix}-common-ci"
       name       = "Mindclade CI and supply-chain identities"
       services = [
-        "artifactregistry.googleapis.com",
-        "binaryauthorization.googleapis.com",
-        "compute.googleapis.com",
-        "container.googleapis.com",
-        "containeranalysis.googleapis.com",
-        "containerscanning.googleapis.com",
         "iam.googleapis.com",
-        "iamcredentials.googleapis.com",
         "logging.googleapis.com",
         "monitoring.googleapis.com",
         "secretmanager.googleapis.com",
-        "serviceusage.googleapis.com",
       ]
       lien = true
     }

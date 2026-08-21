@@ -15,16 +15,7 @@ locals {
   account_vars = read_terragrunt_config("${get_repo_root()}/account.hcl")
 
   environment    = local.env_vars.locals.environment
-  module_version = "v0.4.0"
-
-  # Terraform's Binary Authorization resource has no Kubernetes-namespace-rule interface.
-  # Upstream GitOps control-plane images therefore use a reviewed exact-digest contract rather
-  # than a nonmatching cluster rule or a namespace-wide ALWAYS_ALLOW policy.
-  argocd_exception_contract = jsondecode(file("${get_repo_root()}/contracts/argocd-image-exceptions.json"))
-  argocd_exception_images = [
-    for exception in local.argocd_exception_contract.exceptions : exception.image
-    if contains(exception.scope.environments, local.environment)
-  ]
+  module_version = "v0.1.1"
 }
 
 terraform {
@@ -32,12 +23,12 @@ terraform {
 }
 
 inputs = {
-  # Deny by default. Development audits the rule; staging and production enforce it so staging
-  # supplies real admission evidence before production approval.
+  # DENY by default. Every exception is a named namespace below, and each one is a decision
+  # somebody made rather than a gap somebody left.
   default_admission_rule = {
     evaluation_mode  = "REQUIRE_ATTESTATION"
-    enforcement_mode = local.environment == "development" ? "DRYRUN_AUDIT_LOG_ONLY" : "ENFORCED_BLOCK_AND_AUDIT_LOG"
-    # The protected deployment signer verifies independent ARC build and qualification
+    enforcement_mode = local.environment == "production" ? "ENFORCED_BLOCK_AND_AUDIT_LOG" : "DRYRUN_AUDIT_LOG_ONLY"
+    # The protected deployment signer verifies independent Buildkite build and qualification
     # attestations before it issues deployment-attestor. Requiring build-attestor directly in
     # production would let the builder satisfy admission without the independent gate.
     require_attestations_by = local.environment == "production" ? [
@@ -47,19 +38,25 @@ inputs = {
     ]
   }
 
-  # Google's managed system-image policy is enabled separately. User-configured exemptions are
-  # restricted to the reviewed upstream Argo catalog and only exist in staging/production.
+  # Google's own system images. Without this exemption the cluster cannot start kube-proxy
+  # and the node never becomes ready — a failure that looks like a networking problem.
   global_policy_evaluation_mode = "ENABLE"
-  exempt_images                 = local.argocd_exception_images
+
+  exempt_images = [
+    "gcr.io/google-containers/*",
+    "k8s.gcr.io/**",
+    "registry.k8s.io/**",
+    "gke.gcr.io/**",
+  ]
 
   attestors = {
     build-attestor = {
-      description       = "The authoritative ARC builder produced and published this image."
+      description       = "The authoritative Buildkite builder produced and published this image."
       kms_protection    = "HSM"
       kms_key_algorithm = "RSA_SIGN_PKCS1_4096_SHA512"
     }
     qualification-attestor = {
-      description       = "Independent ARC qualification, security, and numerical gates passed."
+      description       = "Independent Buildkite qualification, security, and numerical gates passed."
       kms_protection    = "HSM"
       kms_key_algorithm = "RSA_SIGN_PKCS1_4096_SHA512"
     }

@@ -15,12 +15,10 @@ dependency "platform" {
 dependency "automation" {
   config_path = "../../../1-org/automation-iam"
   mock_outputs = { supply_chain_service_accounts = {
-    canary               = "sa-arc-canary@mc-common-ci.iam.gserviceaccount.com"
-    builder              = "sa-artifact-builder@mc-common-ci.iam.gserviceaccount.com"
-    qualification_reader = "sa-artifact-qual-reader@mc-common-ci.iam.gserviceaccount.com"
-    qualifier            = "sa-artifact-qualifier@mc-common-ci.iam.gserviceaccount.com"
-    signer               = "sa-artifact-signer@mc-common-ci.iam.gserviceaccount.com"
-    promoter             = "sa-artifact-promoter@mc-common-ci.iam.gserviceaccount.com"
+    builder   = "sa-artifact-builder@mc-common-ci.iam.gserviceaccount.com"
+    qualifier = "sa-artifact-qualifier@mc-common-ci.iam.gserviceaccount.com"
+    signer    = "sa-artifact-signer@mc-common-ci.iam.gserviceaccount.com"
+    promoter  = "sa-artifact-promoter@mc-common-ci.iam.gserviceaccount.com"
   } }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }

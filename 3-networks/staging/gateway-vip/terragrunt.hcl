@@ -39,7 +39,7 @@ terraform {
 locals {
   environment = include.root.locals.environment
 
-  module_version = "v0.4.0"
+  module_version = "v0.1.0"
 }
 
 dependency "vpc" {

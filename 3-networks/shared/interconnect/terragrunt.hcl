@@ -30,11 +30,11 @@ include "root" {
 }
 
 terraform {
-  source = "${include.root.locals.module_source_base}//hybrid_connectivity?ref=${local.module_version}"
+  source = "${include.root.locals.module_source_base}//network?ref=${local.module_version}"
 }
 
 locals {
-  module_version = "v0.4.0"
+  module_version = "v0.1.0"
 }
 
 exclude {

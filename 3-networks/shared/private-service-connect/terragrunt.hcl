@@ -24,11 +24,11 @@ include "root" {
 }
 
 terraform {
-  source = "${include.root.locals.module_source_base}//private_connectivity?ref=${local.module_version}"
+  source = "${include.root.locals.module_source_base}//private_service_access?ref=${local.module_version}"
 }
 
 locals {
-  module_version = "v0.4.0"
+  module_version = "v0.1.0"
 }
 
 # One dependency per environment. This unit genuinely spans all three — a peering range is

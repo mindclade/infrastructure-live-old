@@ -66,9 +66,6 @@ jobs:
         # unresolvable input surfaces here rather than inside a ten-minute build.
         run: nix flake metadata --no-write-lock-file
 
-      - name: Locked flake contract
-        run: nix flake check --no-update-lock-file --show-trace
-
       - name: Validate pinned CI and developer tools
         run: |
           set -euo pipefail

@@ -11,12 +11,5 @@ variable "environment" {
   }
 }
 variable "service_accounts" {
-  type = object({
-    canary               = string
-    builder              = string
-    qualification_reader = string
-    qualifier            = string
-    signer               = string
-    promoter             = string
-  })
+  type = object({ builder = string, qualifier = string, signer = string, promoter = string })
 }

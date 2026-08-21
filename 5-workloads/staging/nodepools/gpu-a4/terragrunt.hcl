@@ -2,10 +2,12 @@
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
 
-# B200 A4 High accelerator pool. Tainted, scales to zero, and scheduled through Kueue.
-# The legacy gpu-a4 state path is retained deliberately; renaming it would fork Terragrunt state.
+# A4 GPU node pool. Tainted; scheduled through Kueue.
 #
-# It exists as a separate pool rather than a larger max on the H100 pool because the two are
+# A4: 8× B200 per node. The largest shape in the estate, and the one where every number in
+# ../gpu-a3's cost note roughly doubles.
+#
+# It exists as a separate pool rather than a larger max on the A3 pool because the two are
 # not substitutable: a run compiled and tuned for H100 does not simply go faster on B200, and
 # Kueue needs to be able to admit to one and not the other. A single pool with mixed shapes
 # would let a job land on whichever node happened to be free.
@@ -28,41 +30,66 @@ dependency "gke" {
   config_path = "../../gke"
 
   mock_outputs = {
-    cluster_name     = "mc-staging"
-    cluster_location = "us-central1"
-  }
-  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
-}
-
-dependency "shared" {
-  config_path                             = "../../../../2-environments/staging/shared-projects"
-  mock_outputs                            = { project_ids = { platform = "mc-staging-platform" } }
-  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
-}
-
-dependency "vpc" {
-  config_path                             = "../../../../3-networks/staging/shared-vpc-host"
-  mock_outputs                            = { pods_range_names = { staging = "mock-staging-pods" } }
-  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
-}
-
-dependency "node_identities" {
-  config_path = "../../node-identities"
-  mock_outputs = {
-    service_accounts = { gpu_nodes = { email = "sa-gpu-nodes@mc-staging-platform.iam.gserviceaccount.com" } }
+    cluster_name = "mc-staging"
+    location     = "us-central1"
+    project_id   = "mc-staging-platform"
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
 inputs = {
-  name                       = "gpu-b200"
-  profile                    = "gke-b200-a4-highgpu-8g"
-  zone                       = include.root.locals.account_vars.locals.gpu_zone
-  cluster_name               = dependency.gke.outputs.cluster_name
-  project_id                 = dependency.shared.outputs.project_ids["platform"]
-  node_service_account_email = dependency.node_identities.outputs.service_accounts["gpu_nodes"].email
-  pod_secondary_range_name   = dependency.vpc.outputs.pods_range_names[include.envcommon.locals.environment]
-  capacity_mode              = "QUEUED_PROVISIONING"
-  enable_compact_placement   = false
-  total_max_nodes            = 4
+  name       = "gpu-a4"
+  cluster    = dependency.gke.outputs.cluster_name
+  project_id = dependency.gke.outputs.project_id
+
+  machine_type      = "a4-highgpu-8g"
+  accelerator_type  = "nvidia-b200"
+  accelerator_count = 8
+
+  # Two nodes. Enough to prove a multi-node all-reduce works on this shape, which is the
+  # whole reason the pool exists in staging.
+  max_node_count = 2
+
+  node_locations = [include.root.locals.account_vars.locals.gpu_zone]
+
+  # SPOT IS OFF, against the envcommon default of "spot in non-production".
+  #
+  # The default is right for A3, where a preemption costs a retry. It is wrong here: B200
+  # capacity is scarce enough that a preempted A4 node is frequently not replaceable for
+  # hours, so a spot A4 pool spends most of its life at zero nodes while jobs queue against
+  # capacity that is nominally available. Paying on-demand for two nodes that actually exist
+  # is cheaper than an engineer waiting for capacity that does not.
+  spot = false
+
+  enable_gpudirect = true
+  # A4 exposes more NICs than A3. Under-declaring here does not error — it silently gives
+  # the RDMA path less bandwidth than the hardware has.
+  additional_node_network_configs = 8
+
+  local_ssd_count       = 32
+  ephemeral_storage_ssd = true
+
+  placement_policy = {
+    type = "COMPACT"
+  }
+
+  node_labels = {
+    "mindclade.dev/accelerator"                       = "b200"
+    "mindclade.dev/pool"                              = "gpu-a4"
+    "cloud.google.com/gke-max-shared-clients-per-gpu" = "1"
+  }
+
+  # A second taint on top of the accelerator taint from envcommon. Tolerating "there is a
+  # GPU here" is not sufficient to land on this pool — a workload has to name it, which
+  # means an A3 job cannot drift onto B200 capacity because the A3 pool was busy.
+  taints = concat(
+    include.envcommon.locals.gpu_taints,
+    [
+      {
+        key    = "mindclade.dev/pool"
+        value  = "gpu-a4"
+        effect = "NO_SCHEDULE"
+      },
+    ],
+  )
 }
