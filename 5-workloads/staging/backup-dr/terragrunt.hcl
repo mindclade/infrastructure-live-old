@@ -26,10 +26,9 @@ locals {
   env_vars       = read_terragrunt_config(find_in_parent_folders("env.hcl"))
   env            = local.env_vars.locals.environment
 
-  # A different continent from the primary, matching the state replica in bootstrap. Same
-  # reasoning: the scenario this defends against includes an actor with credentials in the
-  # primary region.
-  replica_region = "us-central1"
+  # The independent U.S. recovery region. The recovery source stays inside the residency
+  # boundary while avoiding the primary region's failure domain.
+  replica_region = include.root.locals.dr_region
 }
 
 dependency "gke" {
@@ -37,19 +36,19 @@ dependency "gke" {
 
   mock_outputs = {
     cluster_name = "mc-staging"
-    location     = "europe-west4"
+    location     = "us-central1"
     project_id   = "mc-staging-platform"
-    cluster_id   = "projects/mc-staging-platform/locations/europe-west4/clusters/mc-staging"
+    cluster_id   = "projects/mc-staging-platform/locations/us-central1/clusters/mc-staging"
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
-dependency "kms" {
-  config_path = "../../../2-environments/staging/kms"
+dependency "kms_dr" {
+  config_path = "../../../2-environments/staging/kms-dr"
 
   mock_outputs = {
     crypto_key_ids = {
-      storage = "projects/mock/locations/europe-west4/keyRings/mock-staging/cryptoKeys/storage"
+      storage = "projects/mock/locations/us-east4/keyRings/mock-staging-dr/cryptoKeys/storage"
     }
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
@@ -93,7 +92,7 @@ inputs = {
     include_volume_data = true
     include_secrets     = true
 
-    encryption_key = dependency.kms.outputs.crypto_key_ids["storage"]
+    encryption_key = dependency.kms_dr.outputs.crypto_key_ids["storage"]
 
     retention = {
       # 30 days of daily backups in staging. The number that matters is not the count but
@@ -110,7 +109,7 @@ inputs = {
   # ---------------------------------------------------------------------------------------
   # Bucket replication
   # ---------------------------------------------------------------------------------------
-  # The data buckets, replicated to the other continent on a schedule. Same shape as the
+  # The data buckets, replicated to the independent U.S. recovery region on a schedule. Same shape as the
   # state replication in bootstrap/modules/state/replication.tf, and for the same reason.
   bucket_replication = {
     for name in ["checkpoints", "lake-raw"] : name => {
@@ -125,7 +124,7 @@ inputs = {
       delete_objects_from_source_after_transfer  = false
       overwrite_objects_already_existing_in_sink = true
 
-      schedule = "0 4 * * *"
+      schedule = "0 * * * *"
 
       # Longer retention on the replica than the source, again matching bootstrap: the
       # replica exists for the case where the primary was tampered with, and that is

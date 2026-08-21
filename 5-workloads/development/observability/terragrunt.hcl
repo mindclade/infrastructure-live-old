@@ -32,7 +32,7 @@ dependency "gke" {
 
   mock_outputs = {
     cluster_name = "mc-development"
-    location     = "europe-west4"
+    location     = "us-central1"
     project_id   = "mc-development-platform"
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]

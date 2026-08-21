@@ -54,9 +54,9 @@ dependency "vpc" {
       production  = "mc-production-net"
     }
     subnet_self_links = {
-      development = { gateway-vip = "projects/mock/regions/europe-west4/subnetworks/gateway-vip" }
-      staging     = { gateway-vip = "projects/mock/regions/europe-west4/subnetworks/gateway-vip" }
-      production  = { gateway-vip = "projects/mock/regions/europe-west4/subnetworks/gateway-vip" }
+      development = { gateway-vip = "projects/mock/regions/us-central1/subnetworks/gateway-vip" }
+      staging     = { gateway-vip = "projects/mock/regions/us-central1/subnetworks/gateway-vip" }
+      production  = { gateway-vip = "projects/mock/regions/us-central1/subnetworks/gateway-vip" }
     }
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]

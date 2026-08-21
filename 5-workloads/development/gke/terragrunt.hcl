@@ -72,7 +72,7 @@ dependency "kms" {
   # makes "revoke development's access to production data" a single IAM change.
   mock_outputs = {
     crypto_key_ids = {
-      gke = "projects/mock/locations/europe-west4/keyRings/mock-development/cryptoKeys/gke"
+      gke = "projects/mock/locations/us-central1/keyRings/mock-development/cryptoKeys/gke"
     }
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]

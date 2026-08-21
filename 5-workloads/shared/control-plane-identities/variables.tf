@@ -31,6 +31,25 @@ variable "github_org" {
   description = "Canonical GitHub organization login."
 }
 
+variable "production_qualification_identity" {
+  description = "Bootstrap-exported exact WIF provider and principal for GitOps production qualification."
+  type = object({
+    workload_identity_provider = string
+    principal                  = string
+    subject                    = string
+    workflow_ref               = string
+  })
+  validation {
+    condition = (
+      can(regex("^projects/[0-9]+/locations/global/workloadIdentityPools/github/providers/gh-production-qualification$", var.production_qualification_identity.workload_identity_provider)) &&
+      can(regex("^principal://iam\\.googleapis\\.com/projects/[0-9]+/locations/global/workloadIdentityPools/github/subject/production-qualification:repo:mindclade@[0-9]+/gitops@[0-9]+:environment:production$", var.production_qualification_identity.principal)) &&
+      can(regex("^repo:mindclade@[0-9]+/gitops@[0-9]+:environment:production$", var.production_qualification_identity.subject)) &&
+      var.production_qualification_identity.workflow_ref == "mindclade/gitops/.github/workflows/production-qualification-evidence.yml@refs/heads/main"
+    )
+    error_message = "Production qualification identity must match the exact protected GitOps workflow contract."
+  }
+}
+
 variable "ci_project_id" {
   type        = string
   description = "Project that owns the private ARC GKE cluster."

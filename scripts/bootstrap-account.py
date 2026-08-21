@@ -134,7 +134,8 @@ def validated_release_identities(
         if identity["workflow_ref"] != caller:
             raise ValueError(f"artifact release identity {capability} has wrong caller")
         expected_job = (
-            f"{github_org}/.github/.github/workflows/{workflow}@refs/tags/v4.0.0"
+            f"{github_org}/.github/.github/workflows/{workflow}@refs/tags/"
+            f"{'v5.0.0' if capability == 'promoter' else 'v4.0.0'}"
         )
         if identity["job_workflow_ref"] != expected_job:
             raise ValueError(
@@ -193,6 +194,42 @@ def validated_dr_evidence_identity(
     }
 
 
+def validated_production_qualification_identity(
+    value: Any, github_pool: str, github_org: str
+) -> dict[str, str]:
+    required = {
+        "workload_identity_provider",
+        "principal",
+        "subject",
+        "workflow_ref",
+    }
+    if not isinstance(value, dict) or set(value) != required:
+        raise ValueError("platform_contract production qualification identity is not exact")
+    subject = value["subject"]
+    if not isinstance(subject, str) or re.fullmatch(
+        rf"repo:{re.escape(github_org)}@[0-9]+/gitops@[0-9]+:environment:production",
+        subject,
+    ) is None:
+        raise ValueError("platform_contract production qualification subject is wrong")
+    expected = {
+        "workload_identity_provider": (
+            f"{github_pool}/providers/gh-production-qualification"
+        ),
+        "principal": (
+            f"principal://iam.googleapis.com/{github_pool}/subject/"
+            f"production-qualification:{subject}"
+        ),
+        "subject": subject,
+        "workflow_ref": (
+            f"{github_org}/gitops/.github/workflows/"
+            "production-qualification-evidence.yml@refs/heads/main"
+        ),
+    }
+    if value != expected:
+        raise ValueError("platform_contract production qualification identity differs")
+    return expected
+
+
 def main() -> int:
     args = parse_args()
     bootstrap = args.bootstrap.resolve()
@@ -237,6 +274,11 @@ def main() -> int:
         dr_evidence_identity = validated_dr_evidence_identity(
             need(github, "dr_evidence_identity", "github"), pool, github_org
         )
+        production_qualification_identity = validated_production_qualification_identity(
+            need(github, "production_qualification_identity", "github"),
+            pool,
+            github_org,
+        )
         values = {
             "GCP_ORG_ID": need(contract, "organization_id", "platform_contract"),
             "BILLING_ACCOUNT": need(contract, "billing_account", "platform_contract"),
@@ -255,6 +297,11 @@ def main() -> int:
             ),
             "DR_EVIDENCE_IDENTITY_JSON": json.dumps(
                 dr_evidence_identity, sort_keys=True, separators=(",", ":")
+            ),
+            "PRODUCTION_QUALIFICATION_IDENTITY_JSON": json.dumps(
+                production_qualification_identity,
+                sort_keys=True,
+                separators=(",", ":"),
             ),
             "WIF_PROVIDER_SIGNER": need(
                 need(github, "artifact_signer", "github"),

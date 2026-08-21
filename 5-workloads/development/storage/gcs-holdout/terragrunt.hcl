@@ -47,14 +47,22 @@ dependency "research" {
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
+dependency "workload_identities" {
+  config_path = "../../workload-identities"
+
+  mock_outputs = {
+    service_accounts = {
+      preprocessing     = { email = "preprocessing@mc-development-research.iam.gserviceaccount.com" }
+      training_h100     = { email = "training-h100@mc-development-research.iam.gserviceaccount.com" }
+      training_b200     = { email = "training-b200@mc-development-research.iam.gserviceaccount.com" }
+      holdout_evaluator = { email = "holdout-evaluator@mc-development-research.iam.gserviceaccount.com" }
+    }
+  }
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+}
+
 locals {
   env = include.envcommon.locals.environment
-
-  # `denied_identities` USED TO BE HERE, built from dependency.research.outputs. Terragrunt
-  # evaluates `locals` before `dependency`, so `dependency` is not in scope in this block —
-  # it failed with "you're referencing something else (\"dependency\" is not defined)" and
-  # took `local.denied_identities` down with it. The list is built inline at its single use
-  # site below, where dependency outputs are resolved.
 }
 
 inputs = {
@@ -80,6 +88,14 @@ inputs = {
     }
   }
 
+  bucket_iam_members = {
+    holdout_evaluator = {
+      bucket_key = "holdout"
+      role       = "roles/storage.objectViewer"
+      member     = "serviceAccount:${dependency.workload_identities.outputs.service_accounts["holdout_evaluator"].email}"
+    }
+  }
+
   # ---------------------------------------------------------------------------------------
   # The deny policy
   # ---------------------------------------------------------------------------------------
@@ -102,20 +118,13 @@ inputs = {
           # Adding an identity here is safe. Removing one is the change to look at twice: the
           # failure mode of a missing entry is not an error, it is a benchmark that quietly
           # stops meaning anything.
-          # Built from the project id rather than read from an output. The research unit
-          # creates a PROJECT; it does not create service accounts, and the
-          # `workload_identities` output this used to read never existed on the `project`
-          # module — it resolved only because mock outputs supplied it and nothing ever
-          # planned. See docs/module-interface-contract.md.
-          #
-          # A deny policy takes a principal identifier, not a resource reference, so naming
-          # the accounts by their canonical email is sufficient and — unlike the phantom
-          # output — actually correct. The accounts themselves are created by a
-          # `workload-identity` unit that does not exist yet; when it does, the names below
-          # are the contract it has to satisfy.
+          # Consume the dedicated workload-identity unit's real service-account outputs. This
+          # dependency is both a typed identity contract and an apply-order edge: the deny can
+          # never be planned against a fictional account name inferred from the project id.
           denied_principals = [
-            "principal://iam.googleapis.com/projects/-/serviceAccounts/training@${dependency.research.outputs.project_id}.iam.gserviceaccount.com",
-            "principal://iam.googleapis.com/projects/-/serviceAccounts/preprocessing@${dependency.research.outputs.project_id}.iam.gserviceaccount.com",
+            "principal://iam.googleapis.com/projects/-/serviceAccounts/${dependency.workload_identities.outputs.service_accounts["preprocessing"].email}",
+            "principal://iam.googleapis.com/projects/-/serviceAccounts/${dependency.workload_identities.outputs.service_accounts["training_h100"].email}",
+            "principal://iam.googleapis.com/projects/-/serviceAccounts/${dependency.workload_identities.outputs.service_accounts["training_b200"].email}",
           ]
 
           denied_permissions = [

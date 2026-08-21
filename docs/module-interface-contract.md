@@ -26,6 +26,12 @@ Kubernetes GPU contract and Kueue `ResourceFlavor` objects. It also requires mat
 namespaces, held queues, qualification jobs, and training overlays. This prevents a valid Terraform
 GPU pool and a valid Kubernetes tree from silently disagreeing on H100, H200, or B200 scheduling.
 
+The `scripts/validate-workload-identity-contract.py` gate applies the same immutable-ref rule to
+GKE identity. It requires every environment's typed KSA-to-GSA binding, the exact environment
+overlay annotation, the three holdout deny principals, and the evaluator's additive bucket-level
+object-viewer member to describe the same identities. Candidate mode
+checks the planned worktree only and cannot substitute for the protected module/Kubernetes tag.
+
 A missing module, a scaffold with no variables, an undeclared live input, or an omitted required
 input is a hard failure. The plan then performs Terraform's authoritative type, value, graph, and
 provider validation. This prevents `infrastructure-live` from silently getting ahead of the module
@@ -51,6 +57,7 @@ Run the interface preflight directly when diagnosing a mismatch:
 ```sh
 make validate-module-interfaces MONOREPO=../mindclade-internal-monorepo
 make validate-capacity-contract MONOREPO=../mindclade-internal-monorepo
+make validate-workload-identity-contract MONOREPO=../mindclade-internal-monorepo
 ```
 
 For the planned v0.4.0 source review, run the separate candidate gate:
@@ -58,6 +65,7 @@ For the planned v0.4.0 source review, run the separate candidate gate:
 ```sh
 make validate-module-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
 make validate-capacity-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
+make validate-workload-identity-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
 nix develop .#ci --command make validate-source-integration MONOREPO=../mindclade-internal-monorepo
 ```
 

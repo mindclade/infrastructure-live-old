@@ -37,6 +37,18 @@ resource "google_service_account" "gitops_verifier" {
   description  = "Read-only verification of Artifact Registry images and Binary Authorization attestations."
 }
 
+resource "google_service_account" "production_qualification" {
+  for_each = {
+    reader = "Reads the dedicated GitHub App key for exact-source qualification."
+    writer = "Publishes immutable production qualification evidence to the protected archive."
+  }
+
+  project      = var.security_project_id
+  account_id   = "sa-prod-qual-${each.key}"
+  display_name = "Production qualification ${each.key}"
+  description  = each.value
+}
+
 resource "google_service_account_iam_member" "gitops_wif" {
   for_each = {
     render   = google_service_account.gitops_render.name
@@ -46,6 +58,14 @@ resource "google_service_account_iam_member" "gitops_wif" {
   service_account_id = each.value
   role               = "roles/iam.workloadIdentityUser"
   member             = local.gitops_workflow_principals[each.key]
+}
+
+resource "google_service_account_iam_member" "production_qualification_wif" {
+  for_each = google_service_account.production_qualification
+
+  service_account_id = each.value.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = var.production_qualification_identity.principal
 }
 
 resource "google_project_service_identity" "secret_manager" {
@@ -94,6 +114,38 @@ resource "google_secret_manager_secret_iam_member" "gitops_render" {
   secret_id = google_secret_manager_secret.github_app_render_pem.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.gitops_render.email}"
+}
+
+resource "google_secret_manager_secret" "github_app_production_qualification_pem" {
+  project   = var.security_project_id
+  secret_id = "github-app-production-qualification-reader-pem"
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+        customer_managed_encryption {
+          kms_key_name = var.secret_kms_key_id
+        }
+      }
+    }
+  }
+
+  labels = {
+    managed_by  = "terraform"
+    repository  = "infrastructure-live"
+    purpose     = "production-qualification-source-read"
+    criticality = "critical"
+  }
+
+  depends_on = [google_kms_crypto_key_iam_member.secret_manager]
+}
+
+resource "google_secret_manager_secret_iam_member" "production_qualification_reader" {
+  project   = var.security_project_id
+  secret_id = google_secret_manager_secret.github_app_production_qualification_pem.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.production_qualification["reader"].email}"
 }
 
 resource "google_secret_manager_secret" "github_app_arc_pem" {

@@ -72,6 +72,14 @@ locals {
     signer               = "reusable-binauthz-sign.yml"
     promoter             = "reusable-gitops-promote.yml"
   }
+  artifact_release_versions = {
+    canary               = "v4.0.0"
+    builder              = "v4.0.0"
+    qualification-reader = "v4.0.0"
+    qualifier            = "v4.0.0"
+    signer               = "v4.0.0"
+    promoter             = "v5.0.0"
+  }
   artifact_release_subject_suffixes = {
     canary               = "ref:refs/heads/main"
     builder              = "ref:refs/heads/main"
@@ -120,9 +128,9 @@ check "artifact_release_trust_contract" {
       )) &&
       identity.principal == "principal://iam.googleapis.com/${var.github_wif_pool_name}/subject/${capability == "signer" ? "" : "arc-${capability}:"}${identity.subject}" &&
       identity.workflow_ref == "${var.github_org}/mindclade-internal-monorepo/.github/workflows/release.yml@refs/heads/main" &&
-      identity.job_workflow_ref == "${var.github_org}/.github/.github/workflows/${local.artifact_release_workflows[capability]}@refs/tags/v4.0.0"
+      identity.job_workflow_ref == "${var.github_org}/.github/.github/workflows/${local.artifact_release_workflows[capability]}@refs/tags/${local.artifact_release_versions[capability]}"
     ])
-    error_message = "ARC release trust must match bootstrap's exact capability inventory, trusted-main caller, and immutable v4 reusable workflows."
+    error_message = "ARC release trust must match bootstrap's exact capability inventory, trusted-main caller, v4 execution workflows, and v5 promoter."
   }
 }
 

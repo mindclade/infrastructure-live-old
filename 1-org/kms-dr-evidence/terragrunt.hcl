@@ -33,9 +33,16 @@ inputs = {
       rotation_period_seconds = 7776000
       protection_level        = "HSM"
     }
+    production-qualification-evidence = {
+      rotation_period_seconds = 7776000
+      protection_level        = "HSM"
+    }
   }
   encrypter_decrypters = {
     dr-evidence = [
+      "serviceAccount:service-${dependency.common_projects.outputs.project_numbers["security"]}@gs-project-accounts.iam.gserviceaccount.com",
+    ]
+    production-qualification-evidence = [
       "serviceAccount:service-${dependency.common_projects.outputs.project_numbers["security"]}@gs-project-accounts.iam.gserviceaccount.com",
     ]
   }

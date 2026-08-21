@@ -93,6 +93,8 @@ for required_make_contract in (
     'python3 scripts/validate-module-interfaces.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"',
     'python3 scripts/validate-capacity-contract.py --monorepo "$(MONOREPO)"',
     'python3 scripts/validate-capacity-contract.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"',
+    'python3 scripts/validate-workload-identity-contract.py --monorepo "$(MONOREPO)"',
+    'python3 scripts/validate-workload-identity-contract.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"',
 ):
     if required_make_contract not in makefile:
         error(
@@ -299,7 +301,10 @@ elif REPOSITORY == "infrastructure-live":
         "gh-arc-qualification-reader",
         'capability == "signer" ? "" : "arc-${capability}:"',
         "reusable-binauthz-sign.yml",
-        "@refs/tags/v4.0.0",
+        "artifact_release_versions = {",
+        '"v4.0.0"',
+        "reusable-gitops-promote.yml",
+        "v5.0.0",
     ):
         if trust_value not in automation_main:
             error(f"ARC artifact trust check omits: {trust_value}")
@@ -322,7 +327,14 @@ elif REPOSITORY == "infrastructure-live":
     identity_handoff_docs = (ROOT / "docs/automation-identity-handoff.md").read_text(
         "utf-8", errors="ignore"
     )
-    for output_name in ("SA_GITOPS_RENDER", "SA_GITOPS_VERIFIER"):
+    for output_name in (
+        "SA_GITOPS_RENDER",
+        "SA_GITOPS_VERIFIER",
+        "SA_PRODUCTION_QUALIFICATION_READER",
+        "SA_PRODUCTION_QUALIFICATION_WRITER",
+        "WIF_PROVIDER_PRODUCTION_QUALIFICATION",
+        "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET",
+    ):
         if output_name not in control_plane_outputs:
             error(f"GitOps control-plane identity output omits: {output_name}")
         if output_name not in identity_handoff_docs:
@@ -348,10 +360,14 @@ elif REPOSITORY == "infrastructure-live":
         for required_handoff_gate in (
             "artifact_release_identity_contract",
             "ARTIFACT_RELEASE_IDENTITIES_JSON",
+            "PRODUCTION_QUALIFICATION_IDENTITY_JSON",
             "SA_ARC_CANARY",
             "SA_ARTIFACT_QUALIFICATION_READER",
             "SA_ARTIFACT_PROMOTER",
             "github_config_identity_handoff",
+            "production_qualification_identity_contract",
+            "qualification_evidence",
+            "PRODUCTION_QUALIFICATION_BUCKET",
             '"project_id"',
             '"attestor_names"',
             '"attestor_key_versions"',
@@ -668,6 +684,7 @@ elif REPOSITORY == "infrastructure-live":
         "iam.disableServiceAccountKeyUpload",
         "iam.automaticIamGrantsForDefaultServiceAccounts",
         "iam.allowedPolicyMemberDomains",
+        "gcp.resourceLocations",
         "storage.uniformBucketLevelAccess",
         "storage.publicAccessPrevention",
         "compute.vmExternalIpAccess",
@@ -686,6 +703,8 @@ elif REPOSITORY == "infrastructure-live":
                 "organization policy uses a legacy equivalent instead of the live managed "
                 f"constraint: {legacy_constraint}"
             )
+    if 'allowed_values = ["in:us-locations"]' not in org_policy:
+        error("organization policy does not enforce the strict U.S. location value group")
     policy_module = (ROOT / "1-org/org-policies/module/main.tf").read_text(
         "utf-8", errors="ignore"
     )
@@ -779,6 +798,27 @@ elif REPOSITORY == "infrastructure-live":
     account_contract = (ROOT / "account.hcl").read_text("utf-8", errors="ignore")
     if 'get_env("GPU_ZONE"' not in account_contract:
         error("account contract lacks an explicit GPU/Parallelstore zone")
+    for exact_residency_setting in (
+        'get_env("RESIDENCY_PROFILE", "us-only-v1")',
+        'get_env("PRIMARY_REGION", "us-central1")',
+        'get_env("GPU_ZONE", "${local.region}-b")',
+        'get_env("DR_REGION", "us-east4")',
+        'get_env("DR_GPU_ZONE", "${local.dr_region}-b")',
+        'get_env("STATE_LOCATION", "US")',
+    ):
+        if exact_residency_setting not in account_contract:
+            error(f"account contract omits U.S. residency setting: {exact_residency_setting}")
+
+    non_us_region = re.compile(
+        r'(?i)\b(?:asia|europe|australia|southamerica|northamerica|me|africa)-[a-z0-9-]+\b'
+    )
+    for hcl_path in ROOT.rglob("*.hcl"):
+        match = non_us_region.search(hcl_path.read_text("utf-8", errors="ignore"))
+        if match:
+            error(
+                f"non-U.S. deployable location in {hcl_path.relative_to(ROOT)}: "
+                f"{match.group(0)}"
+            )
     gpu_profiles = {
         "gpu-a3": "gke-h100-a3-megagpu-8g",
         # The directory name is a retained Terragrunt state address; the selected
@@ -808,6 +848,70 @@ elif REPOSITORY == "infrastructure-live":
                 r'enable_compact_placement\s*=\s*false', gpu
             ):
                 error(f"{env}/{pool} queued GPU capacity must disable compact placement")
+            if not re.search(r"(?m)^\s*total_max_nodes\s*=\s*1\s*$", gpu):
+                error(f"{env}/{pool} must remain bounded to one eight-GPU node")
+
+        kms_dr = (
+            ROOT / f"2-environments/{env}/kms-dr/terragrunt.hcl"
+        ).read_text("utf-8", errors="ignore")
+        for required in (
+            "location      = include.root.locals.dr_region",
+            'artifacts = { rotation_period_seconds = 7776000, protection_level = "HSM" }',
+            'secrets   = { rotation_period_seconds = 7776000, protection_level = "HSM" }',
+            'sql       = { rotation_period_seconds = 7776000, protection_level = "HSM" }',
+            'storage   = { rotation_period_seconds = 7776000, protection_level = "HSM" }',
+        ):
+            if required not in kms_dr:
+                error(f"{env} recovery-region KMS contract omits: {required}")
+
+        registry_dr = (
+            ROOT / f"5-workloads/{env}/artifact-registry-dr/terragrunt.hcl"
+        ).read_text("utf-8", errors="ignore")
+        for required in (
+            "location                 = include.root.locals.dr_region",
+            'repository_id            = "releases"',
+            'dependency.kms_dr.outputs.crypto_key_ids["artifacts"]',
+            "cleanup_policy_dry_run   = true",
+        ):
+            if required not in registry_dr:
+                error(f"{env} recovery registry contract omits: {required}")
+
+        backup_dr = (
+            ROOT / f"5-workloads/{env}/backup-dr/terragrunt.hcl"
+        ).read_text("utf-8", errors="ignore")
+        for required in (
+            "replica_region = include.root.locals.dr_region",
+            'config_path = "../../../2-environments/' + env + '/kms-dr"',
+            'encryption_key = dependency.kms_dr.outputs.crypto_key_ids["storage"]',
+            'schedule = "0 * * * *"',
+        ):
+            if required not in backup_dr:
+                error(f"{env} U.S. backup contract omits: {required}")
+        if env == "production" and 'cron_schedule = "0 * * * *"' not in backup_dr:
+            error("production GKE backup does not meet the hourly recovery contract")
+
+        cloud_sql = (
+            ROOT / f"5-workloads/{env}/cloud-sql/terragrunt.hcl"
+        ).read_text("utf-8", errors="ignore")
+        for required in (
+            "region       = include.root.locals.dr_region",
+            'kms_key_name = dependency.kms_dr.outputs.crypto_key_ids["sql"]',
+            'private_network              = dependency.vpc.outputs.network_self_link[local.env]',
+            'allocated_ip_range           = dependency.psa.outputs.allocated_ip_ranges[local.env]',
+        ):
+            if required not in cloud_sql:
+                error(f"{env} U.S. Cloud SQL recovery contract omits: {required}")
+
+        secrets = (
+            ROOT / f"5-workloads/{env}/secret-manager/terragrunt.hcl"
+        ).read_text("utf-8", errors="ignore")
+        for required in (
+            "location     = include.root.locals.region",
+            "location     = include.root.locals.dr_region",
+            'kms_key_name = dependency.kms_dr.outputs.crypto_key_ids["secrets"]',
+        ):
+            if required not in secrets:
+                error(f"{env} U.S. Secret Manager replication contract omits: {required}")
 
     gpu_defaults = (ROOT / "_envcommon/gpu-nodepool.hcl").read_text(
         "utf-8", errors="ignore"

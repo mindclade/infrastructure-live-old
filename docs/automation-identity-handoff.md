@@ -40,11 +40,18 @@ The foundation identity remains the only automation principal for:
 ### GitOps identity re-export
 
 `5-workloads/shared/control-plane-identities` is authoritative for both GitOps workflow
-identities. Its `github_config_identity_handoff` output exposes their exact emails as:
+identities and for the isolated production-qualification reader/writer pair. Its applied
+outputs expose the exact non-secret handoff values as:
 
 ```text
 SA_GITOPS_RENDER
 SA_GITOPS_VERIFIER
+WIF_PROVIDER_PRODUCTION_QUALIFICATION
+SA_PRODUCTION_QUALIFICATION_READER
+SA_PRODUCTION_QUALIFICATION_WRITER
+PRODUCTION_QUALIFICATION_PROJECT
+PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET
+PRODUCTION_QUALIFICATION_BUCKET
 ```
 
 These values are outputs, not naming conventions. `github-config` must not construct or
@@ -59,8 +66,10 @@ python3 scripts/export-applied-control-plane-handoff.py \
 ```
 
 The destination must be outside the repository. The generated file is mode 0600 and carries
-all six ARC service accounts plus the exact GitOps, attestor, project, and immutable key-version
-values. Feed that file to
+all six ARC service accounts plus the exact GitOps, qualification, evidence-bucket, attestor,
+project, and immutable key-version values. It compares the applied qualification WIF contract
+byte-for-byte with `PRODUCTION_QUALIFICATION_IDENTITY_JSON` from bootstrap before exporting.
+Feed that file to
 the `github-config` exporter, review its resulting plan, then reapply `github-config` so the
 GitOps and monorepo repositories receive the authoritative values. Repeat the export and
 reviewed governance apply after any identity, attestor, or key-version replacement. Until this

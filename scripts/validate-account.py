@@ -26,6 +26,7 @@ REQUIRED = {
     "GITHUB_WIF_POOL_NAME": r"^projects/[0-9]+/locations/global/workloadIdentityPools/[a-z0-9-]+$",
     "ARTIFACT_RELEASE_IDENTITIES_JSON": r"^\{.+\}$",
     "DR_EVIDENCE_IDENTITY_JSON": r"^\{.+\}$",
+    "PRODUCTION_QUALIFICATION_IDENTITY_JSON": r"^\{.+\}$",
     "TFSTATE_BUCKET_DEVELOPMENT": r"^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$",
     "TFSTATE_BUCKET_STAGING": r"^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$",
     "TFSTATE_BUCKET_PRODUCTION": r"^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$",
@@ -37,9 +38,12 @@ REQUIRED = {
 }
 OPTIONAL = {
     "RESOURCE_PREFIX": "mc",
+    "RESIDENCY_PROFILE": "us-only-v1",
     "PRIMARY_REGION": "us-central1",
     "STATE_LOCATION": "US",
     "GPU_ZONE": "us-central1-b",
+    "DR_REGION": "us-east4",
+    "DR_GPU_ZONE": "us-east4-b",
     "DOMAIN": "mindclade.com",
     "MONOREPO_ORG": "mindclade",
     "ORG_POLICY_ACTIVATION_PHASE": "baseline",
@@ -92,9 +96,10 @@ def release_identity_errors(payload: str, pool: str, organization: str) -> list[
         ):
             errors.append(f"artifact release caller differs: {capability}")
         job = identity.get("job_workflow_ref")
+        expected_version = "v5.0.0" if capability == "promoter" else "v4.0.0"
         if not isinstance(job, str) or not job.startswith(
             f"{organization}/.github/.github/workflows/reusable-"
-        ) or not job.endswith("@refs/tags/v4.0.0"):
+        ) or not job.endswith(f"@refs/tags/{expected_version}"):
             errors.append(f"artifact release workflow differs: {capability}")
     return errors
 
@@ -148,6 +153,46 @@ def dr_evidence_identity_errors(
     return errors
 
 
+def production_qualification_identity_errors(
+    payload: str, pool: str, organization: str
+) -> list[str]:
+    try:
+        identity = json.loads(payload)
+    except json.JSONDecodeError:
+        return ["PRODUCTION_QUALIFICATION_IDENTITY_JSON is not valid JSON"]
+    required = {
+        "workload_identity_provider",
+        "principal",
+        "subject",
+        "workflow_ref",
+    }
+    if not isinstance(identity, dict) or set(identity) != required:
+        return ["production qualification identity contract is not exact"]
+    subject_pattern = (
+        rf"repo:{re.escape(organization)}@[0-9]+/gitops@[0-9]+:"
+        r"environment:production"
+    )
+    subject = identity.get("subject")
+    if not isinstance(subject, str) or re.fullmatch(subject_pattern, subject) is None:
+        return ["production qualification subject differs"]
+    errors: list[str] = []
+    if identity.get("workload_identity_provider") != (
+        f"{pool}/providers/gh-production-qualification"
+    ):
+        errors.append("production qualification provider differs")
+    if identity.get("principal") != (
+        f"principal://iam.googleapis.com/{pool}/subject/"
+        f"production-qualification:{subject}"
+    ):
+        errors.append("production qualification principal differs")
+    if identity.get("workflow_ref") != (
+        f"{organization}/gitops/.github/workflows/"
+        "production-qualification-evidence.yml@refs/heads/main"
+    ):
+        errors.append("production qualification workflow differs")
+    return errors
+
+
 def source_errors() -> list[str]:
     text = SOURCE.read_text(encoding="utf-8")
     errors = []
@@ -175,12 +220,17 @@ def runtime_values() -> tuple[dict[str, str], list[str]]:
             errors.append(f"invalid or missing runtime account field: {name}")
     if not re.fullmatch(r"^[a-z][a-z0-9]{1,3}$", values["RESOURCE_PREFIX"]):
         errors.append("invalid RESOURCE_PREFIX")
-    if not re.fullmatch(r"^[a-z]+-[a-z0-9]+[0-9]$", values["PRIMARY_REGION"]):
-        errors.append("invalid PRIMARY_REGION")
-    if not re.fullmatch(r"^[a-z]+-[a-z0-9]+[0-9]-[a-z]$", values["GPU_ZONE"]):
-        errors.append("invalid GPU_ZONE")
-    if not values["GPU_ZONE"].startswith(values["PRIMARY_REGION"] + "-"):
-        errors.append("GPU_ZONE must belong to PRIMARY_REGION")
+    exact_us_contract = {
+        "RESIDENCY_PROFILE": "us-only-v1",
+        "PRIMARY_REGION": "us-central1",
+        "GPU_ZONE": "us-central1-b",
+        "DR_REGION": "us-east4",
+        "DR_GPU_ZONE": "us-east4-b",
+        "STATE_LOCATION": "US",
+    }
+    for name, expected in exact_us_contract.items():
+        if values[name] != expected:
+            errors.append(f"{name} must be {expected} for us-only-v1")
     if not re.fullmatch(r"^[A-Za-z0-9.-]+$", values["DOMAIN"]):
         errors.append("invalid DOMAIN")
     if not re.fullmatch(r"^[A-Za-z0-9_.-]+$", values["MONOREPO_ORG"]):
@@ -197,6 +247,13 @@ def runtime_values() -> tuple[dict[str, str], list[str]]:
     errors.extend(
         dr_evidence_identity_errors(
             values["DR_EVIDENCE_IDENTITY_JSON"],
+            values["GITHUB_WIF_POOL_NAME"],
+            values["MONOREPO_ORG"],
+        )
+    )
+    errors.extend(
+        production_qualification_identity_errors(
+            values["PRODUCTION_QUALIFICATION_IDENTITY_JSON"],
             values["GITHUB_WIF_POOL_NAME"],
             values["MONOREPO_ORG"],
         )
