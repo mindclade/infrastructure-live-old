@@ -39,6 +39,9 @@ locals {
   production_qualification_identity = jsondecode(
     coalesce(get_env("PRODUCTION_QUALIFICATION_IDENTITY_JSON", ""), "{}"),
   )
+  bootstrap_account_handoff = jsondecode(
+    coalesce(get_env("BOOTSTRAP_ACCOUNT_HANDOFF_JSON", ""), "{}"),
+  )
 
   infrastructure_live_service_accounts = {
     plan        = get_env("SA_TF_LIVE_PLAN")

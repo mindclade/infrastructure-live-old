@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindclade.internal/infrastructure/bootstrap-account-handoff.schema.json",
+  "title": "Applied bootstrap account handoff",
+  "description": "Non-secret exact values exported from the applied bootstrap platform_contract before infrastructure-live may plan or apply.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bootstrap_contract_version",
+    "bootstrap_source_commit",
+    "platform_contract_sha256",
+    "state_location",
+    "state_buckets",
+    "service_accounts"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "bootstrap_contract_version": {"const": "1.5.0"},
+    "bootstrap_source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "platform_contract_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "state_location": {"const": "US"},
+    "state_buckets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["development", "staging", "production"],
+      "properties": {
+        "development": {"$ref": "#/$defs/bucket"},
+        "staging": {"$ref": "#/$defs/bucket"},
+        "production": {"$ref": "#/$defs/bucket"}
+      }
+    },
+    "service_accounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan", "foundation", "development", "staging", "production"],
+      "properties": {
+        "plan": {"$ref": "#/$defs/serviceAccount"},
+        "foundation": {"$ref": "#/$defs/serviceAccount"},
+        "development": {"$ref": "#/$defs/serviceAccount"},
+        "staging": {"$ref": "#/$defs/serviceAccount"},
+        "production": {"$ref": "#/$defs/serviceAccount"}
+      }
+    }
+  },
+  "$defs": {
+    "bucket": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$"
+    },
+    "serviceAccount": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+@[a-z0-9-]+\\.iam\\.gserviceaccount\\.com$"
+    }
+  }
+}

@@ -118,10 +118,16 @@ reviewed governance apply after any identity, attestor, or key-version replaceme
 handoff has completed, GitOps render/provenance and production artifact signing are not
 activation-ready.
 
-`account.hcl` is a stable `get_env()` contract. In CI, `github-config` exports verified
-bootstrap outputs as repository variables; local operators generate the ignored `.account.env` file
-before any plan or apply. Saved apply artifacts contain the exact generated account contract;
-apply fails if those inputs change after planning.
+`account.hcl` is a stable `get_env()` contract. The bootstrap exporter requires a clean checkout,
+records its full source commit, hashes the complete applied `platform_contract`, and emits the
+versioned `BOOTSTRAP_ACCOUNT_HANDOFF_JSON` record into the ignored `.account.env` file. Protected
+automation must publish that exact non-secret JSON as a repository variable alongside the
+individual state-bucket and service-account variables. Runtime validation rejects any duplicate
+whose value differs from the applied-output record, including `TFSTATE_BUCKET_PRODUCTION` and
+`SA_TF_LIVE_APPLY_PRODUCTION`; malformed records produce stable redacted error codes. Saved apply
+artifacts contain the exact generated account contract, and apply fails if those inputs change
+after planning. This source contract does not claim that the repository variable has been
+published or that connected bootstrap output has been reviewed.
 
 ## Live-only implementation exception
 
