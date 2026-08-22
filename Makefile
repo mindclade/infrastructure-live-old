@@ -3,9 +3,10 @@ SHELL := /usr/bin/env bash
 MONOREPO ?= ../mindclade-internal-monorepo
 GITOPS ?= ../gitops
 CANDIDATE_MODULE_VERSION ?= v0.4.0
+CANDIDATE_MODULE_REF ?=
 
-.PHONY: validate validate-integration validate-source-integration validate-module-interfaces validate-module-candidate validate-capacity-contract validate-capacity-candidate validate-workload-identity-contract validate-workload-identity-candidate validate-gitops-integration validate-argocd-image-exceptions validate-dns-portfolio validate-security-txt validate-repository-home test format plan-development plan-staging plan-production
-validate: validate-production-contract validate-repository-home validate-argocd-image-exceptions validate-dns-portfolio validate-security-txt test
+.PHONY: validate validate-integration validate-source-integration validate-release-candidate validate-module-interfaces validate-module-candidate validate-module-worktree-candidate validate-capacity-contract validate-capacity-candidate validate-workload-identity-contract validate-workload-identity-candidate validate-gitops-integration validate-argocd-image-exceptions validate-dns-portfolio validate-dns-governance validate-security-txt validate-repository-home test format plan-development plan-staging plan-production
+validate: validate-production-contract validate-repository-home validate-argocd-image-exceptions validate-dns-portfolio validate-dns-governance validate-security-txt test
 	python3 scripts/verify-provider-locks.py
 	./scripts/validate-live-tree.py
 	./scripts/validate-dependency-order.py
@@ -15,10 +16,16 @@ validate-integration: validate validate-module-interfaces validate-capacity-cont
 
 validate-source-integration: validate validate-module-candidate validate-capacity-candidate validate-workload-identity-candidate
 
+validate-release-candidate: validate validate-module-candidate validate-capacity-candidate validate-workload-identity-candidate
+
 validate-module-interfaces:
 	python3 scripts/validate-module-interfaces.py --monorepo "$(MONOREPO)"
 
 validate-module-candidate:
+	@test -n "$(CANDIDATE_MODULE_REF)" || (echo "CANDIDATE_MODULE_REF must be an exact 40-character commit SHA" >&2; exit 2)
+	python3 scripts/validate-module-release-candidate.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)" --candidate-ref "$(CANDIDATE_MODULE_REF)"
+
+validate-module-worktree-candidate:
 	python3 scripts/validate-module-interfaces.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"
 
 validate-capacity-contract:
@@ -44,6 +51,9 @@ test:
 
 validate-dns-portfolio:
 	python3 scripts/validate_dns_portfolio.py
+
+validate-dns-governance:
+	python3 scripts/validate_dns_governance.py
 
 validate-security-txt:
 	python3 scripts/validate_security_txt.py

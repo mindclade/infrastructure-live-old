@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mindclade.com/contracts/dns-cutover-packet.schema.json",
+  "title": "DNS cutover packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "domain", "change_id", "generated_at", "window", "ttl_lowered_at", "readiness", "evidence_manifest_sha256", "public_record_exceptions", "incumbent_snapshot", "target_snapshot", "preflight_commands", "cutover_steps", "rollback_steps"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"enum": ["DRAFT", "READY"]},
+    "domain": {"type": "string", "format": "hostname"},
+    "change_id": {"type": "string", "pattern": "^CHG-[A-Za-z0-9._-]+$"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"type": "string", "format": "date-time"},
+        "end": {"type": "string", "format": "date-time"}
+      }
+    },
+    "ttl_lowered_at": {"type": "string", "format": "date-time"},
+    "readiness": {"type": "object"},
+    "evidence_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "public_record_exceptions": {"type": "array"},
+    "incumbent_snapshot": {"$ref": "#/$defs/snapshot"},
+    "target_snapshot": {"$ref": "#/$defs/snapshot"},
+    "preflight_commands": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "cutover_steps": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "rollback_steps": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "content"],
+      "properties": {
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "content": {"type": "object"}
+      }
+    }
+  }
+}
