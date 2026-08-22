@@ -134,8 +134,7 @@ def validated_release_identities(
         if identity["workflow_ref"] != caller:
             raise ValueError(f"artifact release identity {capability} has wrong caller")
         expected_job = (
-            f"{github_org}/.github/.github/workflows/{workflow}@refs/tags/"
-                "v5.0.0"
+            f"{github_org}/.github/.github/workflows/{workflow}@refs/tags/v5.0.0"
         )
         if identity["job_workflow_ref"] != expected_job:
             raise ValueError(

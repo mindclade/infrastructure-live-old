@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
+import hashlib
 import html
 import re
 import sys
@@ -26,6 +28,12 @@ REQUIRED_HEADINGS = (
     "## Change path",
     "## Documentation and support",
     "## Security",
+)
+READER_SUCCESS_LABELS = (
+    "Prerequisite:",
+    "**Success means:**",
+    "**If it fails:**",
+    "**Safety boundary:**",
 )
 EXTRA_BADGES = {
     "bootstrap": (("trust", "Ring 0"),),
@@ -47,6 +55,338 @@ VERSION_SOURCES = {
     "Kubernetes": (".kubernetes-version", re.compile(r"Kubernetes\s+v?(\d+\.\d+(?:\.\d+)?)", re.I)),
 }
 PALETTE = {"#201C24", "#B5673F", "#D68A61", "#FBFAF7", "#F2EFE8", "#423D48", "#5B5660", "#E2DED4"}
+
+COMMON_DOCUMENT_MARKERS = {
+    "CONTRIBUTING.md": "<!-- mindclade-doc: contributing@1 -->",
+    "SECURITY.md": "<!-- mindclade-doc: security@1 -->",
+    "SUPPORT.md": "<!-- mindclade-doc: support@1 -->",
+    "CODE_OF_CONDUCT.md": "<!-- mindclade-doc: code-of-conduct@1 -->",
+    "GOVERNANCE.md": "<!-- mindclade-doc: governance@1 -->",
+    "CHANGELOG.md": "<!-- mindclade-doc: changelog@1 -->",
+    "LEGAL.md": "<!-- mindclade-doc: legal-and-reliance@1 -->",
+}
+CANONICAL_DOCUMENT_DIGESTS = {
+    "LICENSE": "a3fe40dac91dfc0c71eb8dc8ceb1c7b606ab8bc5fe26e09b8e53f6b9f8c8d57f",
+    "CODE_OF_CONDUCT.md": "676edfffba55165ce25919f1a2d2a0b336e13a331bb4d5c47c8dcb20ca9872a9",
+    "LEGAL.md": "65e8f593ad0927cdc5b6c1daceeae8ed14d0ac73f85ff1fc40db046387f01231",
+}
+SOURCE_HEADER_PATH = ".github/MINDCLADE_PROPRIETARY_SOURCE_HEADER.txt"
+SOURCE_HEADER_DIGEST = "0f2b024dbf454c08d57b663d8ad8e469215984a7007ef66bd37d651e046e0029"
+
+LEGAL_CLAIM_PATTERNS = (
+    (
+        "unqualified certification or compliance claim",
+        re.compile(
+            r"\b(?:fully|completely|100%)\s+compliant\b|"
+            r"\b(?:SOC\s*2|ISO\s*27001|HIPAA|GDPR|FedRAMP|PCI(?:[ -]DSS)?)\s+"
+            r"(?:certified|compliant)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "unqualified guarantee",
+        re.compile(
+            r"\bguarantee(?:d|s)?\s+(?:availability|uptime|results?|security|safety|"
+            r"compliance|response|recovery|performance)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "unqualified response-time promise",
+        re.compile(
+            r"\b(?:we|Mindclade|support|security)\s+will\s+(?:respond|acknowledge|resolve)\s+"
+            r"within\s+\d+\s+(?:minutes?|hours?|business\s+days?|days?)\b",
+            re.IGNORECASE,
+        ),
+    ),
+)
+LEGAL_CLAIM_ANNOTATION = re.compile(
+    r"^\s*<!--\s*mindclade-legal-claim:\s*(.*?)\s*-->\s*$", re.IGNORECASE
+)
+LEGAL_CLAIM_REQUIRED_FIELDS = {"owner", "evidence", "scope", "reviewed", "expires"}
+LEGAL_CLAIM_EXCLUDED_PARTS = {
+    ".git",
+    ".direnv",
+    ".venv",
+    "build",
+    "dist",
+    "node_modules",
+    "target",
+    "third_party",
+    "vendor",
+}
+
+
+def _legal_claim_annotation(
+    raw: str, path: Path, line_number: int
+) -> tuple[dict[str, str] | None, list[str]]:
+    """Parse and validate one legal-claim approval annotation."""
+    match = LEGAL_CLAIM_ANNOTATION.fullmatch(raw)
+    if not match:
+        return None, []
+    fields: dict[str, str] = {}
+    errors: list[str] = []
+    for item in match.group(1).split(";"):
+        key, separator, value = item.strip().partition("=")
+        if not separator or not key or not value:
+            errors.append(f"{path}:{line_number}: malformed legal-claim annotation field")
+            continue
+        if key in fields:
+            errors.append(f"{path}:{line_number}: duplicate legal-claim field: {key}")
+        fields[key] = value.strip()
+    if set(fields) != LEGAL_CLAIM_REQUIRED_FIELDS:
+        errors.append(
+            f"{path}:{line_number}: legal-claim fields must be exactly "
+            f"{', '.join(sorted(LEGAL_CLAIM_REQUIRED_FIELDS))}"
+        )
+        return fields, errors
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._/-]*", fields["owner"], re.IGNORECASE):
+        errors.append(f"{path}:{line_number}: legal-claim owner is malformed")
+    if not re.fullmatch(r"(?:https://|[A-Z][A-Z0-9]+-)[^\s]+", fields["evidence"]):
+        errors.append(
+            f"{path}:{line_number}: legal-claim evidence must be an HTTPS URI or record id"
+        )
+    if len(fields["scope"]) < 3:
+        errors.append(f"{path}:{line_number}: legal-claim scope is too short")
+    dates: dict[str, dt.date] = {}
+    for name in ("reviewed", "expires"):
+        try:
+            dates[name] = dt.date.fromisoformat(fields[name])
+        except ValueError:
+            errors.append(f"{path}:{line_number}: legal-claim {name} must be YYYY-MM-DD")
+    if len(dates) == 2:
+        if dates["reviewed"] > dates["expires"]:
+            errors.append(f"{path}:{line_number}: legal-claim review occurs after expiry")
+        if dates["expires"] < dt.date.today():
+            errors.append(f"{path}:{line_number}: legal-claim approval is expired")
+    return fields, errors
+
+
+def validate_legal_claims(root: Path) -> list[str]:
+    """Reject risky legal/marketing claims without scoped, expiring approval evidence."""
+    errors: list[str] = []
+    for path in sorted(root.rglob("*.md")):
+        relative = path.relative_to(root)
+        if LEGAL_CLAIM_EXCLUDED_PARTS.intersection(relative.parts):
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError) as exc:
+            errors.append(f"{relative}: cannot lint legal claims: {exc}")
+            continue
+        in_fence = False
+        pending_annotation: tuple[int, bool] | None = None
+        for line_number, line in enumerate(lines, start=1):
+            if line.lstrip().startswith("```"):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
+            annotation, annotation_errors = _legal_claim_annotation(
+                line, relative, line_number
+            )
+            errors.extend(annotation_errors)
+            if annotation is not None:
+                pending_annotation = (line_number, not annotation_errors)
+                continue
+            for label, pattern in LEGAL_CLAIM_PATTERNS:
+                if not pattern.search(line):
+                    continue
+                approved = (
+                    pending_annotation is not None
+                    and pending_annotation[1]
+                    and line_number - pending_annotation[0] <= 3
+                )
+                if not approved:
+                    errors.append(
+                        f"{relative}:{line_number}: {label}; add a current "
+                        "mindclade-legal-claim annotation with owner, evidence, scope, "
+                        "reviewed, and expires"
+                    )
+            if line.strip() and pending_annotation and line_number - pending_annotation[0] > 3:
+                pending_annotation = None
+    return errors
+
+
+def validate_common_documents(root: Path, repository: str) -> list[str]:
+    """Validate the versioned common-document@1 policy and legal surface."""
+    errors: list[str] = []
+    required = {
+        "README.md",
+        "AGENTS.md",
+        "LICENSE",
+        "NOTICE",
+        *COMMON_DOCUMENT_MARKERS,
+    }
+    texts: dict[str, str] = {}
+
+    duplicate_license_surfaces = sorted(
+        path.name
+        for path in root.iterdir()
+        if path.is_file() and path.name.lower().startswith("license") and path.name != "LICENSE"
+    )
+    if duplicate_license_surfaces:
+        errors.append(
+            "duplicate root license surface(s); LICENSE must be the sole root license: "
+            + ", ".join(duplicate_license_surfaces)
+        )
+
+    source_header = root / SOURCE_HEADER_PATH
+    if source_header.is_file():
+        payload = source_header.read_bytes()
+        if hashlib.sha256(payload).hexdigest() != SOURCE_HEADER_DIGEST:
+            errors.append(f"{SOURCE_HEADER_PATH} differs from the canonical source-header template")
+        header_text = payload.decode("utf-8", errors="replace")
+        for value in (
+            "SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary",
+            "Source-file header template; this file is not a standalone license.",
+            "The sole repository license is the complete root LICENSE.",
+        ):
+            if value not in header_text:
+                errors.append(f"{SOURCE_HEADER_PATH} lacks required identity: {value}")
+
+    for name in sorted(required):
+        path = root / name
+        if not path.is_file():
+            errors.append(f"missing required common document: {name}")
+            continue
+        payload = path.read_bytes()
+        if not payload:
+            errors.append(f"required common document is empty: {name}")
+            continue
+        if not payload.endswith(b"\n"):
+            errors.append(f"required common document lacks final newline: {name}")
+        try:
+            texts[name] = payload.decode("utf-8")
+        except UnicodeDecodeError:
+            errors.append(f"required common document is not UTF-8: {name}")
+
+    pull_request_path = next(
+        (
+            candidate
+            for candidate in (
+                root / ".github" / "PULL_REQUEST_TEMPLATE.md",
+                root / ".github" / "pull_request_template.md",
+            )
+            if candidate.is_file()
+        ),
+        None,
+    )
+    if pull_request_path is None:
+        errors.append("missing required common document: .github/PULL_REQUEST_TEMPLATE.md")
+    else:
+        payload = pull_request_path.read_bytes()
+        if not payload:
+            errors.append("required pull-request template is empty")
+        else:
+            if not payload.endswith(b"\n"):
+                errors.append("required pull-request template lacks final newline")
+            try:
+                texts[".github/PULL_REQUEST_TEMPLATE.md"] = payload.decode("utf-8")
+            except UnicodeDecodeError:
+                errors.append("required pull-request template is not UTF-8")
+
+    for name, marker in COMMON_DOCUMENT_MARKERS.items():
+        text = texts.get(name, "")
+        if text.count(marker) != 1:
+            errors.append(f"{name} must contain exactly one {marker}")
+        heading_text = re.sub(r"\x60\x60\x60.*?\x60\x60\x60", "", text, flags=re.S)
+        if text and len(re.findall(r"^# ", heading_text, flags=re.M)) != 1:
+            errors.append(f"{name} must contain exactly one level-one heading")
+
+    for name, expected in CANONICAL_DOCUMENT_DIGESTS.items():
+        path = root / name
+        if path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            errors.append(f"{name} differs from the canonical common-document@1 text")
+
+    license_text = texts.get("LICENSE", "")
+    for value in (
+        "Document-Control: mindclade-license@2",
+        "Effective date: August 21, 2026",
+        "Copyright © 2026 Mindclade, LLC. All Rights Reserved.",
+        "SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary",
+        "controlling written agreement",
+        "Third-party components",
+        "Protected disclosures",
+        "18 U.S.C. § 1833(b)",
+    ):
+        if value not in license_text:
+            errors.append(f"LICENSE lacks required legal term: {value}")
+
+    notice = re.sub(r"\s+", " ", texts.get("NOTICE", ""))
+    expected_repository = f"Repository: mindclade/{repository}"
+    for value in (
+        "Document-Control: mindclade-notice@1",
+        expected_repository,
+        "SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary",
+        "third-party",
+        "terms control",
+        "Contributor Covenant version 2.1",
+        "Creative Commons Attribution 4.0",
+    ):
+        if value.lower() not in notice.lower():
+            errors.append(f"NOTICE lacks required disclosure: {value}")
+
+    contributing = re.sub(r"\s+", " ", texts.get("CONTRIBUTING.md", ""))
+    for value in (
+        "current written",
+        "right and authority",
+        "third-party",
+        "By submitting or updating a pull request",
+        "Signed commits",
+        "not a substitute",
+    ):
+        if value not in contributing:
+            errors.append(f"CONTRIBUTING.md lacks required authorization term: {value}")
+
+    security = texts.get("SECURITY.md", "")
+    for value in (
+        "security@mindclade.com",
+        "biosecurity@mindclade.com",
+        "Do not open",
+        "operational targets",
+        "not contractual",
+        "third-party systems",
+        "unlawful conduct",
+    ):
+        if value.lower() not in security.lower():
+            errors.append(f"SECURITY.md lacks required private-reporting term: {value}")
+    if re.search(r"PGP key in the canonical policy|publishes? a public PGP key", security, re.I):
+        errors.append("SECURITY.md incorrectly claims that Mindclade publishes a PGP key")
+
+    legal = re.sub(r"\s+", " ", texts.get("LEGAL.md", ""))
+    for value in (
+        "does not by itself create a contract",
+        "controlling written agreement",
+        "not legal, medical, clinical, financial, or regulatory advice",
+        "customer security schedule",
+        "third-party systems or data",
+        "protected disclosure",
+        "qualified counsel",
+    ):
+        if value.lower() not in legal.lower():
+            errors.append(f"LEGAL.md lacks required reliance boundary: {value}")
+
+    support = texts.get("SUPPORT.md", "")
+    for value in ("SECURITY.md", "SLA", "customer", "Do not"):
+        if value.lower() not in support.lower():
+            errors.append(f"SUPPORT.md lacks required routing term: {value}")
+
+    pull_request = re.sub(
+        r"\s+", " ", texts.get(".github/PULL_REQUEST_TEMPLATE.md", "")
+    )
+    for value in (
+        "current written agreement with Mindclade, LLC.",
+        "third-party",
+        "LICENSE",
+        "NOTICE",
+    ):
+        if value not in pull_request:
+            errors.append(
+                f".github/PULL_REQUEST_TEMPLATE.md lacks required contributor term: {value}"
+            )
+
+    return errors
 
 
 def parse_contract(path: Path) -> dict[str, object]:
@@ -213,6 +553,13 @@ def validate(root: Path) -> list[str]:
         errors.append("README.md must use the responsive light/dark <picture> header")
 
     rows = contract_table(markdown)
+    if not rows.get("Primary readers", "").strip():
+        errors.append("contract table must identify the primary readers")
+    if not re.fullmatch(r"\[[^\]]+\]\(#quick-start\)", rows.get("First success", "")):
+        errors.append("contract table First success must link to #quick-start")
+    for label in READER_SUCCESS_LABELS:
+        if markdown.count(label) != 1:
+            errors.append(f"README.md must contain exactly one reader-success label: {label}")
     expected_rows = {
         "Class": str(contract.get("repository_class", "")),
         "Visibility": str(contract.get("visibility", "")),
@@ -235,7 +582,9 @@ def validate(root: Path) -> list[str]:
             if not (root / str(required)).exists():
                 errors.append(f"repository contract required path does not exist: {required}")
 
-    badge_dir = root / "docs" / "assets" / "badges"
+    errors.extend(validate_common_documents(root, repository))
+    errors.extend(validate_legal_claims(root))
+
     for filename, label, key in CORE_BADGES:
         relative = f"docs/assets/badges/{filename}.svg"
         path = root / relative

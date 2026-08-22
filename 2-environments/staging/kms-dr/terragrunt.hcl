@@ -42,7 +42,10 @@ inputs = {
   encrypter_decrypters = {
     secrets = ["serviceAccount:service-${dependency.shared.outputs.project_numbers["platform"]}@gcp-sa-secretmanager.iam.gserviceaccount.com"]
     sql     = ["serviceAccount:service-${dependency.shared.outputs.project_numbers["platform"]}@gcp-sa-cloud-sql.iam.gserviceaccount.com"]
-    storage = ["serviceAccount:service-${dependency.shared.outputs.project_numbers["platform"]}@gcp-sa-gkebackup.iam.gserviceaccount.com"]
+    storage = [
+      "serviceAccount:service-${dependency.shared.outputs.project_numbers["platform"]}@gcp-sa-gkebackup.iam.gserviceaccount.com",
+      "serviceAccount:service-${dependency.shared.outputs.project_numbers["platform"]}@gs-project-accounts.iam.gserviceaccount.com",
+    ]
   }
 
   labels = merge(include.root.locals.common_labels, { purpose = "us-dr" })

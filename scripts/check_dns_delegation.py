@@ -81,6 +81,45 @@ def canonical_rdata(record_type: str, value: str) -> str:
     return value
 
 
+def load_authoritative_snapshot(path: Path) -> list[dict[str, Any]]:
+    """Load a Cloud DNS record-set snapshot produced by a read-only gcloud command."""
+
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read authoritative snapshot {path}: {exc}") from exc
+    if not isinstance(value, list):
+        raise ValueError("authoritative snapshot must be a JSON list")
+    records: list[dict[str, Any]] = []
+    for index, record in enumerate(value):
+        if not isinstance(record, dict):
+            raise ValueError(f"authoritative snapshot record {index} must be an object")
+        name = record.get("name")
+        record_type = record.get("type")
+        rrdatas = record.get("rrdatas")
+        if not isinstance(name, str) or not isinstance(record_type, str):
+            raise ValueError(f"authoritative snapshot record {index} requires name and type")
+        if not isinstance(rrdatas, list) or not all(isinstance(item, str) for item in rrdatas):
+            raise ValueError(f"authoritative snapshot record {index}.rrdatas must be strings")
+        records.append(
+            {
+                "name": name.rstrip(".") + ".",
+                "type": record_type.upper(),
+                "rrdatas": rrdatas,
+            }
+        )
+    return records
+
+
+def parent_zone(domain_name: str) -> str:
+    """Return the parent zone for the portfolio's one-label-TLD apex domains."""
+
+    labels = domain_name.rstrip(".").split(".")
+    if len(labels) != 2:
+        raise ValueError("portfolio domains must be registrable apex names with one-label TLDs")
+    return labels[-1] + "."
+
+
 def dig_query(server: str | None, name: str, record_type: str) -> tuple[list[str], str | None]:
     command = ["dig"]
     if server:
@@ -154,6 +193,7 @@ def evaluate_delegation(
     cloud_nameservers: list[str],
     expect_dnssec: bool,
     resolver: Resolver = dig_query,
+    authoritative_records: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Return structured checks; this function performs no mutations."""
 
@@ -164,7 +204,37 @@ def evaluate_delegation(
         if isinstance(domain, dict) and isinstance(domain.get("domain"), str)
     }
     domain = domains[domain_name]
-    records = domain["records"]
+    # Preflight compares the reviewed portable inventory between providers. SOA and apex NS
+    # are provider-owned and necessarily differ before delegation. Predeligation and
+    # postcutover instead use the complete Cloud DNS snapshot, including generated
+    # Certificate Manager CNAMEs and provider-owned record sets.
+    records = authoritative_records if phase != "preflight" else None
+    records = records or [
+        {
+            "name": owner_fqdn(record["name"], domain_name),
+            "type": record["type"],
+            "rrdatas": record["rrdatas"],
+        }
+        for record in domain["records"]
+    ]
+
+    def compare_records(group: str, nameservers: list[str]) -> None:
+        for nameserver in nameservers:
+            for record in records:
+                record_type = record["type"].upper()
+                fqdn = record["name"]
+                actual, error = resolver(nameserver, fqdn, record_type)
+                expected = sorted(
+                    canonical_rdata(record_type, value)
+                    for value in record["rrdatas"]
+                )
+                _check(
+                    checks,
+                    f"{group}:{nameserver}:{fqdn}:{record_type}",
+                    expected,
+                    actual,
+                    error,
+                )
 
     if phase == "preflight":
         for group, nameservers in (
@@ -174,21 +244,28 @@ def evaluate_delegation(
             for nameserver in nameservers:
                 soa, error = resolver(nameserver, f"{domain_name}.", "SOA")
                 _presence_check(checks, f"{group}:{nameserver}:SOA", soa, error)
-                for record in records:
-                    record_type = record["type"].upper()
-                    fqdn = owner_fqdn(record["name"], domain_name)
-                    actual, error = resolver(nameserver, fqdn, record_type)
-                    expected = sorted(
-                        canonical_rdata(record_type, value)
-                        for value in record["rrdatas"]
-                    )
-                    _check(
-                        checks,
-                        f"{group}:{nameserver}:{fqdn}:{record_type}",
-                        expected,
-                        actual,
-                        error,
-                    )
+            compare_records(group, nameservers)
+        return checks
+
+    if phase == "predeligation":
+        parent = parent_zone(domain_name)
+        parent_nameservers, error = resolver(None, parent, "NS")
+        _presence_check(checks, f"parent:{parent}:NS", parent_nameservers, error)
+        for nameserver in parent_nameservers:
+            ds, error = resolver(nameserver, f"{domain_name}.", "DS")
+            _check(
+                checks,
+                f"parent:{nameserver}:{domain_name}.:DS-absent",
+                [],
+                ds,
+                error,
+            )
+        for nameserver in cloud_nameservers:
+            soa, error = resolver(nameserver, f"{domain_name}.", "SOA")
+            _presence_check(checks, f"cloud:{nameserver}:SOA", soa, error)
+            dnskey, error = resolver(nameserver, f"{domain_name}.", "DNSKEY")
+            _presence_check(checks, f"cloud:{nameserver}:DNSKEY", dnskey, error)
+        compare_records("cloud", cloud_nameservers)
         return checks
 
     public_ns, error = resolver(None, f"{domain_name}.", "NS")
@@ -204,7 +281,7 @@ def evaluate_delegation(
         _presence_check(checks, f"cloud:{nameserver}:SOA", soa, error)
     for record in records:
         record_type = record["type"].upper()
-        fqdn = owner_fqdn(record["name"], domain_name)
+        fqdn = record["name"]
         actual, error = resolver(None, fqdn, record_type)
         expected = sorted(
             canonical_rdata(record_type, value) for value in record["rrdatas"]
@@ -228,10 +305,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--inventory", type=Path, default=DEFAULT_INVENTORY)
     parser.add_argument("--domain", required=True)
-    parser.add_argument("--phase", required=True, choices=("preflight", "postcutover"))
+    parser.add_argument(
+        "--phase",
+        required=True,
+        choices=("preflight", "predeligation", "postcutover"),
+    )
     parser.add_argument("--incumbent-nameservers", default="")
     parser.add_argument("--cloud-nameservers", required=True)
     parser.add_argument("--expect-dnssec", action="store_true")
+    parser.add_argument("--authoritative-snapshot", type=Path)
     parser.add_argument("--change-reference", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -248,8 +330,10 @@ def main() -> int:
     errors: list[str] = []
     if not CHANGE_REFERENCE.fullmatch(args.change_reference):
         errors.append("change reference must start with CHG-, INC-, SEC-, or DR-")
-    if args.phase == "preflight" and args.expect_dnssec:
-        errors.append("preflight must not expect a registrar DS record before delegation")
+    if args.phase in {"preflight", "predeligation"} and args.expect_dnssec:
+        errors.append(
+            f"{args.phase} must not expect a registrar DS record before delegation"
+        )
     try:
         incumbent = parse_nameservers(args.incumbent_nameservers)
         cloud = parse_nameservers(args.cloud_nameservers)
@@ -271,6 +355,19 @@ def main() -> int:
     if inventory:
         errors.extend(validate_inventory(inventory, {args.domain}))
 
+    authoritative_records: list[dict[str, Any]] | None = None
+    if args.authoritative_snapshot is not None:
+        try:
+            authoritative_records = load_authoritative_snapshot(
+                args.authoritative_snapshot
+            )
+        except ValueError as exc:
+            errors.append(str(exc))
+    if args.phase == "predeligation" and not authoritative_records:
+        errors.append(
+            "predeligation requires a non-empty Cloud DNS authoritative snapshot"
+        )
+
     if not errors:
         report["checks"] = evaluate_delegation(
             inventory,
@@ -279,6 +376,7 @@ def main() -> int:
             incumbent,
             cloud,
             args.expect_dnssec,
+            authoritative_records=authoritative_records,
         )
         if all(check["passed"] for check in report["checks"]):
             report["status"] = "PASS"

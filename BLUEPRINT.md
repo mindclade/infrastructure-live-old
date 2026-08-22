@@ -1,4 +1,4 @@
-# infrastructure-live production blueprint
+# Mindclade · `infrastructure-live` production blueprint
 
 **Repository class:** `production-control`  
 **Visibility:** `private`  

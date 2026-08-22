@@ -98,6 +98,7 @@ inputs = {
         "binaryauthorization.googleapis.com",
         "containeranalysis.googleapis.com",
         "artifactregistry.googleapis.com",
+        "certificatemanager.googleapis.com",
         "secretmanager.googleapis.com",
         "cloudkms.googleapis.com",
         "monitoring.googleapis.com",

@@ -24,7 +24,8 @@ folder. The identities cannot mutate another environment through those bindings.
 It creates distinct normal-plane canary, builder, qualification-reader, qualifier, signer, and
 promoter service accounts. Each account is bound only to its bootstrap-exported capability
 principal. The exact immutable-ID subject, trusted-main caller, push event, provider audience,
-and immutable v4 reusable workflow must all agree. Provider-specific subject prefixes prevent
+and governed workflow version must all agree: v5 for qualification reading and promotion, and v4
+for every other artifact capability. Provider-specific subject prefixes prevent
 one accepted ARC token from crossing into another capability's IAM binding. The IDs come from
 bootstrap outputs and are never invented here.
 See [`supply-chain-signer-contract.md`](supply-chain-signer-contract.md).

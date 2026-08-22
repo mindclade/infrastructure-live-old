@@ -74,8 +74,7 @@ def release_identities(
             "subject": subject,
             "workflow_ref": "mindclade/mindclade-internal-monorepo/.github/workflows/release.yml@refs/heads/main",
             "job_workflow_ref": (
-                f"mindclade/.github/.github/workflows/{workflow}@refs/tags/"
-                "v5.0.0"
+                f"mindclade/.github/.github/workflows/{workflow}@refs/tags/v5.0.0"
             ),
         }
     return result

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import check_dns_delegation as delegation  # noqa: E402
+import generate_dns_domains as domains_projection  # noqa: E402
 import validate_dns_portfolio as portfolio  # noqa: E402
 
 
@@ -27,6 +28,35 @@ class DNSPortfolioTest(unittest.TestCase):
     def test_committed_inventory_is_safe_and_matches_live_units(self) -> None:
         self.assertEqual(portfolio.validate_inventory(self.inventory), [])
         self.assertEqual(portfolio.validate_live_parity(self.inventory), [])
+        self.assertEqual(portfolio.validate_shared_dns_hub_interface(), [])
+
+    def test_generated_domain_projection_is_current(self) -> None:
+        expected = domains_projection.render(self.inventory)
+        self.assertEqual(
+            domains_projection.DEFAULT_OUTPUT.read_text(encoding="utf-8"), expected
+        )
+
+    def test_planned_module_ref_requires_an_activation_blocker(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.ai"
+        )
+        domain["activation_blockers"].remove(portfolio.MODULE_RELEASE_BLOCKER)
+        errors = portfolio.validate_inventory(inventory)
+        self.assertIn(
+            "mindclade.ai: planned module ref requires the "
+            "dns-module-ref-not-published blocker",
+            errors,
+        )
+
+    def test_published_module_ref_rejects_stale_release_blockers(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        inventory["module_contract"]["release_status"] = "published"
+        errors = portfolio.validate_inventory(inventory)
+        self.assertIn(
+            "mindclade.ai: remove the stale module-release activation blocker",
+            errors,
+        )
 
     def test_pending_domain_fails_a_cutover_readiness_gate(self) -> None:
         errors = portfolio.validate_inventory(
@@ -34,12 +64,50 @@ class DNSPortfolioTest(unittest.TestCase):
         )
         self.assertIn("mindclade.com: delegation is not ready", errors)
 
+    def test_environment_naming_cannot_enable_wildcard_production_records(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        inventory["environment_naming"]["wildcard_production_records_allowed"] = True
+        errors = portfolio.validate_inventory(inventory)
+        self.assertIn(
+            "environment_naming must define production, staging, and development "
+            "mindclade.ai boundaries without wildcard production records",
+            errors,
+        )
+
+    def test_unapproved_migration_requires_a_domain_blocker(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.dev"
+        )
+        domain["activation_blockers"].remove(portfolio.MIGRATION_WINDOW_BLOCKER)
+        errors = portfolio.validate_inventory(inventory)
+        self.assertIn(
+            "mindclade.dev: unapproved migration requires the "
+            "migration-window-not-approved blocker",
+            errors,
+        )
+
+    def test_caa_record_rejects_an_unapproved_issuer(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.ai"
+        )
+        caa = next(record for record in domain["records"] if record["type"] == "CAA")
+        caa["rrdatas"].append('0 issue "example.invalid"')
+        errors = portfolio.validate_inventory(inventory)
+        self.assertIn(
+            "mindclade.ai: apex CAA must permit pki.goog and letsencrypt.org, "
+            "forbid wildcards, and carry the security iodef contact",
+            errors,
+        )
+
     def test_no_mail_domain_must_fail_closed(self) -> None:
         inventory = copy.deepcopy(self.inventory)
         domain = next(
             item for item in inventory["domains"] if item["domain"] == "mindclade.ai"
         )
-        domain["records"][0]["rrdatas"] = ["1 smtp.google.com."]
+        mx = next(record for record in domain["records"] if record["type"] == "MX")
+        mx["rrdatas"] = ["1 smtp.google.com."]
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
             "mindclade.ai: no-mail policy requires apex null MX '0 .'", errors
@@ -61,12 +129,24 @@ class DNSPortfolioTest(unittest.TestCase):
     def test_workspace_readiness_requires_complete_mail_authentication(self) -> None:
         inventory = copy.deepcopy(self.inventory)
         inventory["module_contract"]["ref"] = "v0.2.0"
+        inventory["module_contract"]["release_status"] = "published"
         inventory["module_contract"]["supports_record_name_override"] = True
+        inventory["migration_window"] = {
+            "status": "approved",
+            "change_reference": "CHG-test",
+            "starts_at": "2026-08-22T01:00:00Z",
+            "ends_at": "2026-08-22T02:00:00Z",
+        }
         for domain in inventory["domains"]:
             domain["activation_blockers"] = [
                 blocker
                 for blocker in domain["activation_blockers"]
-                if blocker != "dns-module-record-name-override-not-released"
+                if blocker
+                not in {
+                    "dns-module-record-name-override-not-released",
+                    portfolio.MODULE_RELEASE_BLOCKER,
+                    portfolio.MIGRATION_WINDOW_BLOCKER,
+                }
             ]
         domain = next(
             item for item in inventory["domains"] if item["domain"] == "mindclade.com"
@@ -159,6 +239,49 @@ class DNSDelegationTest(unittest.TestCase):
             )
         )
 
+    def test_preflight_ignores_provider_owned_snapshot_records(self) -> None:
+        inventory = {
+            "domains": [
+                {
+                    "domain": "example.com",
+                    "records": [
+                        {"name": "@", "type": "MX", "rrdatas": ["0 ."]}
+                    ],
+                }
+            ]
+        }
+        snapshot = [
+            {
+                "name": "example.com.",
+                "type": "NS",
+                "rrdatas": ["new.example."],
+            },
+            {
+                "name": "example.com.",
+                "type": "MX",
+                "rrdatas": ["0 ."],
+            },
+        ]
+
+        def resolver(server: str | None, name: str, record_type: str):
+            if record_type == "SOA":
+                return ["ns.example. hostmaster.example. 1 2 3 4 5"], None
+            if record_type == "MX":
+                return ["0 ."], None
+            self.fail(f"preflight must not compare provider-owned {record_type}")
+
+        checks = delegation.evaluate_delegation(
+            inventory,
+            "example.com",
+            "preflight",
+            ["old.example."],
+            ["new.example."],
+            False,
+            resolver,
+            snapshot,
+        )
+        self.assertTrue(all(check["passed"] for check in checks))
+
     def test_postcutover_checks_delegation_records_and_dnssec(self) -> None:
         inventory = {
             "domains": [
@@ -195,6 +318,66 @@ class DNSDelegationTest(unittest.TestCase):
             resolver,
         )
         self.assertTrue(all(check["passed"] for check in checks))
+
+    def test_predeligation_requires_parent_ds_absence_and_target_agreement(self) -> None:
+        inventory = {
+            "domains": [{"domain": "example.com", "records": []}]
+        }
+        snapshot = [
+            {
+                "name": "example.com.",
+                "type": "MX",
+                "rrdatas": ["0 ."],
+            }
+        ]
+
+        def resolver(server: str | None, name: str, record_type: str):
+            if name == "com." and record_type == "NS":
+                return ["a.gtld-servers.net."], None
+            if server == "a.gtld-servers.net." and record_type == "DS":
+                return [], None
+            answers = {
+                "SOA": ["ns.example. hostmaster.example. 1 2 3 4 5"],
+                "DNSKEY": ["257 3 8 PUBLICKEY"],
+                "MX": ["0 ."],
+            }
+            return answers[record_type], None
+
+        checks = delegation.evaluate_delegation(
+            inventory,
+            "example.com",
+            "predeligation",
+            [],
+            ["new.example."],
+            False,
+            resolver,
+            snapshot,
+        )
+        self.assertTrue(all(check["passed"] for check in checks))
+
+    def test_predeligation_fails_when_parent_ds_remains(self) -> None:
+        inventory = {"domains": [{"domain": "example.com", "records": []}]}
+
+        def resolver(server: str | None, name: str, record_type: str):
+            if name == "com." and record_type == "NS":
+                return ["a.gtld-servers.net."], None
+            if server == "a.gtld-servers.net." and record_type == "DS":
+                return ["12345 8 2 ABCD"], None
+            return ["present"], None
+
+        checks = delegation.evaluate_delegation(
+            inventory,
+            "example.com",
+            "predeligation",
+            [],
+            ["new.example."],
+            False,
+            resolver,
+            [{"name": "example.com.", "type": "MX", "rrdatas": ["present"]}],
+        )
+        self.assertTrue(
+            any(check["name"].endswith("DS-absent") and not check["passed"] for check in checks)
+        )
 
 
 if __name__ == "__main__":

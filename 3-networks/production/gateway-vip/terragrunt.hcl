@@ -6,7 +6,7 @@
 #
 # One per environment, and the single VIP behind `mindclade.studio`, `*.mindclade.ai`, and
 # `*.mindclade.dev` in that environment. The GKE Gateway binds to it by NAME; the private DNS
-# zones in ../dns-hub point their A records at its VALUE. Both of those are read from this
+# zones in ../private-service-dns point their A records at its VALUE. Both are read from this
 # unit's outputs rather than restated, because a VIP that moves and a DNS record that does not
 # is an outage with no error anywhere.
 #

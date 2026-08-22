@@ -7,7 +7,20 @@ include "root" {
   expose = true
 }
 
-locals { module_version = "v0.4.0" }
+locals {
+  module_version = "v0.4.0"
+  inventory      = jsondecode(file("${get_repo_root()}/contracts/dns-domain-inventory.json"))
+  domain         = one([for domain in local.inventory.domains : domain if domain.domain == "mindclade.studio"])
+  records = {
+    for record in local.domain.records :
+    "${replace(record.name, "@", "apex")}-${lower(record.type)}" => {
+      name    = record.name
+      type    = record.type
+      ttl     = record.ttl
+      rrdatas = record.type == "TXT" ? [for value in record.rrdatas : jsonencode(value)] : record.rrdatas
+    }
+  }
+}
 terraform {
   source = "${include.root.locals.module_source_base}//dns?ref=${local.module_version}"
 }
@@ -21,31 +34,11 @@ dependency "common_projects" {
 inputs = {
   project_id = dependency.common_projects.outputs.project_ids["dns"]
   zones = {
-    mindclade_studio = {
-      domain              = "mindclade.studio."
-      visibility          = "public"
-      dnssec              = true
-      deletion_protection = true
-      records = {
-        "@-mx" = {
-          name    = "@"
-          type    = "MX"
-          ttl     = 3600
-          rrdatas = ["0 ."]
-        }
-        "@-txt" = {
-          name    = "@"
-          type    = "TXT"
-          ttl     = 3600
-          rrdatas = ["\"v=spf1 -all\""]
-        }
-        "_dmarc-txt" = {
-          name    = "_dmarc"
-          type    = "TXT"
-          ttl     = 3600
-          rrdatas = ["\"v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s\""]
-        }
-      }
+    mindclade-studio = {
+      dns_name   = "mindclade.studio."
+      visibility = "public"
+      dnssec     = true
+      records    = local.records
     }
   }
   labels = merge(include.root.locals.common_labels, {

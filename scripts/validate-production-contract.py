@@ -302,6 +302,7 @@ elif REPOSITORY == "infrastructure-live":
         'capability == "signer" ? "" : "arc-${capability}:"',
         "reusable-binauthz-sign.yml",
         "artifact_release_versions = {",
+        '"v5.0.0"',
         "reusable-gitops-promote.yml",
         "v5.0.0",
     ):
@@ -535,7 +536,7 @@ elif REPOSITORY == "infrastructure-live":
         or "validated_release_identities" not in bootstrap_account
         or "validated_dr_evidence_identity" not in bootstrap_account
     ):
-        error("bootstrap account exporter omits an exact v4 identity contract")
+        error("bootstrap account exporter omits an exact v5 identity contract")
     initial_import = (ROOT / "docs/initial-import.md").read_text(
         "utf-8", errors="ignore"
     )
@@ -634,7 +635,7 @@ elif REPOSITORY == "infrastructure-live":
         "utf-8", errors="ignore"
     )
     for required in (
-        'domain     = "googleapis.com."',
+        'dns_name   = "googleapis.com."',
         'rrdatas = ["restricted.googleapis.com."]',
         "199.36.153.4",
     ):
@@ -882,6 +883,7 @@ elif REPOSITORY == "infrastructure-live":
             "replica_region = include.root.locals.dr_region",
             'config_path = "../../../2-environments/' + env + '/kms-dr"',
             'encryption_key = dependency.kms_dr.outputs.crypto_key_ids["storage"]',
+            'kms_key_name       = dependency.kms_dr.outputs.crypto_key_ids["storage"]',
             'schedule = "0 * * * *"',
         ):
             if required not in backup_dr:

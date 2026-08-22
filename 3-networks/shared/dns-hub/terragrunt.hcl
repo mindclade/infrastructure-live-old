@@ -38,7 +38,7 @@ inputs = {
   project_id = dependency.common_projects.outputs.project_ids["dns"]
   zones = {
     gcp-internal = {
-      domain     = "gcp.mindclade.com."
+      dns_name   = "gcp.mindclade.com."
       visibility = "private"
       networks = [
         dependency.development_vpc.outputs.network_self_link["development"],
@@ -52,7 +52,7 @@ inputs = {
     # private googleapis.com zone with an A record for restricted.googleapis.com and a
     # wildcard CNAME; no PSC forwarding rule is involved in this path.
     restricted-googleapis = {
-      domain     = "googleapis.com."
+      dns_name   = "googleapis.com."
       visibility = "private"
       networks = [
         dependency.development_vpc.outputs.network_self_link["development"],
@@ -76,7 +76,7 @@ inputs = {
     }
 
     restricted-pkg-dev = {
-      domain     = "pkg.dev."
+      dns_name   = "pkg.dev."
       visibility = "private"
       networks = [
         dependency.development_vpc.outputs.network_self_link["development"],
@@ -94,7 +94,7 @@ inputs = {
     }
 
     restricted-gcr-io = {
-      domain     = "gcr.io."
+      dns_name   = "gcr.io."
       visibility = "private"
       networks = [
         dependency.development_vpc.outputs.network_self_link["development"],

@@ -8,15 +8,21 @@
 
 ## Safety contract
 
-The workflow named **DNS cutover check** is read-only. It queries DNS and uploads evidence; it
-has no Google Cloud identity, Squarespace credential, or registrar write path. Nameserver and
-DS changes remain manual because a bad automated delegation can make the whole domain
-unreachable before the automation can repair itself.
+The workflow named **DNS cutover check** is read-only. It queries DNS, uses the protected plan
+identity to snapshot record sets from Cloud DNS, and uploads evidence; it has no Squarespace
+credential, registrar write path, or cloud mutation permission. Nameserver and DS changes remain
+manual because a bad automated delegation can make the whole domain unreachable before the
+automation can repair itself.
 
 Do not delegate a domain unless all of these are true:
 
 - `contracts/dns-domain-inventory.json` marks its inventory complete and
   delegation-ready with no activation blockers.
+- The inventory marks the DNS module ref `published`, and the exact immutable-ref interface
+  gate passes against the protected monorepo checkout.
+- The approved migration window has a change reference and bounded start/end timestamps.
+- Certificate Manager DNS authorizations, issuer inventory, and CAA policy are ready for every
+  certificate-serving domain; public and private endpoint names match the environment contract.
 - `python3 scripts/validate_dns_portfolio.py --require-ready <domain>` passes.
 - The protected Cloud DNS plan and apply completed for the exact reviewed commit.
 - A preflight evidence run passes against every incumbent and Cloud DNS nameserver.
@@ -24,7 +30,8 @@ Do not delegate a domain unless all of these are true:
 - The change record contains old and new nameservers, old and new DS data, TTLs, timestamps,
   operators, and the rollback deadline.
 
-The released DNS module permits public `TXT`, `CAA`, `MX`, and delegated-child `NS` records.
+The planned DNS module interface permits public `TXT`, `CAA`, `MX`, and delegated-child `NS`
+records; deployment additionally requires its protected release tag and exact-ref validation.
 If the incumbent inventory contains public `A`, `AAAA`, or `CNAME` records, stop. Reconcile the
 public-service architecture and release a reviewed module change rather than omitting those
 records or bypassing the validation.
@@ -45,7 +52,7 @@ records or bypassing the validation.
 Validate source state first:
 
 ```sh
-python3 scripts/validate_dns_portfolio.py --require-ready mindclade.studio
+python3 scripts/validate_dns_portfolio.py --require-ready mindclade.dev
 ```
 
 Run the manual **DNS cutover check** workflow from `main` with:
@@ -59,38 +66,48 @@ Run the manual **DNS cutover check** workflow from `main` with:
 The workflow compares SOA availability and every inventoried record set on every named server.
 Keep its JSON artifact with the change record.
 
+After the incumbent DS has been removed and its cache interval has elapsed, run the workflow
+again with `phase=predeligation`. This phase reads the complete target zone snapshot and refuses
+cutover unless every parent nameserver reports the DS absent, every target nameserver serves SOA
+and DNSKEY, and every target answer agrees with the snapshot. Do not substitute a recursive
+resolver's empty DS answer for the direct parent-authoritative checks.
+
 For local diagnosis from the pinned development shell:
 
 ```sh
 nix develop
 python3 scripts/check_dns_delegation.py \
-  --domain mindclade.studio \
+  --domain mindclade.dev \
   --phase preflight \
   --incumbent-nameservers '<old-ns-1>,<old-ns-2>' \
   --cloud-nameservers '<cloud-ns-1>,<cloud-ns-2>,<cloud-ns-3>,<cloud-ns-4>' \
   --change-reference CHG-0000 \
-  --output /tmp/mindclade-studio-dns-preflight.json
+  --output /tmp/mindclade-dev-dns-preflight.json
 ```
 
 ## Resolution and cutover
 
-Perform one domain at a time, starting with `mindclade.studio`; migrate `mindclade.com` last.
+Perform one domain at a time in this fixed order: `mindclade.dev`, `mindclade.ai`,
+`mindclade.studio`, then `mindclade.com`. The first three prove the no-mail path before the
+mail-enabled corporate domain is exposed to change.
 
 1. Confirm the preflight evidence status is `PASS`.
 2. At Squarespace, remove or disable the incumbent DNSSEC/DS chain. Wait the approved interval
    derived from the current DS and DNSKEY TTLs before changing nameservers.
-3. Replace the Squarespace nameservers with the complete Cloud DNS nameserver set. Do not
+3. Run **DNS cutover check** with `phase=predeligation` and retain its passing evidence. Do not
+   continue if any parent nameserver still publishes DS or any target nameserver disagrees.
+4. Replace the Squarespace nameservers with the complete Cloud DNS nameserver set. Do not
    delete the incumbent zone.
-4. Run **DNS cutover check** with `phase=postcutover` and `expect_dnssec=false` until public
+5. Run **DNS cutover check** with `phase=postcutover` and `expect_dnssec=false` until public
    delegation and every inventoried answer pass.
-5. Verify affected web and identity endpoints. For `mindclade.com`, verify real inbound and
+6. Verify affected web and identity endpoints. For `mindclade.com`, verify real inbound and
    outbound Workspace mail plus SPF and DKIM authentication; DNS queries alone do not prove
    message delivery.
-6. Publish the Cloud DNS DS data at Squarespace.
-7. Run the post-cutover check again with `expect_dnssec=true`. This confirms public DS and
+7. Publish the Cloud DNS DS data at Squarespace.
+8. Run the post-cutover check again with `expect_dnssec=true`. This confirms public DS and
    authoritative DNSKEY presence; retain an independent validating-resolver result with the
    change evidence.
-8. Keep the incumbent zone unchanged until the rollback deadline passes.
+9. Keep the incumbent zone unchanged until the rollback deadline passes.
 
 ## Rollback
 
@@ -122,4 +139,5 @@ mail authentication, or the public-record policy to make a check pass.
 - Keep record changes in the normalized inventory and Terragrunt unit in the same pull request.
 - Keep all domains blocked until their incumbent inventory is independently reviewed.
 - Retain the nightly Terraform drift workflow and DNS evidence artifacts.
+- Keep the nightly DNS portfolio monitor green; it reconciles one drift issue per ready domain.
 - Drill rollback on a non-mail domain before migrating `mindclade.com`.

@@ -1,0 +1,109 @@
+---
+# Copyright © 2026 Mindclade, LLC. All Rights Reserved.
+# Mindclade Proprietary and Confidential.
+# SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
+
+name: DNS portfolio monitor
+
+on:
+  schedule:
+    - cron: "43 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+
+concurrency:
+  group: dns-portfolio-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: plan
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342  # v31.11.0
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = false
+
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_PLAN }}
+          service_account: ${{ vars.SA_TF_LIVE_PLAN }}
+
+      - name: Snapshot ready Cloud DNS zones
+        env:
+          SNAPSHOT_DIR: ${{ runner.temp }}/dns-snapshots
+        run: |
+          set -euo pipefail
+          mkdir -p "$SNAPSHOT_DIR"
+          jq -r '.domains[] | select(.delegation_ready == true) | .domain' \
+            contracts/dns-domain-inventory.json | while read -r domain; do
+              managed_zone="mindclade-${domain##*.}"
+              nix develop .#ci --command gcloud dns record-sets list \
+                --project=mc-common-dns \
+                --zone="$managed_zone" \
+                --format=json > "$SNAPSHOT_DIR/$domain.json"
+              test -s "$SNAPSHOT_DIR/$domain.json"
+            done
+
+      - id: monitor
+        name: Compare public DNS with Cloud DNS
+        continue-on-error: true
+        env:
+          SNAPSHOT_DIR: ${{ runner.temp }}/dns-snapshots
+          EVIDENCE_PATH: ${{ runner.temp }}/dns-portfolio-evidence.json
+        run: >-
+          nix develop .#ci --command python3 scripts/monitor_dns_portfolio.py
+          --snapshot-dir "$SNAPSHOT_DIR"
+          --output "$EVIDENCE_PATH"
+
+      - name: Reconcile DNS drift issues
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVIDENCE_PATH: ${{ runner.temp }}/dns-portfolio-evidence.json
+        run: |
+          set -euo pipefail
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          for domain in mindclade.com mindclade.ai mindclade.dev mindclade.studio; do
+            title="DNS drift: $domain"
+            existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number,title --jq '.[] | select(.title == "'"$title"'") | .number' | head -n1)"
+            status="$(jq -r --arg domain "$domain" '.domains[]? | select(.domain == $domain) | .status' "$EVIDENCE_PATH")"
+            if [[ -z "$status" || "$status" == PASS ]]; then
+              if [[ -n "$existing" ]]; then
+                gh issue close "$existing" --repo "$GITHUB_REPOSITORY" --reason completed
+              fi
+              continue
+            fi
+            body="Nightly read-only DNS verification failed for ${domain}. Review the seven-day evidence artifact. Run: ${run_url}"
+            if [[ -n "$existing" ]]; then
+              gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --label drift --label infrastructure --body "$body"
+            fi
+          done
+
+      - name: Upload short-lived DNS evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5
+        with:
+          name: dns-portfolio-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dns-portfolio-evidence.json
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Enforce DNS monitoring result
+        if: steps.monitor.outcome != 'success'
+        run: |
+          echo "::error::DNS portfolio monitoring detected drift or failed"
+          exit 1
