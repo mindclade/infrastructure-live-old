@@ -89,6 +89,9 @@ class NixBinaryCacheTest(unittest.TestCase):
         candidate["status"] = "qualifying"
         candidate["blockers"] = [VALIDATOR.EXPECTED_BLOCKERS[-1]]
         candidate["evidence"]["signature_tamper"] = False
+        candidate["qualification_evidence"] = copy.deepcopy(
+            CONTRACT["qualification_evidence"]
+        )
         self.assertEqual(VALIDATOR.schema_errors(candidate, SCHEMA), [])
         self.assertEqual(VALIDATOR.policy_errors(candidate), [])
         candidate["client"]["enabled"] = True
@@ -158,6 +161,16 @@ class NixBinaryCacheTest(unittest.TestCase):
             candidate["evidence"][key] = True
         candidate["module"]["release_status"] = "published"
         candidate["publication"]["enabled"] = True
+        candidate["qualification_evidence"].update(
+            {
+                "object_generation": "1",
+                "object_uri": "gs://mc-production-qualification-evidence/nix-binary-cache/qualification.json",
+                "reviewed_at": "2026-08-22T12:00:00Z",
+                "reviewer": "security-reviewer",
+                "sha256": "sha256:" + "a" * 64,
+                "verification_digest": "sha256:" + "b" * 64,
+            }
+        )
         candidate["server"].update(
             {
                 "active_gitops_target": True,

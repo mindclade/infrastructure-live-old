@@ -80,6 +80,15 @@
     ],
     "workflow": "mindclade/.github/.github/workflows/reusable-nix-cache-populate.yml@refs/tags/v5.0.0"
   },
+  "qualification_evidence": {
+    "archive_boundary": "5-workloads/shared/production-qualification-evidence",
+    "object_generation": null,
+    "object_uri": null,
+    "reviewed_at": null,
+    "reviewer": null,
+    "sha256": null,
+    "verification_digest": null
+  },
   "schema_version": 1,
   "secrets": {
     "github_accessor": false,

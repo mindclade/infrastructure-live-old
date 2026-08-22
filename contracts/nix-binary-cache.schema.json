@@ -11,6 +11,7 @@
     "module",
     "nixpkgs",
     "publication",
+    "qualification_evidence",
     "schema_version",
     "secrets",
     "server",
@@ -105,6 +106,20 @@
       },
       "additionalProperties": false
     },
+    "qualification_evidence": {
+      "type": "object",
+      "required": ["archive_boundary", "object_generation", "object_uri", "reviewed_at", "reviewer", "sha256", "verification_digest"],
+      "properties": {
+        "archive_boundary": {"const": "5-workloads/shared/production-qualification-evidence"},
+        "object_generation": {"type": ["string", "null"], "pattern": "^[1-9][0-9]*$"},
+        "object_uri": {"type": ["string", "null"], "pattern": "^gs://mc-production-qualification-evidence/nix-binary-cache/[A-Za-z0-9._/-]+$"},
+        "reviewed_at": {"type": ["string", "null"], "format": "date-time"},
+        "reviewer": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$"},
+        "sha256": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+        "verification_digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
     "secrets": {
       "type": "object",
       "required": ["github_accessor", "secret_ids", "unit", "versions_created_by_terraform"],
@@ -153,6 +168,7 @@
             }
           },
           "publication": {"properties": {"enabled": {"const": false}}},
+          "qualification_evidence": {"properties": {"object_generation": {"const": null}, "object_uri": {"const": null}, "reviewed_at": {"const": null}, "reviewer": {"const": null}, "sha256": {"const": null}, "verification_digest": {"const": null}}},
           "server": {"properties": {"active_gitops_target": {"const": false}, "endpoint": {"const": null}, "replicas": {"const": 0}}}
         }
       }
@@ -190,6 +206,7 @@
           },
           "module": {"properties": {"release_status": {"const": "published"}}},
           "publication": {"properties": {"enabled": {"const": true}}},
+          "qualification_evidence": {"properties": {"object_generation": {"type": "string"}, "object_uri": {"type": "string"}, "reviewed_at": {"type": "string"}, "reviewer": {"type": "string"}, "sha256": {"type": "string"}, "verification_digest": {"type": "string"}}},
           "server": {"properties": {"active_gitops_target": {"const": true}, "endpoint": {"type": "string", "pattern": "^https://"}, "replicas": {"minimum": 2}}}
         }
       }

@@ -2,7 +2,7 @@
 
 # Nix binary-cache qualification and activation
 
-> **Platform Foundation · Protected cache publication**  
+> **Platform Foundation · Protected cache publication**
 > Qualify a private Attic service without granting pull requests write authority or exposing
 > server signing material to any client.
 
@@ -62,7 +62,9 @@ Protected reviewers must retain all of the following before changing the lifecyc
    a separately reviewed caller is added for `qualifying`.
 
 The evidence record must identify the protected plan artifact, change record, reviewer,
-timestamp, immutable object generation, and SHA-256 without embedding credentials.
+timestamp, immutable object generation, SHA-256, and evidence-ledger verification digest without
+embedding credentials. Store it below the contract's exact prefix in the locked production
+qualification archive.
 
 ## Qualify
 
