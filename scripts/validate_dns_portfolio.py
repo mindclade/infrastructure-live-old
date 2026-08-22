@@ -104,11 +104,39 @@ EXPECTED_CAA = {
 MODULE_PUBLIC_TYPES = {"CAA", "MX", "NS", "TXT"}
 MODULE_CONDITIONAL_PUBLIC_TYPES = {"A", "AAAA", "CNAME"}
 MODULE_SUPPORTED_PUBLIC_TYPES = MODULE_PUBLIC_TYPES | MODULE_CONDITIONAL_PUBLIC_TYPES
+APPROVED_PUBLIC_RECORDS = {
+    "mindclade.ai": {
+        "apex-a": (
+            "@",
+            "A",
+            300,
+            (
+                "198.185.159.144",
+                "198.185.159.145",
+                "198.49.23.144",
+                "198.49.23.145",
+            ),
+        ),
+        "www-cname": ("www", "CNAME", 300, ("ext-sq.squarespace.com.",)),
+    },
+    "mindclade.dev": {
+        "apex-a": (
+            "@",
+            "A",
+            300,
+            (
+                "198.185.159.144",
+                "198.185.159.145",
+                "198.49.23.144",
+                "198.49.23.145",
+            ),
+        ),
+        "www-cname": ("www", "CNAME", 300, ("ext-sq.squarespace.com.",)),
+    },
+}
 APPROVED_PUBLIC_RECORD_ALLOWLISTS = {
-    "mindclade.com": set(),
-    "mindclade.ai": {"apex-a", "www-cname"},
-    "mindclade.dev": {"apex-a", "www-cname"},
-    "mindclade.studio": set(),
+    domain: set(APPROVED_PUBLIC_RECORDS.get(domain, {}))
+    for domain in EXPECTED_DOMAINS
 }
 FINAL_WORKSPACE_SPF = "v=spf1 include:_spf.google.com -all"
 FINAL_WORKSPACE_DMARC = (
@@ -469,11 +497,14 @@ def validate_inventory(
             record_type = record.get("type")
             ttl = record.get("ttl")
             rrdatas = record.get("rrdatas")
-            if not isinstance(owner, str) or not RECORD_NAME.fullmatch(owner):
+            if not isinstance(owner, str):
                 errors.append(f"{record_prefix} has an invalid relative owner name")
                 continue
             if "*" in owner:
                 errors.append(f"{record_prefix} may not use a wildcard owner")
+            if not RECORD_NAME.fullmatch(owner):
+                errors.append(f"{record_prefix} has an invalid relative owner name")
+                continue
             if not isinstance(record_type, str):
                 errors.append(f"{record_prefix}.type must be a string")
                 continue
@@ -492,6 +523,22 @@ def validate_inventory(
                     f"{record_prefix}: public {record_type} record key {record_key} "
                     "requires exact public_record_allowlist membership"
                 )
+            approved_record = APPROVED_PUBLIC_RECORDS.get(name, {}).get(record_key)
+            if record_type in MODULE_CONDITIONAL_PUBLIC_TYPES and approved_record:
+                actual_record = (
+                    owner.lower(),
+                    record_type,
+                    ttl,
+                    tuple(sorted(rrdatas))
+                    if isinstance(rrdatas, list)
+                    and all(isinstance(value, str) for value in rrdatas)
+                    else (),
+                )
+                if actual_record != approved_record:
+                    errors.append(
+                        f"{record_prefix}: allowlisted public record {record_key} must "
+                        "match the exact reviewed incumbent Squarespace record"
+                    )
             if record_type == "NS" and owner == "@":
                 errors.append(f"{record_prefix}: Cloud DNS owns the apex NS record set")
             if owner.lower().startswith("_acme-challenge"):
@@ -724,6 +771,11 @@ def parse_live_zone(path: Path) -> dict[str, Any]:
         'contracts/dns-domain-inventory.json' in text
         and bool(re.search(r'(?m)^\s*records\s*=\s*local\.records\s*$', text))
     )
+    zones = _assignment_object(text, "zones")
+    zone_blocks = _top_level_record_blocks(zones)
+    if len(zone_blocks) != 1:
+        raise InventoryError("each public-zone unit must own exactly one zone")
+    _zone_key, zone = zone_blocks[0]
     canonical_allowlist = bool(
         re.search(
             r"(?m)^\s*public_record_allowlist\s*=\s*"
@@ -731,11 +783,6 @@ def parse_live_zone(path: Path) -> dict[str, Any]:
             zone,
         )
     )
-    zones = _assignment_object(text, "zones")
-    zone_blocks = _top_level_record_blocks(zones)
-    if len(zone_blocks) != 1:
-        raise InventoryError("each public-zone unit must own exactly one zone")
-    _zone_key, zone = zone_blocks[0]
     dns_name = _hcl_string(zone, "dns_name", required=False)
     domain_attribute = "dns_name"
     if dns_name is None:

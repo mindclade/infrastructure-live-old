@@ -4,28 +4,32 @@
 
 # GENERATED from contracts/dns-domain-inventory.json. DO NOT EDIT.
 ---
-schema_version: 2
+schema_version: 3
 registrar: squarespace
 authoritative_dns: google-cloud-dns
 cloud_dns_project_id: mc-common-dns
 zones:
   - domain: mindclade.com
     role: corporate-identity-email-trust
+    public_record_allowlist: []
     dnssec: required
     certificate_serving: false
     delegation_ready: false
   - domain: mindclade.ai
     role: production-product-api-auth
+    public_record_allowlist: [apex-a, www-cname]
     dnssec: required
     certificate_serving: true
     delegation_ready: false
   - domain: mindclade.dev
     role: developer-documentation-sdks
+    public_record_allowlist: [apex-a, www-cname]
     dnssec: required
     certificate_serving: true
     delegation_ready: false
   - domain: mindclade.studio
     role: isolated-demos-experiments
+    public_record_allowlist: []
     dnssec: required
     certificate_serving: true
     delegation_ready: false

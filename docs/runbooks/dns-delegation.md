@@ -31,10 +31,14 @@ Do not delegate a domain unless all of these are true:
   operators, and the rollback deadline.
 
 The planned DNS module interface permits public `TXT`, `CAA`, `MX`, and delegated-child `NS`
-records; deployment additionally requires its protected release tag and exact-ref validation.
-If the incumbent inventory contains public `A`, `AAAA`, or `CNAME` records, stop. Reconcile the
-public-service architecture and release a reviewed module change rather than omitting those
-records or bypassing the validation.
+records by default. Public `A`, `AAAA`, or `CNAME` records require an exact reviewed records-map
+key in `public_record_allowlist`; the inventory validator also pins the approved owner, type,
+TTL, and answer values. The only current exceptions are `apex-a` and `www-cname` for
+`mindclade.ai` and `mindclade.dev`. Wildcards, stale allowlist entries, and any additional public
+address record fail closed. Deployment additionally requires the protected module release tag
+and exact-ref validation. If an incumbent inventory needs any different public address record,
+stop and reconcile the public-service architecture through a separate module-and-inventory
+review rather than omitting the record or weakening validation.
 
 ## Symptoms and impact
 

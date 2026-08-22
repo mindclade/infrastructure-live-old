@@ -129,6 +129,38 @@ class DNSPortfolioTest(unittest.TestCase):
     def test_exact_squarespace_public_address_allowlist_is_accepted(self) -> None:
         self.assertEqual(portfolio.validate_inventory(self.inventory), [])
 
+    def test_allowlisted_public_address_values_are_exact(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.ai"
+        )
+        address = next(record for record in domain["records"] if record["type"] == "A")
+        address["rrdatas"] = ["203.0.113.10"]
+        errors = portfolio.validate_inventory(inventory)
+        self.assertTrue(
+            any(
+                "allowlisted public record apex-a must match the exact reviewed "
+                "incumbent Squarespace record" in error
+                for error in errors
+            )
+        )
+
+    def test_allowlisted_public_cname_target_is_exact(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.dev"
+        )
+        cname = next(record for record in domain["records"] if record["type"] == "CNAME")
+        cname["rrdatas"] = ["unreviewed.example."]
+        errors = portfolio.validate_inventory(inventory)
+        self.assertTrue(
+            any(
+                "allowlisted public record www-cname must match the exact reviewed "
+                "incumbent Squarespace record" in error
+                for error in errors
+            )
+        )
+
     def test_allowlisting_one_public_address_does_not_allow_another(self) -> None:
         inventory = copy.deepcopy(self.inventory)
         domain = next(
