@@ -21,6 +21,11 @@ locals {
     for pair in setproduct(toset(values(var.platform_project_ids)), local.verifier_roles) :
     "${pair[0]}:${pair[1]}" => { project = pair[0], role = pair[1] }
   }
+
+  eligibility_admin_principals = {
+    for environment in ["staging", "production"] : environment =>
+    "principal://iam.googleapis.com/projects/${var.platform_project_numbers[environment]}/locations/global/workloadIdentityPools/${var.platform_project_ids[environment]}.svc.id.goog/subject/ns/mindclade-system/sa/control-plane-admin"
+  }
 }
 
 resource "google_service_account" "gitops_render" {
@@ -39,8 +44,9 @@ resource "google_service_account" "gitops_verifier" {
 
 resource "google_service_account" "production_qualification" {
   for_each = {
-    reader = "Reads the dedicated GitHub App key for exact-source qualification."
-    writer = "Publishes immutable production qualification evidence to the protected archive."
+    evaluator = "Submits qualified evidence and verifies signed production-eligibility decisions through IAP."
+    reader    = "Reads the dedicated GitHub App key for exact-source qualification."
+    writer    = "Publishes immutable production qualification evidence to the protected archive."
   }
 
   project      = var.security_project_id
@@ -66,6 +72,70 @@ resource "google_service_account_iam_member" "production_qualification_wif" {
   service_account_id = each.value.name
   role               = "roles/iam.workloadIdentityUser"
   member             = var.production_qualification_identity.principal
+}
+
+resource "google_service_account_iam_member" "production_qualification_evaluator_sign_jwt" {
+  service_account_id = google_service_account.production_qualification["evaluator"].name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = var.production_qualification_identity.principal
+}
+
+resource "google_project_iam_member" "production_qualification_evaluator_iap" {
+  for_each = {
+    staging    = var.platform_project_ids.staging
+    production = var.platform_project_ids.production
+  }
+
+  project = each.value
+  role    = "roles/iap.httpsResourceAccessor"
+  member  = "serviceAccount:${google_service_account.production_qualification["evaluator"].email}"
+}
+
+resource "google_kms_crypto_key" "production_eligibility" {
+  name                          = "production-eligibility-decisions"
+  key_ring                      = var.eligibility_signing_key_ring_id
+  purpose                       = "ASYMMETRIC_SIGN"
+  skip_initial_version_creation = true
+
+  version_template {
+    algorithm        = "EC_SIGN_ED25519"
+    protection_level = "HSM"
+  }
+
+  labels = {
+    managed_by  = "terraform"
+    repository  = "infrastructure-live"
+    purpose     = "production-eligibility"
+    criticality = "critical"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_kms_crypto_key_version" "production_eligibility" {
+  crypto_key = google_kms_crypto_key.production_eligibility.id
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_kms_crypto_key_iam_member" "production_eligibility_signer" {
+  for_each = local.eligibility_admin_principals
+
+  crypto_key_id = google_kms_crypto_key.production_eligibility.id
+  role          = "roles/cloudkms.signer"
+  member        = each.value
+}
+
+resource "google_kms_crypto_key_iam_member" "production_eligibility_public_key" {
+  for_each = toset(["evaluator", "writer"])
+
+  crypto_key_id = google_kms_crypto_key.production_eligibility.id
+  role          = "roles/cloudkms.publicKeyViewer"
+  member        = "serviceAccount:${google_service_account.production_qualification[each.value].email}"
 }
 
 resource "google_project_service_identity" "secret_manager" {

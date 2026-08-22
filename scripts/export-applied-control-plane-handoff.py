@@ -47,6 +47,11 @@ KEY_VERSION = re.compile(
     r"keyRings/[A-Za-z0-9_-]+/cryptoKeys/attestor-deployment-attestor/"
     r"cryptoKeyVersions/[1-9][0-9]*$"
 )
+ELIGIBILITY_KEY_VERSION = re.compile(
+    r"^projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/locations/[a-z0-9-]+/"
+    r"keyRings/[A-Za-z0-9_-]+/cryptoKeys/production-eligibility-decisions/"
+    r"cryptoKeyVersions/[1-9][0-9]*$"
+)
 MOCK_VALUE = re.compile(
     r"(?i)(?:^|[-_/.])(mock|unknown|placeholder|example|changeme)(?:$|[-_/.])|"
     r"\(known after apply\)"
@@ -356,6 +361,18 @@ def compile_contract(
     )
     if qualification_secret != "github-app-production-qualification-reader-pem":
         raise ValueError("production qualification private-key secret ID is not exact")
+    eligibility_key_version = require_string(
+        qualification_handoff.get("PRODUCTION_ELIGIBILITY_KMS_KEY_VERSION"),
+        "PRODUCTION_ELIGIBILITY_KMS_KEY_VERSION",
+    )
+    if ELIGIBILITY_KEY_VERSION.fullmatch(eligibility_key_version) is None:
+        raise ValueError("production eligibility signer is not an immutable KMS key version")
+    eligibility_key_id = require_string(
+        qualification_handoff.get("PRODUCTION_ELIGIBILITY_SIGNING_KEY_ID"),
+        "PRODUCTION_ELIGIBILITY_SIGNING_KEY_ID",
+    )
+    if eligibility_key_id != "production-eligibility-v1":
+        raise ValueError("production eligibility signing key ID is not exact")
 
     variables = {
         "CI_PROJECT_ID": ci_project_id,
@@ -373,6 +390,12 @@ def compile_contract(
             project_suffix="-common-security",
         ),
         "WIF_PROVIDER_PRODUCTION_QUALIFICATION": qualification_provider,
+        "SA_PRODUCTION_QUALIFICATION_EVALUATOR": require_service_account(
+            qualification_handoff.get("SA_PRODUCTION_QUALIFICATION_EVALUATOR"),
+            "SA_PRODUCTION_QUALIFICATION_EVALUATOR",
+            expected_account="sa-prod-qual-evaluator",
+            project_suffix="-common-security",
+        ),
         "SA_PRODUCTION_QUALIFICATION_READER": require_service_account(
             qualification_handoff.get("SA_PRODUCTION_QUALIFICATION_READER"),
             "SA_PRODUCTION_QUALIFICATION_READER",
@@ -388,6 +411,8 @@ def compile_contract(
         "PRODUCTION_QUALIFICATION_PROJECT": qualification_project,
         "PRODUCTION_QUALIFICATION_BUCKET": bucket_name,
         "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET": qualification_secret,
+        "PRODUCTION_ELIGIBILITY_SIGNING_KEY_ID": eligibility_key_id,
+        "PRODUCTION_ELIGIBILITY_KMS_KEY_VERSION": eligibility_key_version,
         "BINAUTHZ_BUILD_ATTESTOR_PROJECT": project_id,
         "BINAUTHZ_BUILD_ATTESTOR": exact_attestors["build-attestor"],
         "BINAUTHZ_QUALIFICATION_ATTESTOR_PROJECT": project_id,
@@ -397,7 +422,7 @@ def compile_contract(
         "BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION": deployment_key,
     }
     return {
-        "contract_version": "1.2.0",
+        "contract_version": "1.3.0",
         "producer": "mindclade/infrastructure-live",
         "source_commit": source_commit,
         "environment": "production",

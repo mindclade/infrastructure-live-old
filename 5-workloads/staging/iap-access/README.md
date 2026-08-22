@@ -14,8 +14,10 @@ The staging browser plane remains disabled until all of the following are true:
    `spec.default.iap.enabled: true`;
 3. access is granted through a reviewed, stable IAM design—preferably a dedicated project
    or a module consuming stable Gateway outputs, never manually copied generated names;
-4. the access principal is an IdP-managed group, not an individual or
-   `allAuthenticatedUsers`;
+4. human access uses an IdP-managed group, never an individual or
+   `allAuthenticatedUsers`; the sole non-human exception is the exact
+   `sa-prod-qual-evaluator` identity with project-level accessor authority for keyless,
+   protected production-qualification rehearsal calls;
 5. the resulting IAP policy is tested from both an authorized and an unauthorized identity.
 
 Google-managed IAP OAuth clients are the default for internal browser access. Custom OAuth

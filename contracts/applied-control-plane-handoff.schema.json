@@ -13,7 +13,7 @@
     "credential_material_included"
   ],
   "properties": {
-    "contract_version": { "const": "1.2.0" },
+    "contract_version": { "const": "1.3.0" },
     "producer": { "const": "mindclade/infrastructure-live" },
     "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "environment": { "const": "production" },
@@ -47,11 +47,14 @@
         "SA_GITOPS_RENDER",
         "SA_GITOPS_VERIFIER",
         "WIF_PROVIDER_PRODUCTION_QUALIFICATION",
+        "SA_PRODUCTION_QUALIFICATION_EVALUATOR",
         "SA_PRODUCTION_QUALIFICATION_READER",
         "SA_PRODUCTION_QUALIFICATION_WRITER",
         "PRODUCTION_QUALIFICATION_PROJECT",
         "PRODUCTION_QUALIFICATION_BUCKET",
         "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET",
+        "PRODUCTION_ELIGIBILITY_SIGNING_KEY_ID",
+        "PRODUCTION_ELIGIBILITY_KMS_KEY_VERSION",
         "BINAUTHZ_BUILD_ATTESTOR_PROJECT",
         "BINAUTHZ_BUILD_ATTESTOR",
         "BINAUTHZ_QUALIFICATION_ATTESTOR_PROJECT",
@@ -101,6 +104,9 @@
           "type": "string",
           "pattern": "^projects/[0-9]+/locations/global/workloadIdentityPools/github/providers/gh-production-qualification$"
         },
+        "SA_PRODUCTION_QUALIFICATION_EVALUATOR": {
+          "const": "sa-prod-qual-evaluator@mc-common-security.iam.gserviceaccount.com"
+        },
         "SA_PRODUCTION_QUALIFICATION_READER": {
           "const": "sa-prod-qual-reader@mc-common-security.iam.gserviceaccount.com"
         },
@@ -111,6 +117,13 @@
         "PRODUCTION_QUALIFICATION_BUCKET": { "const": "mc-production-qualification-evidence" },
         "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET": {
           "const": "github-app-production-qualification-reader-pem"
+        },
+        "PRODUCTION_ELIGIBILITY_SIGNING_KEY_ID": {
+          "const": "production-eligibility-v1"
+        },
+        "PRODUCTION_ELIGIBILITY_KMS_KEY_VERSION": {
+          "type": "string",
+          "pattern": "^projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/locations/[a-z0-9-]+/keyRings/[A-Za-z0-9_-]+/cryptoKeys/production-eligibility-decisions/cryptoKeyVersions/[1-9][0-9]*$"
         },
         "BINAUTHZ_BUILD_ATTESTOR_PROJECT": { "$ref": "#/$defs/productionProjectId" },
         "BINAUTHZ_BUILD_ATTESTOR": { "const": "build-attestor" },
