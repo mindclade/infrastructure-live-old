@@ -35,5 +35,6 @@ jobs:
         shell: bash
         run: python3 scripts/validate-production-contract.py
       - name: Validate repository home
-        shell: bash
-        run: python3 scripts/validate-repository-home.py --root .
+        uses: mindclade/.github/actions/validate-repository-home@8467615f12868d4b78718b8ddf7f05797c44a507  # policy bundle 2026.08.21.3
+        with:
+          local-validator-path: scripts/validate-repository-home.py
