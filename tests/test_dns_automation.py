@@ -25,6 +25,37 @@ class DNSPortfolioTest(unittest.TestCase):
     def setUp(self) -> None:
         self.inventory = portfolio.load_inventory(portfolio.DEFAULT_INVENTORY)
 
+    def ready_workspace_inventory(self) -> dict:
+        inventory = copy.deepcopy(self.inventory)
+        inventory["module_contract"]["release_status"] = "published"
+        inventory["migration_window"] = {
+            "status": "approved",
+            "change_reference": "CHG-test",
+            "starts_at": "2026-08-22T01:00:00Z",
+            "ends_at": "2026-08-22T02:00:00Z",
+        }
+        for domain in inventory["domains"]:
+            domain["activation_blockers"] = [
+                blocker
+                for blocker in domain["activation_blockers"]
+                if blocker
+                not in {
+                    portfolio.MODULE_RELEASE_BLOCKER,
+                    portfolio.MIGRATION_WINDOW_BLOCKER,
+                }
+            ]
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.com"
+        )
+        domain.update(
+            {
+                "inventory_complete": True,
+                "delegation_ready": True,
+                "activation_blockers": [],
+            }
+        )
+        return inventory
+
     def test_committed_inventory_is_safe_and_matches_live_units(self) -> None:
         self.assertEqual(portfolio.validate_inventory(self.inventory), [])
         self.assertEqual(portfolio.validate_live_parity(self.inventory), [])
@@ -214,73 +245,142 @@ class DNSPortfolioTest(unittest.TestCase):
         apex_txt["rrdatas"] = ["v=spf1 -all"]
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
-            "mindclade.studio: apex TXT must retain a Google verification value",
+            "mindclade.studio: apex TXT must retain the exact reviewed Google "
+            "verification value at TTL 3600",
             errors,
         )
 
-    def test_workspace_readiness_requires_complete_mail_authentication(self) -> None:
+    def test_google_verification_value_is_exact(self) -> None:
         inventory = copy.deepcopy(self.inventory)
-        inventory["module_contract"]["ref"] = "v0.2.0"
-        inventory["module_contract"]["release_status"] = "published"
-        inventory["module_contract"]["supports_record_name_override"] = True
-        inventory["migration_window"] = {
-            "status": "approved",
-            "change_reference": "CHG-test",
-            "starts_at": "2026-08-22T01:00:00Z",
-            "ends_at": "2026-08-22T02:00:00Z",
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.dev"
+        )
+        apex_txt = next(
+            record
+            for record in domain["records"]
+            if record["name"] == "@" and record["type"] == "TXT"
+        )
+        apex_txt["rrdatas"][-1] = "google-site-verification=unreviewed"
+        errors = portfolio.validate_inventory(inventory)
+        self.assertIn(
+            "mindclade.dev: apex TXT must retain the exact reviewed Google "
+            "verification value at TTL 3600",
+            errors,
+        )
+
+    def test_no_mail_dmarc_requires_strict_alignment(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.ai"
+        )
+        dmarc = next(
+            record
+            for record in domain["records"]
+            if record["name"] == "_dmarc" and record["type"] == "TXT"
+        )
+        dmarc["rrdatas"] = ["v=DMARC1; p=reject; sp=reject"]
+        errors = portfolio.validate_inventory(inventory)
+        self.assertIn(
+            "mindclade.ai: no-mail policy requires exact DMARC p=reject, "
+            "sp=reject, adkim=s, and aspf=s",
+            errors,
+        )
+
+    def test_no_mail_dmarc_rejects_policy_weakening_tags(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.ai"
+        )
+        dmarc = next(
+            record
+            for record in domain["records"]
+            if record["name"] == "_dmarc" and record["type"] == "TXT"
+        )
+        dmarc["rrdatas"] = [
+            "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; pct=0"
+        ]
+        errors = portfolio.validate_inventory(inventory)
+        self.assertIn(
+            "mindclade.ai: no-mail policy requires exact DMARC p=reject, "
+            "sp=reject, adkim=s, and aspf=s",
+            errors,
+        )
+
+    def test_schema_rejects_unexpected_nested_property(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        inventory["certificate_policy"]["unreviewed"] = True
+        errors = portfolio.validate_inventory(inventory)
+        self.assertTrue(
+            any(
+                error.startswith("schema $.certificate_policy:")
+                and "additionalProperties constraint failed" in error
+                for error in errors
+            )
+        )
+
+    def test_schema_requires_each_domain_exactly_once(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        inventory["domains"][1] = copy.deepcopy(inventory["domains"][0])
+        errors = portfolio.validate_inventory_schema(inventory)
+        self.assertTrue(
+            any(
+                error.startswith("schema $.domains:")
+                and "contains constraint failed" in error
+                for error in errors
+            )
+        )
+
+    def test_schema_errors_do_not_emit_record_values(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        inventory["domains"][1] = copy.deepcopy(inventory["domains"][0])
+        record_values = {
+            value
+            for domain in inventory["domains"]
+            for record in domain["records"]
+            for value in record["rrdatas"]
         }
-        for domain in inventory["domains"]:
-            domain["activation_blockers"] = [
-                blocker
-                for blocker in domain["activation_blockers"]
-                if blocker
-                not in {
-                    "dns-module-record-name-override-not-released",
-                    portfolio.MODULE_RELEASE_BLOCKER,
-                    portfolio.MIGRATION_WINDOW_BLOCKER,
-                }
-            ]
+        errors = portfolio.validate_inventory_schema(inventory)
+        self.assertTrue(errors)
+        for error in errors:
+            for record_value in record_values:
+                self.assertNotIn(record_value, error)
+
+    def test_workspace_readiness_requires_complete_mail_authentication(self) -> None:
+        inventory = self.ready_workspace_inventory()
+        self.assertEqual(
+            portfolio.validate_inventory(inventory, {"mindclade.com"}), []
+        )
+
+    def test_workspace_mx_values_are_exact(self) -> None:
+        inventory = self.ready_workspace_inventory()
         domain = next(
             item for item in inventory["domains"] if item["domain"] == "mindclade.com"
         )
-        domain.update(
-            {
-                "inventory_complete": True,
-                "delegation_ready": True,
-                "activation_blockers": [],
-                "records": [
-                    {
-                        "name": "@",
-                        "type": "MX",
-                        "ttl": 3600,
-                        "rrdatas": ["1 smtp.google.com."],
-                    },
-                    {
-                        "name": "@",
-                        "type": "TXT",
-                        "ttl": 3600,
-                        "rrdatas": [
-                            portfolio.FINAL_WORKSPACE_SPF,
-                            "google-site-verification=public-token",
-                        ],
-                    },
-                    {
-                        "name": "google._domainkey",
-                        "type": "TXT",
-                        "ttl": 3600,
-                        "rrdatas": ["v=DKIM1; k=rsa; p=public-key"],
-                    },
-                    {
-                        "name": "_dmarc",
-                        "type": "TXT",
-                        "ttl": 3600,
-                        "rrdatas": [portfolio.FINAL_WORKSPACE_DMARC],
-                    },
-                ],
-            }
+        mx = next(record for record in domain["records"] if record["type"] == "MX")
+        mx["rrdatas"] = ["1 smtp.google.com."]
+        errors = portfolio.validate_inventory(inventory, {"mindclade.com"})
+        self.assertIn(
+            "mindclade.com: apex MX must match the exact reviewed Google Workspace "
+            "record set at TTL 300",
+            errors,
         )
-        self.assertEqual(
-            portfolio.validate_inventory(inventory, {"mindclade.com"}), []
+
+    def test_workspace_dkim_value_is_exact(self) -> None:
+        inventory = self.ready_workspace_inventory()
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.com"
+        )
+        dkim = next(
+            record
+            for record in domain["records"]
+            if record["name"] == "google._domainkey"
+        )
+        dkim["rrdatas"] = ["v=DKIM1;k=rsa;p=unreviewed"]
+        errors = portfolio.validate_inventory(inventory, {"mindclade.com"})
+        self.assertIn(
+            "mindclade.com: google._domainkey TXT must match the exact reviewed "
+            "Workspace DKIM value at TTL 300",
+            errors,
         )
 
 

@@ -133,6 +133,10 @@
             };
           };
 
+          validationPython = pkgs.python3.withPackages (pythonPackages: [
+            pythonPackages.jsonschema
+          ]);
+
           ciShell = pkgs.mkShell {
             # ---------------------------------------------------------------------------------
             # CI shell
@@ -155,6 +159,7 @@
 
             packages = [
               terragruntPinned
+              validationPython
             ]
             ++ (with pkgs; [
               # The `lint` job in plan.yml. .yamllint.yaml and .github/actionlint.yaml were in
@@ -164,7 +169,6 @@
               bind # dig for the read-only DNS cutover evidence workflow
               git
               gnumake
-              python3
               shellcheck # actionlint shells out to it for `run:` blocks
               yamllint
             ]);
@@ -187,6 +191,7 @@
               yamllint
               actionlint
               bind
+              validationPython
 
               terraformPinned
 

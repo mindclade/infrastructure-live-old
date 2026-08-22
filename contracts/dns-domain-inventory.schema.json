@@ -114,7 +114,13 @@
       "type": "array",
       "minItems": 4,
       "maxItems": 4,
-      "items": {"$ref": "#/$defs/domain"}
+      "items": {"$ref": "#/$defs/domain"},
+      "allOf": [
+        {"contains": {"properties": {"domain": {"const": "mindclade.com"}}, "required": ["domain"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"domain": {"const": "mindclade.ai"}}, "required": ["domain"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"domain": {"const": "mindclade.dev"}}, "required": ["domain"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"domain": {"const": "mindclade.studio"}}, "required": ["domain"]}, "minContains": 1, "maxContains": 1}
+      ]
     }
   },
   "$defs": {
@@ -205,7 +211,7 @@
               "role": {"const": "isolated-demos-experiments"},
               "mail_policy": {"const": "no-mail"},
               "certificate_serving": {"const": true},
-              "dynamic_record_types": {"prefixItems": [{"const": "CNAME"}], "minItems": 1, "maxItems": 1},
+              "dynamic_record_types": {"items": {"const": "CNAME"}, "minItems": 1, "maxItems": 1},
               "public_record_allowlist": {"maxItems": 0}
             }
           }
@@ -213,11 +219,12 @@
       ]
     },
     "public_squarespace_domain": {
+      "type": "object",
       "properties": {
         "mail_policy": {"const": "no-mail"},
         "certificate_serving": {"const": true},
-        "dynamic_record_types": {"prefixItems": [{"const": "CNAME"}], "minItems": 1, "maxItems": 1},
-        "public_record_allowlist": {"prefixItems": [{"const": "apex-a"}, {"const": "www-cname"}], "minItems": 2, "maxItems": 2}
+        "dynamic_record_types": {"items": {"const": "CNAME"}, "minItems": 1, "maxItems": 1},
+        "public_record_allowlist": {"items": {"enum": ["apex-a", "www-cname"]}, "minItems": 2, "maxItems": 2, "uniqueItems": true}
       }
     }
   }

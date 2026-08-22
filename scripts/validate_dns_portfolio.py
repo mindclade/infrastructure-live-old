@@ -14,6 +14,7 @@ pretending that an incomplete zone is ready to delegate.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -26,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INVENTORY = (
     ROOT / "contracts/dns-domain-inventory.json"
 )
+DEFAULT_SCHEMA = ROOT / "contracts/dns-domain-inventory.schema.json"
 PUBLIC_ZONES = ROOT / "3-networks/shared/public-zones"
 SHARED_DNS_HUB = ROOT / "3-networks/shared/dns-hub/terragrunt.hcl"
 
@@ -138,6 +140,40 @@ APPROVED_PUBLIC_RECORD_ALLOWLISTS = {
     domain: set(APPROVED_PUBLIC_RECORDS.get(domain, {}))
     for domain in EXPECTED_DOMAINS
 }
+REVIEWED_GOOGLE_VERIFICATION = {
+    "mindclade.com": (
+        300,
+        "google-site-verification=VbOqcgzfjWHUJucvRZrLc6Ha2sbMuOyB0WAA6YnTqPY",
+    ),
+    "mindclade.ai": (
+        3600,
+        "google-site-verification=PySGrYrpdfTEzLQ4NEt-cil0BGPu0wrpKie4raR6RLk",
+    ),
+    "mindclade.dev": (
+        3600,
+        "google-site-verification=2RPVgJvXDrMYl1teBBy2ZUjXOTsXlPOxt9OIvtKp2C8",
+    ),
+    "mindclade.studio": (
+        3600,
+        "google-site-verification=6NVsg_ufGEcTcp75gxRFZTfDHrBHkxQSyDPLz3k39zI",
+    ),
+}
+REVIEWED_WORKSPACE_MX = (
+    300,
+    {
+        "1 aspmx.l.google.com.",
+        "5 alt1.aspmx.l.google.com.",
+        "5 alt2.aspmx.l.google.com.",
+        "10 alt3.aspmx.l.google.com.",
+        "10 alt4.aspmx.l.google.com.",
+    },
+)
+REVIEWED_WORKSPACE_DKIM = {
+    "google._domainkey": (
+        300,
+        "85f5ca64860205f5398e090043f0f6d8dec8e89610c9608c9dda1607beb0cd50",
+    )
+}
 FINAL_WORKSPACE_SPF = "v=spf1 include:_spf.google.com -all"
 FINAL_WORKSPACE_DMARC = (
     "v=DMARC1; p=reject; sp=reject; pct=100; adkim=s; aspf=s; "
@@ -215,12 +251,73 @@ def _record_map_key(owner: str, record_type: str) -> str:
     return f"{owner.replace('@', 'apex')}-{record_type.lower()}"
 
 
+def _json_path(parts: Any) -> str:
+    result = "$"
+    for part in parts:
+        result += f"[{part}]" if isinstance(part, int) else f".{part}"
+    return result
+
+
+def validate_inventory_schema(
+    inventory: dict[str, Any], schema_path: Path = DEFAULT_SCHEMA
+) -> list[str]:
+    """Validate the inventory against the committed Draft 2020-12 schema."""
+
+    try:
+        from jsonschema import Draft202012Validator, FormatChecker
+        from jsonschema.exceptions import SchemaError
+    except ImportError as exc:
+        return [
+            "JSON Schema validation requires the pinned jsonschema package from "
+            f"`nix develop .#ci`: {exc}"
+        ]
+
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"cannot read inventory schema {schema_path}: {exc}"]
+
+    try:
+        Draft202012Validator.check_schema(schema)
+    except SchemaError as exc:
+        return [f"invalid inventory schema {schema_path}: {exc.message}"]
+
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    violations = sorted(
+        validator.iter_errors(inventory),
+        key=lambda error: (
+            tuple(str(part) for part in error.absolute_path),
+            error.message,
+        ),
+    )
+    return [
+        f"schema {_json_path(error.absolute_path)}: {error.validator} constraint "
+        f"failed at {_json_path(error.absolute_schema_path)}"
+        for error in violations
+    ]
+
+
+def _dmarc_tags(value: str) -> dict[str, str] | None:
+    tags: dict[str, str] = {}
+    for item in value.split(";"):
+        item = item.strip()
+        if not item:
+            continue
+        if "=" not in item:
+            return None
+        name, tag_value = (part.strip().lower() for part in item.split("=", 1))
+        if not name or not tag_value or name in tags:
+            return None
+        tags[name] = tag_value
+    return tags
+
+
 def validate_inventory(
     inventory: dict[str, Any], require_ready: set[str] | None = None
 ) -> list[str]:
     """Return every portfolio policy violation in stable order."""
 
-    errors: list[str] = []
+    errors = validate_inventory_schema(inventory)
     require_ready = require_ready or set()
 
     if inventory.get("schema_version") != 3:
@@ -574,9 +671,17 @@ def validate_inventory(
             for value in apex_txt
             if value.lower().startswith("google-site-verification=")
         ]
-        if not verification:
+        expected_verification_ttl, expected_verification = (
+            REVIEWED_GOOGLE_VERIFICATION[name]
+        )
+        apex_txt_record = record_sets.get(("@", "TXT"), {})
+        if (
+            verification != [expected_verification]
+            or apex_txt_record.get("ttl") != expected_verification_ttl
+        ):
             errors.append(
-                f"{prefix}: apex TXT must retain a Google verification value"
+                f"{prefix}: apex TXT must retain the exact reviewed Google "
+                f"verification value at TTL {expected_verification_ttl}"
             )
         if name in CERTIFICATE_DOMAINS:
             apex_caa = record_sets.get(("@", "CAA"))
@@ -599,33 +704,67 @@ def validate_inventory(
             if spf != ["v=spf1 -all"]:
                 errors.append(f"{prefix}: no-mail policy requires apex SPF 'v=spf1 -all'")
             dmarc = _txt_values(record_sets, "_dmarc")
-            if len(dmarc) != 1 or not all(
-                token in dmarc[0].lower() for token in ("v=dmarc1", "p=reject", "sp=reject")
-            ):
+            dmarc_tags = _dmarc_tags(dmarc[0]) if len(dmarc) == 1 else None
+            required_dmarc_tags = {
+                "v": "dmarc1",
+                "p": "reject",
+                "sp": "reject",
+                "adkim": "s",
+                "aspf": "s",
+            }
+            if dmarc_tags != required_dmarc_tags:
                 errors.append(
-                    f"{prefix}: no-mail policy requires DMARC p=reject and sp=reject"
+                    f"{prefix}: no-mail policy requires exact DMARC p=reject, "
+                    "sp=reject, adkim=s, and aspf=s"
                 )
 
+        if expected_mail == "google-workspace":
+            expected_mx_ttl, expected_mx_values = REVIEWED_WORKSPACE_MX
+            mx_record = record_sets.get(("@", "MX"), {})
+            if (
+                mx_record.get("ttl") != expected_mx_ttl
+                or set(_strings(mx_record.get("rrdatas"))) != expected_mx_values
+            ):
+                errors.append(
+                    f"{prefix}: apex MX must match the exact reviewed Google Workspace "
+                    f"record set at TTL {expected_mx_ttl}"
+                )
+
+            dkim_records = {
+                owner: record
+                for (owner, record_type), record in record_sets.items()
+                if record_type == "TXT" and owner.endswith("._domainkey")
+            }
+            if set(dkim_records) != set(REVIEWED_WORKSPACE_DKIM):
+                errors.append(
+                    f"{prefix}: DKIM TXT owners must match the exact reviewed Workspace set"
+                )
+            else:
+                for owner, (expected_ttl, expected_fingerprint) in (
+                    REVIEWED_WORKSPACE_DKIM.items()
+                ):
+                    dkim_record = dkim_records[owner]
+                    values = _strings(dkim_record.get("rrdatas"))
+                    fingerprint = (
+                        hashlib.sha256(values[0].encode("utf-8")).hexdigest()
+                        if len(values) == 1
+                        else ""
+                    )
+                    if (
+                        dkim_record.get("ttl") != expected_ttl
+                        or fingerprint != expected_fingerprint
+                    ):
+                        errors.append(
+                            f"{prefix}: {owner} TXT must match the exact reviewed "
+                            f"Workspace DKIM value at TTL {expected_ttl}"
+                        )
+
         if expected_mail == "google-workspace" and ready:
-            mx = record_sets.get(("@", "MX"), {}).get("rrdatas", [])
-            if not mx or mx == ["0 ."]:
-                errors.append(f"{prefix}: Workspace readiness requires a non-null apex MX")
             spf = [value for value in apex_txt if value.lower().startswith("v=spf1 ")]
             if spf != [FINAL_WORKSPACE_SPF]:
                 errors.append(
                     f"{prefix}: Workspace readiness requires final Google-only hard-fail SPF"
                 )
-            if not verification:
-                errors.append(
-                    f"{prefix}: Workspace readiness requires a Google verification TXT record"
-                )
-            dkim = [
-                record
-                for (owner, record_type), record in record_sets.items()
-                if record_type == "TXT" and owner.endswith("._domainkey")
-            ]
-            if not dkim:
-                errors.append(f"{prefix}: Workspace readiness requires a DKIM TXT record")
             dmarc = _txt_values(record_sets, "_dmarc")
             if dmarc != [FINAL_WORKSPACE_DMARC]:
                 errors.append(
