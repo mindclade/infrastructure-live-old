@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -16,6 +17,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+ERROR_CODE = re.compile(r"^\[DNS-[A-Z0-9-]+\] ")
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import check_dns_delegation as delegation  # noqa: E402
@@ -93,7 +95,7 @@ class DNSPortfolioTest(unittest.TestCase):
         domain["activation_blockers"].remove(portfolio.MODULE_RELEASE_BLOCKER)
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
-            "mindclade.ai: planned module ref requires the "
+            "[DNS-INVENTORY-POLICY] mindclade.ai: planned module ref requires the "
             "dns-module-ref-not-published blocker",
             errors,
         )
@@ -103,7 +105,8 @@ class DNSPortfolioTest(unittest.TestCase):
         inventory["module_contract"]["release_status"] = "published"
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
-            "mindclade.ai: remove the stale module-release activation blocker",
+            "[DNS-INVENTORY-POLICY] mindclade.ai: remove the stale "
+            "module-release activation blocker",
             errors,
         )
 
@@ -111,14 +114,17 @@ class DNSPortfolioTest(unittest.TestCase):
         errors = portfolio.validate_inventory(
             self.inventory, require_ready={"mindclade.com"}
         )
-        self.assertIn("mindclade.com: delegation is not ready", errors)
+        self.assertIn(
+            "[DNS-INVENTORY-POLICY] mindclade.com: delegation is not ready", errors
+        )
 
     def test_environment_naming_cannot_enable_wildcard_production_records(self) -> None:
         inventory = copy.deepcopy(self.inventory)
         inventory["environment_naming"]["wildcard_production_records_allowed"] = True
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
-            "environment_naming must define production, staging, and development "
+            "[DNS-INVENTORY-POLICY] environment_naming must define production, "
+            "staging, and development "
             "mindclade.ai boundaries without wildcard production records",
             errors,
         )
@@ -131,7 +137,7 @@ class DNSPortfolioTest(unittest.TestCase):
         domain["activation_blockers"].remove(portfolio.MIGRATION_WINDOW_BLOCKER)
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
-            "mindclade.dev: unapproved migration requires the "
+            "[DNS-INVENTORY-POLICY] mindclade.dev: unapproved migration requires the "
             "migration-window-not-approved blocker",
             errors,
         )
@@ -145,7 +151,8 @@ class DNSPortfolioTest(unittest.TestCase):
         caa["rrdatas"].append('0 issue "example.invalid"')
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
-            "mindclade.ai: apex CAA must permit pki.goog and letsencrypt.org, "
+            "[DNS-INVENTORY-POLICY] mindclade.ai: apex CAA must permit pki.goog "
+            "and letsencrypt.org, "
             "forbid wildcards, and carry the security iodef contact",
             errors,
         )
@@ -159,7 +166,9 @@ class DNSPortfolioTest(unittest.TestCase):
         mx["rrdatas"] = ["1 smtp.google.com."]
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
-            "mindclade.ai: no-mail policy requires apex null MX '0 .'", errors
+            "[DNS-INVENTORY-POLICY] mindclade.ai: no-mail policy requires apex "
+            "null MX '0 .'",
+            errors,
         )
 
     def test_public_address_record_is_rejected_by_module_contract(self) -> None:
@@ -243,7 +252,8 @@ class DNSPortfolioTest(unittest.TestCase):
         domain["public_record_allowlist"].append("missing-a")
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
-            "mindclade.dev: public_record_allowlist entry missing-a must match "
+            "[DNS-INVENTORY-POLICY] mindclade.dev: public_record_allowlist entry "
+            "missing-a must match "
             "exactly one A, AAAA, or CNAME record",
             errors,
         )
@@ -318,7 +328,8 @@ class DNSPortfolioTest(unittest.TestCase):
         dmarc["rrdatas"] = ["v=DMARC1; p=reject; sp=reject"]
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
-            "mindclade.ai: no-mail policy requires exact DMARC p=reject, "
+            "[DNS-INVENTORY-POLICY] mindclade.ai: no-mail policy requires exact "
+            "DMARC p=reject, "
             "sp=reject, adkim=s, and aspf=s",
             errors,
         )
@@ -338,7 +349,8 @@ class DNSPortfolioTest(unittest.TestCase):
         ]
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
-            "mindclade.ai: no-mail policy requires exact DMARC p=reject, "
+            "[DNS-INVENTORY-POLICY] mindclade.ai: no-mail policy requires exact "
+            "DMARC p=reject, "
             "sp=reject, adkim=s, and aspf=s",
             errors,
         )
@@ -349,7 +361,9 @@ class DNSPortfolioTest(unittest.TestCase):
         errors = portfolio.validate_inventory(inventory)
         self.assertTrue(
             any(
-                error.startswith("schema $.certificate_policy:")
+                error.startswith(
+                    "[DNS-INVENTORY-SCHEMA] schema $.certificate_policy:"
+                )
                 and "additionalProperties constraint failed" in error
                 for error in errors
             )
@@ -361,7 +375,7 @@ class DNSPortfolioTest(unittest.TestCase):
         errors = portfolio.validate_inventory_schema(inventory)
         self.assertTrue(
             any(
-                error.startswith("schema $.domains:")
+                error.startswith("[DNS-INVENTORY-SCHEMA] schema $.domains:")
                 and "contains constraint failed" in error
                 for error in errors
             )
@@ -381,6 +395,46 @@ class DNSPortfolioTest(unittest.TestCase):
         for error in errors:
             for record_value in record_values:
                 self.assertNotIn(record_value, error)
+
+    def test_inventory_diagnostics_are_coded_and_redacted(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        inventory["schema_version"] = 999
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.dev"
+        )
+        apex_txt = next(
+            record
+            for record in domain["records"]
+            if record["name"] == "@" and record["type"] == "TXT"
+        )
+        injected_value = "google-site-verification=must-not-appear-in-diagnostics"
+        apex_txt["rrdatas"][-1] = injected_value
+
+        errors = portfolio.validate_inventory(inventory)
+
+        self.assertTrue(errors)
+        for error in errors:
+            self.assertRegex(error, ERROR_CODE)
+            self.assertNotIn(injected_value, error)
+
+    def test_public_validation_boundaries_emit_stable_codes(self) -> None:
+        with self.assertRaises(portfolio.InventoryError) as raised:
+            portfolio.load_inventory(ROOT / "contracts/missing-dns-inventory.json")
+        self.assertRegex(str(raised.exception), r"^\[DNS-INVENTORY-LOAD\] ")
+
+        parity_errors = portfolio.validate_live_parity({"domains": None})
+        self.assertTrue(parity_errors)
+        self.assertTrue(
+            all(error.startswith("[DNS-LIVE-PARITY] ") for error in parity_errors)
+        )
+
+        hub_errors = portfolio.validate_shared_dns_hub_interface(
+            ROOT / "3-networks/shared/missing-dns-hub.hcl"
+        )
+        self.assertTrue(hub_errors)
+        self.assertTrue(
+            all(error.startswith("[DNS-HUB-INTERFACE] ") for error in hub_errors)
+        )
 
     def test_record_pins_schema_requires_every_reviewed_identity(self) -> None:
         record_pins = copy.deepcopy(self.record_pins)
@@ -412,6 +466,27 @@ class DNSPortfolioTest(unittest.TestCase):
             )
         self.assertTrue(
             any(error.startswith("[DNS-PINS-001]") for error in errors)
+        )
+
+    def test_missing_reviewed_record_emits_stable_code(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.com"
+        )
+        domain["records"] = [
+            record
+            for record in domain["records"]
+            if not (
+                record["name"] == "google._domainkey" and record["type"] == "TXT"
+            )
+        ]
+
+        errors = portfolio.validate_inventory(inventory)
+
+        self.assertIn(
+            "[DNS-PINS-101] mindclade.com: reviewed pin "
+            "mindclade-com-google-workspace-dkim record is missing",
+            errors,
         )
 
     def test_record_pins_contract_root_must_be_an_object(self) -> None:

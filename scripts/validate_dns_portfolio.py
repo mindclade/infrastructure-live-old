@@ -165,6 +165,12 @@ RECORD_NAME = re.compile(
 BLOCKER = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SEMVER_REF = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 CHANGE_REFERENCE = re.compile(r"^(?:CHG|INC|SEC|DR)-[A-Za-z0-9][A-Za-z0-9._-]*$")
+ERROR_CODE_PREFIX = re.compile(r"^\[DNS-[A-Z0-9-]+\] ")
+INVENTORY_LOAD_ERROR = "DNS-INVENTORY-LOAD"
+INVENTORY_SCHEMA_ERROR = "DNS-INVENTORY-SCHEMA"
+INVENTORY_POLICY_ERROR = "DNS-INVENTORY-POLICY"
+LIVE_PARITY_ERROR = "DNS-LIVE-PARITY"
+HUB_INTERFACE_ERROR = "DNS-HUB-INTERFACE"
 RECORD_PINS_LOAD_ERROR = "DNS-PINS-001"
 RECORD_PINS_ROOT_ERROR = "DNS-PINS-002"
 RECORD_PINS_SCHEMA_ERROR = "DNS-PINS-003"
@@ -178,13 +184,31 @@ class InventoryError(ValueError):
     """Raised when the normalized inventory cannot be read safely."""
 
 
+def _with_error_code(code: str, message: str) -> str:
+    if ERROR_CODE_PREFIX.match(message):
+        return message
+    return f"[{code}] {message}"
+
+
+def _with_error_codes(code: str, messages: list[str]) -> list[str]:
+    return [_with_error_code(code, message) for message in messages]
+
+
 def load_inventory(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise InventoryError(f"cannot read inventory {path}: {exc}") from exc
+        raise InventoryError(
+            _with_error_code(
+                INVENTORY_LOAD_ERROR, f"cannot read inventory {path}: {exc}"
+            )
+        ) from exc
     if not isinstance(value, dict):
-        raise InventoryError("inventory root must be a JSON object")
+        raise InventoryError(
+            _with_error_code(
+                INVENTORY_LOAD_ERROR, "inventory root must be a JSON object"
+            )
+        )
     return value
 
 
@@ -300,11 +324,14 @@ def validate_inventory_schema(
         inventory, schema_path, "inventory"
     )
     if failure is not None:
-        return [failure]
-    return [
-        f"schema {path}: {validator} constraint failed at {absolute_schema_path}"
-        for path, validator, absolute_schema_path in violations
-    ]
+        return [_with_error_code(INVENTORY_SCHEMA_ERROR, failure)]
+    return _with_error_codes(
+        INVENTORY_SCHEMA_ERROR,
+        [
+            f"schema {path}: {validator} constraint failed at {absolute_schema_path}"
+            for path, validator, absolute_schema_path in violations
+        ],
+    )
 
 
 def validate_reviewed_record_pins_schema(
@@ -558,7 +585,9 @@ def validate_inventory(
 
     domains = inventory.get("domains")
     if not isinstance(domains, list):
-        return errors + ["domains must be a list"]
+        return _with_error_codes(
+            INVENTORY_POLICY_ERROR, errors + ["domains must be a list"]
+        )
     by_name: dict[str, dict[str, Any]] = {}
     for index, domain in enumerate(domains):
         if not isinstance(domain, dict):
@@ -843,7 +872,7 @@ def validate_inventory(
                     f"{prefix}: delegation cannot be ready until a released module supports record name overrides"
                 )
 
-    return sorted(set(errors))
+    return sorted(set(_with_error_codes(INVENTORY_POLICY_ERROR, errors)))
 
 
 def _matching_delimiter(text: str, start: int, opening: str, closing: str) -> int:
@@ -1044,7 +1073,12 @@ def validate_live_parity(
     expected_ref = module.get("ref") if isinstance(module, dict) else None
     domains = inventory.get("domains", [])
     if not isinstance(domains, list):
-        return ["cannot validate live parity without a domains list"]
+        return [
+            _with_error_code(
+                LIVE_PARITY_ERROR,
+                "cannot validate live parity without a domains list",
+            )
+        ]
     inventory_domains = {
         domain.get("domain"): domain
         for domain in domains
@@ -1093,7 +1127,7 @@ def validate_live_parity(
         # Static record parity is guaranteed by direct evaluation of local.domain.records;
         # retaining a second parsed representation here would recreate the duplication this
         # contract removes.
-    return sorted(set(errors))
+    return sorted(set(_with_error_codes(LIVE_PARITY_ERROR, errors)))
 
 
 def validate_shared_dns_hub_interface(path: Path = SHARED_DNS_HUB) -> list[str]:
@@ -1104,7 +1138,9 @@ def validate_shared_dns_hub_interface(path: Path = SHARED_DNS_HUB) -> list[str]:
         zones = _assignment_object(text, "zones")
         zone_blocks = _top_level_record_blocks(zones)
     except (OSError, InventoryError, ValueError) as exc:
-        return [f"{path.relative_to(ROOT)}: {exc}"]
+        return [
+            _with_error_code(HUB_INTERFACE_ERROR, f"{path.relative_to(ROOT)}: {exc}")
+        ]
 
     errors: list[str] = []
     if not zone_blocks:
@@ -1120,7 +1156,7 @@ def validate_shared_dns_hub_interface(path: Path = SHARED_DNS_HUB) -> list[str]:
             errors.append(
                 f"{path.relative_to(ROOT)}: {zone_key} must declare dns_name"
             )
-    return sorted(set(errors))
+    return sorted(set(_with_error_codes(HUB_INTERFACE_ERROR, errors)))
 
 
 def main() -> int:
