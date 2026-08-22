@@ -44,6 +44,11 @@ for required in (
     "5-workloads/shared/control-plane-identities/terragrunt.hcl",
     "scripts/validate-account.py",
     "docs/automation-identity-handoff.md",
+    "5-workloads/shared/production-qualification-evidence/terragrunt.hcl",
+    "5-workloads/shared/production-qualification-evidence/.terraform.lock.hcl",
+    "5-workloads/shared/production-qualification-access-logs/terragrunt.hcl",
+    "5-workloads/shared/production-qualification-access-logs/.terraform.lock.hcl",
+    "1-org/kms-dr-evidence/terragrunt.hcl",
 ):
     if not ROOT.joinpath(required).is_file():
         errors.append(f"missing control-plane handoff file: {required}")

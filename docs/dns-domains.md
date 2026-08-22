@@ -19,6 +19,22 @@ The four apex zones are owned by `3-networks/shared/public-zones`. Kubernetes Ga
 objects remain in `gitops`; application host configuration remains in the monorepo. Do not
 grant ExternalDNS write access to an apex zone. Delegate a narrow environment subzone first.
 
+The target Cloud DNS project is `mc-common-dns`. Production service names use
+`<service>.mindclade.ai`; staging and development use `<service>.staging.mindclade.ai` and
+`<service>.dev.mindclade.ai`. Production wildcard DNS records are forbidden. The Gateway and
+route consumers now use that explicit boundary, and each environment has a separate private
+service-zone composition attached only to its own VPC and pointing at its own reserved Gateway
+VIP. These are source contracts, not evidence that any zone, VIP, or route is live.
+
+Certificate ownership belongs to this repository through Google Certificate Manager. The
+v0.4.0 candidate creates regional `PER_PROJECT_RECORD` authorizations and one generated public
+CNAME for every exact SAN, plus three stable certificate names per environment project. CAA is
+now declared in the blocked target inventory, and the Gateway source attaches those stable
+Certificate Manager names. None of those resources has been applied, the complete issuer
+inventory is not yet approved, and the three certificate-serving domains retain explicit
+activation blockers. cert-manager remains only for in-cluster operator webhook PKI; it is not an
+edge certificate owner.
+
 The reusable, environment-neutral DNS module remains in
 `mindclade-internal-monorepo/infra/terraform/modules/dns`; this repository consumes only an
 immutable release. The module, its tests, and its Terraform CI fixtures do not move into the
@@ -30,16 +46,30 @@ The normalized inventory in
 [`contracts/dns-domain-inventory.json`](../contracts/dns-domain-inventory.json)
 marks all four domains as blocked pending review. The committed `mindclade.com` record map in
 [`3-networks/shared/public-zones/mindclade-com/terragrunt.hcl`](../3-networks/shared/public-zones/mindclade-com/terragrunt.hcl)
-is currently empty. **Do not change registrar nameservers or DNSSEC delegation** until every
+contains only the legacy Google MX set, Google verification TXT record, and 2048-bit
+`google._domainkey` DKIM value observed through a read-only Admin-console and public-DNS
+inventory on 2026-08-21. Cloudflare remains authoritative through `cleo.ns.cloudflare.com`
+and `rosa.ns.cloudflare.com`; no public SPF or DMARC record was present. The inventory therefore
+remains incomplete and explicitly blocked on those missing mail-authentication records and an
+independent full incumbent-zone review. **Do not change registrar nameservers or DNSSEC delegation** until every
 authoritative web, identity, mail, verification, and security record has been inventoried,
-reviewed, and applied to Cloud DNS. An empty managed zone is not a delegation-ready zone.
+reviewed, and applied to Cloud DNS. A partially inventoried managed zone is not a
+delegation-ready zone.
+Read-only authoritative checks on 2026-08-21 also found public address answers for
+`mindclade.studio`; its inventory therefore carries a separate reconciliation blocker because
+the target private-only service plane forbids public address records. This observation is not a
+zone export and does not make the incumbent inventory complete.
 
-The current live units still use the legacy `domain` zone input while the released module
-requires `dns_name`, and the current release does not support several record types on one
-owner through distinct map identifiers. The inventory carries explicit activation blockers
-for both interface gaps until the live input is aligned and an immutable module release
-includes the reviewed `name` override. Do not point a live unit at a branch or an unpublished
-tag to bypass those gates.
+The v0.4.0 candidate live units use the typed `dns_name` interface and explicit record `name`
+overrides, so multiple record types can safely share an owner such as the apex. This is
+source compatibility only: `release_status` remains `planned`, every domain carries the
+`dns-module-ref-not-published` blocker, and the incumbent inventories are incomplete. The DNS
+module itself enforces both provider deletion prevention and Terraform `prevent_destroy`; do
+not add a live `deletion_protection` field because it is not part of the typed module input.
+Do not point a live unit at a branch or delegate an empty or partially inventoried zone.
+The normalized contract also keeps the migration window `unapproved`; approving it requires a
+change reference and bounded, timezone-aware start/end timestamps before any domain blocker may
+be cleared.
 
 ## Automated controls
 
@@ -47,18 +77,24 @@ Static validation runs locally and in pull-request CI:
 
 ```sh
 python3 scripts/validate_dns_portfolio.py
-python3 scripts/validate_dns_portfolio.py --require-ready mindclade.studio
+python3 scripts/validate_dns_portfolio.py --require-ready mindclade.dev
 ```
 
 The first command validates roles, ownership, DNSSEC, record types, no-mail controls, module
-release compatibility, and parity between the normalized inventory and live Terragrunt
-records. The second additionally fails unless the selected domain is explicitly ready.
+release status, shared DNS module interfaces, and parity between the normalized inventory and
+live Terragrunt records. The second additionally fails unless the selected domain is explicitly
+ready. Qualify in the fixed order `mindclade.dev` → `mindclade.ai` → `mindclade.studio` →
+`mindclade.com`; never parallelize registrar delegation.
 
 The manually dispatched **DNS cutover check** workflow is read-only. Its `preflight` phase
-compares every inventoried record on the incumbent and Cloud DNS nameservers. Its
-`postcutover` phase checks public delegation and records, with an optional DS/DNSKEY presence
-gate after DNSSEC is re-established. It uploads a timestamped JSON artifact and has no
-registrar or cloud write identity. Follow the
+compares every reviewed portable record on the incumbent and Cloud DNS nameservers. After the
+old DS is removed, `predeligation` requires parent DS absence, target SOA and DNSKEY presence,
+and complete Cloud DNS snapshot agreement on every target nameserver. `postcutover` checks
+public delegation and the complete snapshot, with an optional DS/DNSKEY presence gate after
+DNSSEC is re-established. It uploads timestamped JSON evidence and uses only the protected
+read-only plan identity to snapshot Cloud DNS; it has no registrar or cloud mutation path. A
+nightly monitor repeats public NS, SOA, DS, DNSKEY, MX, SPF, DMARC, CAA, generated-CNAME, and
+authoritative-server agreement checks for every delegation-ready domain. Follow the
 [Cloud DNS delegation runbook](runbooks/dns-delegation.md) for the manual Squarespace steps,
 mail tests, evidence, and rollback order.
 

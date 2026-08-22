@@ -38,6 +38,8 @@ organization/common resources under `1-org`.
 | `3-networks/<env>/shared-vpc-host` | environment shared projects | Host-project identity |
 | `4-projects/<env>/<domain>` | environment folders and Shared VPC | Project placement and attachment |
 | `5-workloads/<env>/gke` | environment project, VPC, and KMS | Private cluster foundation |
+| `5-workloads/<env>/bazel-remote-cache` | environment project/KMS and shared cache access-log bucket | Protected rebuildable CAS/action-cache storage |
+| `5-workloads/<env>/bazel-remote-execution` | GKE, VPC pod range, and Bazel cache | Dedicated keyless multi-zone worker foundation |
 | `2-environments/<env>/kms-dr` | environment project inventory | Region-local `us-east4` recovery keys |
 | `5-workloads/<env>/artifact-registry-dr` | environment project and recovery KMS | Immutable U.S. recovery image repository |
 | `5-workloads/<env>/backup-dr` | GKE and recovery KMS | Encrypted cross-region cluster and object recovery |

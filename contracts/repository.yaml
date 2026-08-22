@@ -30,6 +30,18 @@ forbidden_authority:
     - application-source
 required_paths:
     - AGENTS.md
+    - README.md
+    - CONTRIBUTING.md
+    - SECURITY.md
+    - SUPPORT.md
+    - CODE_OF_CONDUCT.md
+    - GOVERNANCE.md
+    - CHANGELOG.md
+    - LEGAL.md
+    - LICENSE
+    - NOTICE
+    - .github/PULL_REQUEST_TEMPLATE.md
+    - .github/MINDCLADE_PROPRIETARY_SOURCE_HEADER.txt
     - 1-org
     - 2-environments/development
     - 2-environments/staging

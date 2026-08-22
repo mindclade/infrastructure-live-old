@@ -116,6 +116,7 @@ inputs = {
       source_bucket      = "${include.root.locals.prefix}-${local.env}-${name}"
       destination_bucket = "${include.root.locals.prefix}-${local.env}-${name}-replica"
       destination_region = local.replica_region
+      kms_key_name       = dependency.kms_dr.outputs.crypto_key_ids["storage"]
 
       # NEVER propagate a delete. Deletion is precisely the event this defends against —
       # replicating it would make the replica agree the object is gone, which is an expensive

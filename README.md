@@ -28,6 +28,8 @@
 | Visibility | `private` |
 | Change model | `pull-request` |
 | Authority | `normal-gcp-organization-infrastructure`<br>`folders`<br>`org-policy`<br>`environments`<br>`networks`<br>`projects`<br>`gke`<br>`managed-cloud-services` |
+| Primary readers | Cloud platform, security, and reliability engineers |
+| First success | [Validate the live estate source](#quick-start) |
 | Start here | [`docs/README.md`](docs/README.md) |
 
 ## Mission
@@ -52,17 +54,23 @@ networks, projects, GKE, and managed services with independent state boundaries.
 
 ## Quick start
 
-Run the complete credential-free validation path from the repository root:
+Prerequisite: Nix with flakes enabled. This validation needs no Google Cloud credentials and
+does not read state or create a plan.
 
 ```sh
 nix develop .#ci --command make validate
 nix flake check --no-update-lock-file
 ```
 
-Expected result: repository contracts, account and module interfaces, layer dependencies,
-Terraform/Terragrunt syntax, DNS portfolio, and tests pass without reading live state. Do not
-run an apply, import, destroy, state operation, or production plan from an agent or ordinary
-development session.
+**Success means:** repository contracts, account and module interfaces, layer dependencies,
+Terraform/Terragrunt syntax, DNS portfolio, and tests all pass.
+
+**If it fails:** begin with the earliest failing numbered layer and use the
+[dependency graph](docs/dependency-graph.md) to resolve upstream contracts before downstream
+units.
+
+**Safety boundary:** do not run an apply, import, destroy, state operation, or production plan
+from an agent or ordinary development session.
 
 ## Estate position
 
@@ -116,6 +124,9 @@ explicit reviewed dispatch and change reference. See the
 - [GitOps handoff](docs/gitops-handoff.md)
 - [Runbooks](docs/runbooks/README.md)
 - [Contributing](CONTRIBUTING.md)
+- Policies and terms: [governance](GOVERNANCE.md) · [conduct](CODE_OF_CONDUCT.md) ·
+  [support](SUPPORT.md) · [legal](LEGAL.md) · [license](LICENSE) · [notice](NOTICE) ·
+  [changes](CHANGELOG.md)
 
 ## Security
 
