@@ -35,10 +35,11 @@ inputs = {
   project_id = dependency.common_projects.outputs.project_ids["dns"]
   zones = {
     mindclade-dev = {
-      dns_name   = "mindclade.dev."
-      visibility = "public"
-      dnssec     = true
-      records    = local.records
+      dns_name                = "mindclade.dev."
+      visibility              = "public"
+      dnssec                  = true
+      public_record_allowlist = local.domain.public_record_allowlist
+      records                 = local.records
     }
   }
   labels = merge(include.root.locals.common_labels, {

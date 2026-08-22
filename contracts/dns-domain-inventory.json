@@ -1,6 +1,6 @@
 {
   "$schema": "./dns-domain-inventory.schema.json",
-  "schema_version": 2,
+  "schema_version": 3,
   "registrar": "squarespace",
   "authoritative_dns": "google-cloud-dns",
   "cloud_dns_project_id": "mc-common-dns",
@@ -58,6 +58,7 @@
     "ref": "v0.4.0",
     "release_status": "planned",
     "allowed_public_record_types": ["CAA", "MX", "NS", "TXT"],
+    "conditionally_allowed_public_record_types": ["A", "AAAA", "CNAME"],
     "supports_record_name_override": true
   },
   "domains": [
@@ -67,6 +68,7 @@
       "mail_policy": "google-workspace",
       "certificate_serving": false,
       "dynamic_record_types": [],
+      "public_record_allowlist": [],
       "dnssec_required": true,
       "inventory_complete": false,
       "delegation_ready": false,
@@ -74,6 +76,9 @@
         "current-authoritative-record-inventory-not-reviewed",
         "workspace-spf-record-absent",
         "workspace-dmarc-record-absent",
+        "workspace-sender-inventory-not-reviewed",
+        "workspace-mail-auth-observation-incomplete",
+        "cloudflare-proxied-domainconnect-not-reconciled",
         "migration-window-not-approved",
         "dns-module-ref-not-published"
       ],
@@ -95,6 +100,7 @@
           "type": "TXT",
           "ttl": 300,
           "rrdatas": [
+            "v=spf1 include:_spf.google.com -all",
             "google-site-verification=VbOqcgzfjWHUJucvRZrLc6Ha2sbMuOyB0WAA6YnTqPY"
           ]
         },
@@ -105,6 +111,14 @@
           "rrdatas": [
             "v=DKIM1;k=rsa;p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAo7wPRuF+T5hjd7ZHuk/2lChktPjyiSIk4CpzvMjR+U4xtShwhdQdNzf2U/RvbK1UOVMerr8kgva+5J6LnpXVHL66LWY8m1V9hietwluOhr2pEdjNnqmtEksE8rYhWqgIIMT04D4+nY61CBmpTFU9IDLOnDnAxfmMAB8kxw1p3x1SmIySQqJ7E1fTjPT2NQQnNxqTWQk5V6sf6wpuk5wMyB5r2jAJCOaiLQ2k3uNKHUZ8GekObxGrrAAinmSTtVuTvA8Ag0GYCt00coy8qzQeQlK7oYi14Qz5gu9yezvCPQA9WcgaZTs9OQ3VdqQs/9u4fT4RNSTYlGW8SfPPTpjYAwIDAQAB"
           ]
+        },
+        {
+          "name": "_dmarc",
+          "type": "TXT",
+          "ttl": 300,
+          "rrdatas": [
+            "v=DMARC1; p=reject; sp=reject; pct=100; adkim=s; aspf=s; rua=mailto:security@mindclade.com"
+          ]
         }
       ]
     },
@@ -114,11 +128,13 @@
       "mail_policy": "no-mail",
       "certificate_serving": true,
       "dynamic_record_types": ["CNAME"],
+      "public_record_allowlist": ["apex-a", "www-cname"],
       "dnssec_required": true,
       "inventory_complete": false,
       "delegation_ready": false,
       "activation_blockers": [
         "current-authoritative-record-inventory-not-reviewed",
+        "workspace-no-mail-identity-audit-incomplete",
         "certificate-manager-dns-authorizations-not-ready",
         "certificate-issuer-inventory-not-reviewed",
         "certificate-caa-policy-not-ready",
@@ -126,9 +142,11 @@
         "dns-module-ref-not-published"
       ],
       "records": [
+        {"name": "@", "type": "A", "ttl": 300, "rrdatas": ["198.49.23.144", "198.49.23.145", "198.185.159.144", "198.185.159.145"]},
+        {"name": "www", "type": "CNAME", "ttl": 300, "rrdatas": ["ext-sq.squarespace.com."]},
         {"name": "@", "type": "CAA", "ttl": 3600, "rrdatas": ["0 issue \"pki.goog\"", "0 issue \"letsencrypt.org\"", "0 issuewild \";\"", "0 iodef \"mailto:security@mindclade.com\""]},
         {"name": "@", "type": "MX", "ttl": 3600, "rrdatas": ["0 ."]},
-        {"name": "@", "type": "TXT", "ttl": 3600, "rrdatas": ["v=spf1 -all"]},
+        {"name": "@", "type": "TXT", "ttl": 3600, "rrdatas": ["v=spf1 -all", "google-site-verification=PySGrYrpdfTEzLQ4NEt-cil0BGPu0wrpKie4raR6RLk"]},
         {"name": "_dmarc", "type": "TXT", "ttl": 3600, "rrdatas": ["v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s"]}
       ]
     },
@@ -138,11 +156,13 @@
       "mail_policy": "no-mail",
       "certificate_serving": true,
       "dynamic_record_types": ["CNAME"],
+      "public_record_allowlist": ["apex-a", "www-cname"],
       "dnssec_required": true,
       "inventory_complete": false,
       "delegation_ready": false,
       "activation_blockers": [
         "current-authoritative-record-inventory-not-reviewed",
+        "workspace-no-mail-identity-audit-incomplete",
         "certificate-manager-dns-authorizations-not-ready",
         "certificate-issuer-inventory-not-reviewed",
         "certificate-caa-policy-not-ready",
@@ -150,9 +170,11 @@
         "dns-module-ref-not-published"
       ],
       "records": [
+        {"name": "@", "type": "A", "ttl": 300, "rrdatas": ["198.49.23.144", "198.49.23.145", "198.185.159.144", "198.185.159.145"]},
+        {"name": "www", "type": "CNAME", "ttl": 300, "rrdatas": ["ext-sq.squarespace.com."]},
         {"name": "@", "type": "CAA", "ttl": 3600, "rrdatas": ["0 issue \"pki.goog\"", "0 issue \"letsencrypt.org\"", "0 issuewild \";\"", "0 iodef \"mailto:security@mindclade.com\""]},
         {"name": "@", "type": "MX", "ttl": 3600, "rrdatas": ["0 ."]},
-        {"name": "@", "type": "TXT", "ttl": 3600, "rrdatas": ["v=spf1 -all"]},
+        {"name": "@", "type": "TXT", "ttl": 3600, "rrdatas": ["v=spf1 -all", "google-site-verification=2RPVgJvXDrMYl1teBBy2ZUjXOTsXlPOxt9OIvtKp2C8"]},
         {"name": "_dmarc", "type": "TXT", "ttl": 3600, "rrdatas": ["v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s"]}
       ]
     },
@@ -162,12 +184,14 @@
       "mail_policy": "no-mail",
       "certificate_serving": true,
       "dynamic_record_types": ["CNAME"],
+      "public_record_allowlist": [],
       "dnssec_required": true,
       "inventory_complete": false,
       "delegation_ready": false,
       "activation_blockers": [
         "current-authoritative-record-inventory-not-reviewed",
         "incumbent-public-address-record-not-reconciled",
+        "workspace-no-mail-identity-audit-incomplete",
         "certificate-manager-dns-authorizations-not-ready",
         "certificate-issuer-inventory-not-reviewed",
         "certificate-caa-policy-not-ready",
@@ -177,7 +201,7 @@
       "records": [
         {"name": "@", "type": "CAA", "ttl": 3600, "rrdatas": ["0 issue \"pki.goog\"", "0 issue \"letsencrypt.org\"", "0 issuewild \";\"", "0 iodef \"mailto:security@mindclade.com\""]},
         {"name": "@", "type": "MX", "ttl": 3600, "rrdatas": ["0 ."]},
-        {"name": "@", "type": "TXT", "ttl": 3600, "rrdatas": ["v=spf1 -all"]},
+        {"name": "@", "type": "TXT", "ttl": 3600, "rrdatas": ["v=spf1 -all", "google-site-verification=6NVsg_ufGEcTcp75gxRFZTfDHrBHkxQSyDPLz3k39zI"]},
         {"name": "_dmarc", "type": "TXT", "ttl": 3600, "rrdatas": ["v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s"]}
       ]
     }

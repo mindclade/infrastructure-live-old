@@ -55,6 +55,8 @@ def render(inventory: dict[str, Any]) -> str:
             [
                 f"  - domain: {_scalar(domain['domain'])}",
                 f"    role: {_scalar(domain['role'])}",
+                "    public_record_allowlist: "
+                f"[{', '.join(domain['public_record_allowlist'])}]",
                 "    dnssec: required",
                 f"    certificate_serving: {_scalar(domain['certificate_serving'])}",
                 f"    delegation_ready: {_scalar(domain['delegation_ready'])}",

@@ -123,7 +123,99 @@ class DNSPortfolioTest(unittest.TestCase):
         )
         errors = portfolio.validate_inventory(inventory)
         self.assertTrue(
-            any("public type A is not supported by the DNS module" in error for error in errors)
+            any("requires exact public_record_allowlist membership" in error for error in errors)
+        )
+
+    def test_exact_squarespace_public_address_allowlist_is_accepted(self) -> None:
+        self.assertEqual(portfolio.validate_inventory(self.inventory), [])
+
+    def test_allowlisted_public_address_values_are_exact(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.ai"
+        )
+        address = next(record for record in domain["records"] if record["type"] == "A")
+        address["rrdatas"] = ["203.0.113.10"]
+        errors = portfolio.validate_inventory(inventory)
+        self.assertTrue(
+            any(
+                "allowlisted public record apex-a must match the exact reviewed "
+                "incumbent Squarespace record" in error
+                for error in errors
+            )
+        )
+
+    def test_allowlisted_public_cname_target_is_exact(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.dev"
+        )
+        cname = next(record for record in domain["records"] if record["type"] == "CNAME")
+        cname["rrdatas"] = ["unreviewed.example."]
+        errors = portfolio.validate_inventory(inventory)
+        self.assertTrue(
+            any(
+                "allowlisted public record www-cname must match the exact reviewed "
+                "incumbent Squarespace record" in error
+                for error in errors
+            )
+        )
+
+    def test_allowlisting_one_public_address_does_not_allow_another(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.ai"
+        )
+        domain["public_record_allowlist"] = ["apex-a"]
+        errors = portfolio.validate_inventory(inventory)
+        self.assertTrue(
+            any(
+                "public CNAME record key www-cname requires exact "
+                "public_record_allowlist membership" in error
+                for error in errors
+            )
+        )
+
+    def test_wildcard_public_address_owner_is_rejected(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.ai"
+        )
+        cname = next(record for record in domain["records"] if record["type"] == "CNAME")
+        cname["name"] = "*"
+        errors = portfolio.validate_inventory(inventory)
+        self.assertTrue(any("may not use a wildcard owner" in error for error in errors))
+
+    def test_stale_public_record_allowlist_entry_is_rejected(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.dev"
+        )
+        domain["public_record_allowlist"].append("missing-a")
+        errors = portfolio.validate_inventory(inventory)
+        self.assertIn(
+            "mindclade.dev: public_record_allowlist entry missing-a must match "
+            "exactly one A, AAAA, or CNAME record",
+            errors,
+        )
+
+    def test_google_verification_must_be_retained_with_no_mail_spf(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item
+            for item in inventory["domains"]
+            if item["domain"] == "mindclade.studio"
+        )
+        apex_txt = next(
+            record
+            for record in domain["records"]
+            if record["name"] == "@" and record["type"] == "TXT"
+        )
+        apex_txt["rrdatas"] = ["v=spf1 -all"]
+        errors = portfolio.validate_inventory(inventory)
+        self.assertIn(
+            "mindclade.studio: apex TXT must retain a Google verification value",
+            errors,
         )
 
     def test_workspace_readiness_requires_complete_mail_authentication(self) -> None:
@@ -168,7 +260,7 @@ class DNSPortfolioTest(unittest.TestCase):
                         "type": "TXT",
                         "ttl": 3600,
                         "rrdatas": [
-                            "v=spf1 include:_spf.google.com ~all",
+                            portfolio.FINAL_WORKSPACE_SPF,
                             "google-site-verification=public-token",
                         ],
                     },
@@ -182,7 +274,7 @@ class DNSPortfolioTest(unittest.TestCase):
                         "name": "_dmarc",
                         "type": "TXT",
                         "ttl": 3600,
-                        "rrdatas": ["v=DMARC1; p=none"],
+                        "rrdatas": [portfolio.FINAL_WORKSPACE_DMARC],
                     },
                 ],
             }
