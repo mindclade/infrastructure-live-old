@@ -774,6 +774,34 @@ elif REPOSITORY == "infrastructure-live":
         if address not in contacts:
             error(f"organization Essential Contacts omit governed group: {address}")
 
+    binauthz_ring = (ROOT / "1-org/kms-binauthz/terragrunt.hcl").read_text(
+        "utf-8", errors="ignore"
+    )
+    ring_only_owners = sorted(
+        path.relative_to(ROOT).as_posix()
+        for path in TRACKED_PATHS
+        if path.name == "terragrunt.hcl"
+        and re.search(
+            r"(?m)^\s*ring_only\s*=\s*true\s*$",
+            path.read_text("utf-8", errors="ignore"),
+        )
+    )
+    if ring_only_owners != ["1-org/kms-binauthz/terragrunt.hcl"]:
+        error(
+            "Binary Authorization KMS must be the sole ring-only state owner: "
+            f"{ring_only_owners}"
+        )
+    for required in (
+        r"(?m)^\s*ring_only\s*=\s*true\s*$",
+        r"(?m)^\s*keys\s*=\s*\{\}\s*$",
+        r"(?m)^\s*signing_keys\s*=\s*\{\}\s*$",
+    ):
+        if not re.search(required, binauthz_ring):
+            error(
+                "Binary Authorization KMS owner must remain an explicit empty "
+                f"ring-only state: {required}"
+            )
+
     for env in ("staging", "production"):
         binauthz = (
             ROOT / f"5-workloads/{env}/binary-authorization/terragrunt.hcl"

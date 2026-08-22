@@ -50,6 +50,12 @@ provenance. The exact-ref gate remains fail-closed until the release operator pu
 | Change an input type or meaning | Treat as a breaking interface change and document migration |
 | Add a live component | Pin an exact module ref and declare only published variables |
 
+The organization Binary Authorization KMS unit is the one explicit ring-only composition.
+It sets `ring_only = true` with empty `keys` and `signing_keys`; the dependent Binary
+Authorization states remain the sole owners of attestor CryptoKeys in that protected ring.
+The module rejects both an empty ordinary KMS owner and any key declared by the ring-only
+owner, preventing a second CryptoKey state owner.
+
 ## Validate before review
 
 Run the interface preflight directly when diagnosing a mismatch:
