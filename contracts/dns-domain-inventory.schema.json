@@ -7,14 +7,28 @@
   "required": ["schema_version", "registrar", "authoritative_dns", "cloud_dns_project_id", "environment_naming", "certificate_policy", "migration_window", "module_contract", "domains"],
   "properties": {
     "$schema": {"type": "string"},
-    "schema_version": {"const": 2},
+    "schema_version": {"const": 3},
     "registrar": {"const": "squarespace"},
     "authoritative_dns": {"const": "google-cloud-dns"},
     "cloud_dns_project_id": {"type": "string", "minLength": 6},
     "environment_naming": {"type": "object", "required": ["production", "staging", "development", "wildcard_production_records_allowed", "consumer_alignment_complete", "hostnames"]},
     "certificate_policy": {"type": "object", "required": ["owner_repository", "service", "scope", "exact_sans_only", "wildcard_issuance_allowed", "permitted_issuers", "incident_contact", "certificate_names", "dns_authorizations_ready", "issuer_inventory_complete", "caa_policy_ready"]},
     "migration_window": {"type": "object"},
-    "module_contract": {"type": "object"},
+    "module_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "path", "certificate_path", "ref", "release_status", "allowed_public_record_types", "conditionally_allowed_public_record_types", "supports_record_name_override"],
+      "properties": {
+        "repository": {"type": "string"},
+        "path": {"type": "string"},
+        "certificate_path": {"type": "string"},
+        "ref": {"type": "string"},
+        "release_status": {"enum": ["planned", "published"]},
+        "allowed_public_record_types": {"type": "array", "items": {"enum": ["CAA", "MX", "NS", "TXT"]}, "minItems": 4, "maxItems": 4, "uniqueItems": true},
+        "conditionally_allowed_public_record_types": {"type": "array", "items": {"enum": ["A", "AAAA", "CNAME"]}, "minItems": 3, "maxItems": 3, "uniqueItems": true},
+        "supports_record_name_override": {"type": "boolean"}
+      }
+    },
     "domains": {
       "type": "array",
       "minItems": 4,
@@ -22,13 +36,14 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["domain", "role", "mail_policy", "certificate_serving", "dynamic_record_types", "dnssec_required", "inventory_complete", "delegation_ready", "activation_blockers", "records"],
+        "required": ["domain", "role", "mail_policy", "certificate_serving", "dynamic_record_types", "public_record_allowlist", "dnssec_required", "inventory_complete", "delegation_ready", "activation_blockers", "records"],
         "properties": {
           "domain": {"type": "string"},
           "role": {"type": "string"},
           "mail_policy": {"enum": ["google-workspace", "no-mail"]},
           "certificate_serving": {"type": "boolean"},
           "dynamic_record_types": {"type": "array", "items": {"enum": ["CNAME"]}, "uniqueItems": true},
+          "public_record_allowlist": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
           "dnssec_required": {"const": true},
           "inventory_complete": {"type": "boolean"},
           "delegation_ready": {"type": "boolean"},
@@ -41,7 +56,7 @@
               "required": ["name", "type", "ttl", "rrdatas"],
               "properties": {
                 "name": {"type": "string"},
-                "type": {"enum": ["CAA", "MX", "NS", "TXT"]},
+                "type": {"enum": ["A", "AAAA", "CAA", "CNAME", "MX", "NS", "TXT"]},
                 "ttl": {"type": "integer", "minimum": 30, "maximum": 86400},
                 "rrdatas": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
               }

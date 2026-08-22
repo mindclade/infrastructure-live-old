@@ -38,6 +38,7 @@ inputs = {
       dns_name   = "mindclade.com."
       visibility = "public"
       dnssec     = true
+      public_record_allowlist = local.domain.public_record_allowlist
       records    = local.records
     }
   }

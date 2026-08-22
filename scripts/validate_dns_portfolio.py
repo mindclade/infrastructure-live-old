@@ -102,6 +102,19 @@ EXPECTED_CAA = {
     '0 iodef "mailto:security@mindclade.com"',
 }
 MODULE_PUBLIC_TYPES = {"CAA", "MX", "NS", "TXT"}
+MODULE_CONDITIONAL_PUBLIC_TYPES = {"A", "AAAA", "CNAME"}
+MODULE_SUPPORTED_PUBLIC_TYPES = MODULE_PUBLIC_TYPES | MODULE_CONDITIONAL_PUBLIC_TYPES
+APPROVED_PUBLIC_RECORD_ALLOWLISTS = {
+    "mindclade.com": set(),
+    "mindclade.ai": {"apex-a", "www-cname"},
+    "mindclade.dev": {"apex-a", "www-cname"},
+    "mindclade.studio": set(),
+}
+FINAL_WORKSPACE_SPF = "v=spf1 include:_spf.google.com -all"
+FINAL_WORKSPACE_DMARC = (
+    "v=DMARC1; p=reject; sp=reject; pct=100; adkim=s; aspf=s; "
+    "rua=mailto:security@mindclade.com"
+)
 MODULE_RELEASE_STATUSES = {"planned", "published"}
 MODULE_RELEASE_BLOCKER = "dns-module-ref-not-published"
 MIGRATION_WINDOW_BLOCKER = "migration-window-not-approved"
@@ -170,6 +183,10 @@ def _timestamp(value: Any) -> datetime | None:
     return parsed if parsed.tzinfo is not None else None
 
 
+def _record_map_key(owner: str, record_type: str) -> str:
+    return f"{owner.replace('@', 'apex')}-{record_type.lower()}"
+
+
 def validate_inventory(
     inventory: dict[str, Any], require_ready: set[str] | None = None
 ) -> list[str]:
@@ -178,8 +195,8 @@ def validate_inventory(
     errors: list[str] = []
     require_ready = require_ready or set()
 
-    if inventory.get("schema_version") != 2:
-        errors.append("schema_version must be 2")
+    if inventory.get("schema_version") != 3:
+        errors.append("schema_version must be 3")
     if inventory.get("registrar") != EXPECTED_REGISTRAR:
         errors.append(f"registrar must be {EXPECTED_REGISTRAR}")
     if inventory.get("authoritative_dns") != EXPECTED_DNS:
@@ -295,6 +312,13 @@ def validate_inventory(
         errors.append(
             "module allowed_public_record_types must be exactly CAA, MX, NS, and TXT"
         )
+    conditional_types = set(
+        _strings(module.get("conditionally_allowed_public_record_types"))
+    )
+    if conditional_types != MODULE_CONDITIONAL_PUBLIC_TYPES:
+        errors.append(
+            "module conditionally_allowed_public_record_types must be exactly A, AAAA, and CNAME"
+        )
     supports_name_override = module.get("supports_record_name_override")
     if not isinstance(supports_name_override, bool):
         errors.append("module supports_record_name_override must be boolean")
@@ -347,6 +371,22 @@ def validate_inventory(
             errors.append(
                 f"{prefix}: dynamic_record_types must be {expected_dynamic}; generated "
                 "Certificate Manager CNAMEs are not static inventory records"
+            )
+        allowlist_value = domain.get("public_record_allowlist")
+        if not isinstance(allowlist_value, list) or not all(
+            isinstance(item, str) and item for item in allowlist_value
+        ):
+            errors.append(f"{prefix}: public_record_allowlist must be a string list")
+            allowlist: set[str] = set()
+        else:
+            allowlist = set(allowlist_value)
+            if len(allowlist) != len(allowlist_value):
+                errors.append(f"{prefix}: public_record_allowlist entries must be unique")
+        expected_allowlist = APPROVED_PUBLIC_RECORD_ALLOWLISTS[name]
+        if allowlist != expected_allowlist:
+            errors.append(
+                f"{prefix}: public_record_allowlist must be exactly "
+                f"{sorted(expected_allowlist)}"
             )
 
         complete = domain.get("inventory_complete")
@@ -419,6 +459,7 @@ def validate_inventory(
             errors.append(f"{prefix}: records must be a list")
             continue
         seen: set[tuple[str, str]] = set()
+        record_key_types: dict[str, list[str]] = {}
         for record_index, record in enumerate(records):
             record_prefix = f"{prefix}: records[{record_index}]"
             if not isinstance(record, dict):
@@ -437,9 +478,19 @@ def validate_inventory(
                 errors.append(f"{record_prefix}.type must be a string")
                 continue
             record_type = record_type.upper()
-            if record_type not in MODULE_PUBLIC_TYPES:
+            if record_type not in MODULE_SUPPORTED_PUBLIC_TYPES:
                 errors.append(
                     f"{record_prefix}: public type {record_type} is not supported by the DNS module"
+                )
+            record_key = _record_map_key(owner, record_type)
+            record_key_types.setdefault(record_key, []).append(record_type)
+            if (
+                record_type in MODULE_CONDITIONAL_PUBLIC_TYPES
+                and record_key not in allowlist
+            ):
+                errors.append(
+                    f"{record_prefix}: public {record_type} record key {record_key} "
+                    "requires exact public_record_allowlist membership"
                 )
             if record_type == "NS" and owner == "@":
                 errors.append(f"{record_prefix}: Cloud DNS owns the apex NS record set")
@@ -458,7 +509,28 @@ def validate_inventory(
                 errors.append(f"{record_prefix}: duplicate record set {owner}/{record_type}")
             seen.add(key)
 
+        for allowlist_entry in sorted(allowlist):
+            matching_types = record_key_types.get(allowlist_entry, [])
+            if (
+                len(matching_types) != 1
+                or matching_types[0] not in MODULE_CONDITIONAL_PUBLIC_TYPES
+            ):
+                errors.append(
+                    f"{prefix}: public_record_allowlist entry {allowlist_entry} must "
+                    "match exactly one A, AAAA, or CNAME record"
+                )
+
         record_sets = _record_sets(domain)
+        apex_txt = _txt_values(record_sets, "@")
+        verification = [
+            value
+            for value in apex_txt
+            if value.lower().startswith("google-site-verification=")
+        ]
+        if not verification:
+            errors.append(
+                f"{prefix}: apex TXT must retain a Google verification value"
+            )
         if name in CERTIFICATE_DOMAINS:
             apex_caa = record_sets.get(("@", "CAA"))
             if apex_caa is None:
@@ -472,7 +544,12 @@ def validate_inventory(
             null_mx = record_sets.get(("@", "MX"), {}).get("rrdatas")
             if null_mx != ["0 ."]:
                 errors.append(f"{prefix}: no-mail policy requires apex null MX '0 .'")
-            if _txt_values(record_sets, "@") != ["v=spf1 -all"]:
+            spf = [
+                value
+                for value in apex_txt
+                if value.lower().startswith("v=spf1 ")
+            ]
+            if spf != ["v=spf1 -all"]:
                 errors.append(f"{prefix}: no-mail policy requires apex SPF 'v=spf1 -all'")
             dmarc = _txt_values(record_sets, "_dmarc")
             if len(dmarc) != 1 or not all(
@@ -486,17 +563,11 @@ def validate_inventory(
             mx = record_sets.get(("@", "MX"), {}).get("rrdatas", [])
             if not mx or mx == ["0 ."]:
                 errors.append(f"{prefix}: Workspace readiness requires a non-null apex MX")
-            apex_txt = _txt_values(record_sets, "@")
             spf = [value for value in apex_txt if value.lower().startswith("v=spf1 ")]
-            if len(spf) != 1 or "include:_spf.google.com" not in spf[0].lower():
+            if spf != [FINAL_WORKSPACE_SPF]:
                 errors.append(
-                    f"{prefix}: Workspace readiness requires one Google-authorizing SPF record"
+                    f"{prefix}: Workspace readiness requires final Google-only hard-fail SPF"
                 )
-            verification = [
-                value
-                for value in apex_txt
-                if value.lower().startswith("google-site-verification=")
-            ]
             if not verification:
                 errors.append(
                     f"{prefix}: Workspace readiness requires a Google verification TXT record"
@@ -509,8 +580,10 @@ def validate_inventory(
             if not dkim:
                 errors.append(f"{prefix}: Workspace readiness requires a DKIM TXT record")
             dmarc = _txt_values(record_sets, "_dmarc")
-            if len(dmarc) != 1 or "v=dmarc1" not in dmarc[0].lower():
-                errors.append(f"{prefix}: Workspace readiness requires a DMARC TXT record")
+            if dmarc != [FINAL_WORKSPACE_DMARC]:
+                errors.append(
+                    f"{prefix}: Workspace readiness requires final DMARC reject policy"
+                )
 
         owners: dict[str, set[str]] = {}
         for owner, record_type in seen:
@@ -651,6 +724,13 @@ def parse_live_zone(path: Path) -> dict[str, Any]:
         'contracts/dns-domain-inventory.json' in text
         and bool(re.search(r'(?m)^\s*records\s*=\s*local\.records\s*$', text))
     )
+    canonical_allowlist = bool(
+        re.search(
+            r"(?m)^\s*public_record_allowlist\s*=\s*"
+            r"local\.domain\.public_record_allowlist\s*$",
+            zone,
+        )
+    )
     zones = _assignment_object(text, "zones")
     zone_blocks = _top_level_record_blocks(zones)
     if len(zone_blocks) != 1:
@@ -700,6 +780,7 @@ def parse_live_zone(path: Path) -> dict[str, Any]:
         ),
         "records": records,
         "canonical_inventory": canonical_inventory,
+        "canonical_allowlist": canonical_allowlist,
     }
 
 
@@ -763,6 +844,10 @@ def validate_live_parity(
         if live["canonical_inventory"] is not True:
             errors.append(
                 f"{domain}: public-zone records must be derived from the canonical inventory"
+            )
+        if live["canonical_allowlist"] is not True:
+            errors.append(
+                f"{domain}: public record allowlist must be derived from the canonical inventory"
             )
         # Static record parity is guaranteed by direct evaluation of local.domain.records;
         # retaining a second parsed representation here would recreate the duplication this
