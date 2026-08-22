@@ -32,9 +32,10 @@ python3 scripts/validate_dns_governance.py
 ~~~
 
 The `inventory_complete` and `delegation_ready` values must equal the state
-derived from portfolio gates, per-domain gates, evidence expiry, and
-public-address exception approvals. Editing either boolean without satisfying
-its evidence gates fails validation.
+derived from exact policy-owned portfolio and per-domain gate sets, evidence
+expiry, and public-address exception approvals. Missing, additional, or
+re-phased gates fail validation; editing either boolean without satisfying its
+evidence gates also fails.
 
 ## Public-address exceptions
 
@@ -56,18 +57,30 @@ make validate-release-candidate \
   CANDIDATE_MODULE_REF=<40-character-lowercase-commit-sha>
 ~~~
 
-The wrapper validates a detached local clone. It neither reads uncommitted
-candidate files nor substitutes the commit requirement with a branch or short
-SHA. Protected merge and production callers must still use the published,
-immutable release tag.
+The wrapper runs the module, capacity, and workload-identity validators against
+one detached local clone. It neither reads uncommitted candidate files nor
+substitutes the commit requirement with a branch or short SHA. Protected merge
+and production callers must still use the published, immutable release tag.
 
 ## Cutover packets
 
 The script `scripts/generate_dns_cutover_packets.py` consumes separately captured
-incumbent and target snapshots. All timestamps and the `CHG-` identifier are
-explicit, so the output is deterministic. The generator embeds full before/after
-records, snapshot hashes, evidence-manifest hash, readiness blockers, read-only
-preflight commands, and DNSSEC-safe rollback steps.
+incumbent and target snapshots. Snapshot hashes cover canonical JSON bytes, so
+they are independently reproducible from the content embedded in each packet.
+The in-memory evidence object must equal the exact evidence file whose raw-byte
+hash is recorded. All timestamps and the `CHG-` identifier are explicit, so the
+output is deterministic. The generator embeds full before/after records,
+snapshot hashes, evidence-manifest hash, readiness blockers, read-only
+preflight argument vectors, and DNSSEC-safe rollback steps. `READY` packets bind
+both canonical snapshots byte-for-byte to approved evidence gates. A snapshot's
+`captured_at` must also equal its gate's evidence observation time. Argument vectors avoid
+shell interpretation, discover the authoritative parent with `dig +trace`, and
+reject malformed nameserver input. Snapshot capture, TTL-lowering, generation,
+and change-window times must be ordered consistently.
+
+The `sha256` recorded by `incumbent_zone_snapshot` and `target_zone_snapshot`
+evidence gates is therefore the canonical JSON digest, not a whitespace-sensitive
+hash of the local input file.
 
 The output directory is write-once, mode `0700`, with packet files mode `0600`
 and a `SHA256SUMS` manifest. Use `--require-ready` for an approved packet. Without

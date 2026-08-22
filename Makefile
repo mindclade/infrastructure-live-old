@@ -14,9 +14,9 @@ validate: validate-production-contract validate-repository-home validate-argocd-
 
 validate-integration: validate validate-module-interfaces validate-capacity-contract validate-workload-identity-contract
 
-validate-source-integration: validate validate-module-candidate validate-capacity-candidate validate-workload-identity-candidate
+validate-source-integration: validate validate-module-candidate
 
-validate-release-candidate: validate validate-module-candidate validate-capacity-candidate validate-workload-identity-candidate
+validate-release-candidate: validate validate-module-candidate
 
 validate-module-interfaces:
 	python3 scripts/validate-module-interfaces.py --monorepo "$(MONOREPO)"

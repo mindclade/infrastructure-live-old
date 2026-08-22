@@ -25,6 +25,35 @@ GENERATION_URI = re.compile(r"^gs://[^#]+#[1-9][0-9]*$")
 CHANGE_RECORD = re.compile(r"^CHG-[A-Za-z0-9._-]+$")
 ADDRESS_TYPES = {"A", "AAAA", "CNAME"}
 EXCEPTION_DOMAINS = {"mindclade.ai", "mindclade.dev"}
+REQUIRED_PORTFOLIO_GATES = {
+    "evidence_store_ready": "inventory",
+    "immutable_module_release": "delegation",
+    "common_dns_project": "delegation",
+    "protected_automation_access": "delegation",
+}
+COMMON_DOMAIN_GATES = {
+    "authoritative_export": "inventory",
+    "incumbent_zone_snapshot": "inventory",
+    "portable_record_review": "inventory",
+    "workspace_identity_audit": "inventory",
+    "certificate_issuer_inventory": "inventory",
+    "target_zone_snapshot": "delegation",
+    "certificate_authorization": "delegation",
+    "dnssec_preflight": "delegation",
+    "change_record": "delegation",
+    "rollback_packet": "delegation",
+    "independent_review": "delegation",
+}
+REQUIRED_DOMAIN_GATES = {
+    "mindclade.ai": {**COMMON_DOMAIN_GATES, "public_address_exceptions": "delegation"},
+    "mindclade.dev": {**COMMON_DOMAIN_GATES, "public_address_exceptions": "delegation"},
+    "mindclade.studio": {**COMMON_DOMAIN_GATES, "website_dependency_review": "inventory"},
+    "mindclade.com": {
+        **COMMON_DOMAIN_GATES,
+        "cloudflare_feature_review": "inventory",
+        "dmarc_observation": "inventory",
+    },
+}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -80,6 +109,35 @@ def _metadata_is_empty(gate: dict[str, Any]) -> bool:
     )
 
 
+def validate_required_gate_set(
+    gates: list[Any],
+    required: dict[str, str],
+    location: str,
+    errors: list[str],
+) -> None:
+    actual: dict[str, str] = {}
+    for gate in gates:
+        if not isinstance(gate, dict):
+            continue
+        gate_id = gate.get("gate_id")
+        phase = gate.get("phase")
+        if isinstance(gate_id, str) and isinstance(phase, str):
+            actual[gate_id] = phase
+    missing = sorted(set(required) - set(actual))
+    unexpected = sorted(set(actual) - set(required))
+    if missing or unexpected:
+        errors.append(
+            f"{location} gate IDs must exactly match policy; "
+            f"missing={missing}, unexpected={unexpected}"
+        )
+    for gate_id in sorted(set(required) & set(actual)):
+        if actual[gate_id] != required[gate_id]:
+            errors.append(
+                f"{location}.{gate_id}.phase must be {required[gate_id]}, "
+                f"got {actual[gate_id]}"
+            )
+
+
 def validate_gate(
     gate: dict[str, Any],
     location: str,
@@ -103,6 +161,18 @@ def validate_gate(
     expires = parse_timestamp(gate.get("expires_at"), f"{location}.expires_at", errors)
     digest = gate.get("sha256")
     reviewer = gate.get("reviewer")
+    for field, timestamp in (
+        ("observed_at", observed),
+        ("reviewed_at", reviewed),
+    ):
+        if timestamp is not None and timestamp > as_of:
+            errors.append(f"{location}.{field} must not be later than the evaluation time")
+    if observed is not None and reviewed is not None and reviewed < observed:
+        errors.append(f"{location}.reviewed_at must not precede observed_at")
+    if expires is not None and observed is not None and expires <= observed:
+        errors.append(f"{location}.expires_at must be later than observed_at")
+    if expires is not None and reviewed is not None and expires <= reviewed:
+        errors.append(f"{location}.expires_at must be later than reviewed_at")
     if status == "pending":
         if not _metadata_is_empty(gate):
             errors.append(f"{location}: pending gates must not claim evidence metadata")
@@ -162,11 +232,12 @@ def validate_evidence_contract(
             errors.append(f"portfolio_gates[{index}] must be an object")
             continue
         gate_id = gate.get("gate_id")
-        if gate_id in seen:
-            errors.append(f"duplicate portfolio gate {gate_id}")
         if isinstance(gate_id, str):
+            if gate_id in seen:
+                errors.append(f"duplicate portfolio gate {gate_id}")
             seen.add(gate_id)
         validate_gate(gate, f"portfolio_gates[{index}]", uri_prefix, as_of, errors)
+    validate_required_gate_set(portfolio, REQUIRED_PORTFOLIO_GATES, "portfolio_gates", errors)
     inventory_domains = domain_map(inventory, "inventory", errors)
     evidence_domains = domain_map(evidence, "evidence", errors)
     if set(inventory_domains) != set(evidence_domains):
@@ -183,13 +254,18 @@ def validate_evidence_contract(
                 errors.append(f"evidence.{domain}.gates[{index}] must be an object")
                 continue
             gate_id = gate.get("gate_id")
-            if gate_id in seen:
-                errors.append(f"duplicate evidence gate {domain}/{gate_id}")
             if isinstance(gate_id, str):
+                if gate_id in seen:
+                    errors.append(f"duplicate evidence gate {domain}/{gate_id}")
                 seen.add(gate_id)
             if isinstance(gate.get("phase"), str):
                 phases.add(gate["phase"])
             validate_gate(gate, f"evidence.{domain}.gates[{index}]", uri_prefix, as_of, errors)
+        required_gates = REQUIRED_DOMAIN_GATES.get(domain)
+        if required_gates is None:
+            errors.append(f"no required DNS gate policy is defined for {domain}")
+        else:
+            validate_required_gate_set(gates, required_gates, f"evidence.{domain}.gates", errors)
         if phases != {"inventory", "delegation"}:
             errors.append(f"evidence.{domain} must define inventory and delegation gates")
     return errors
@@ -289,6 +365,10 @@ def validate_exception_contract(
             expires_at = parse_timestamp(
                 exception.get("expires_at"), f"{location}.expires_at", errors
             )
+            if approved_at is not None and approved_at > as_of:
+                errors.append(f"{location}.approved_at must not be later than the evaluation time")
+            if expires_at is not None and approved_at is not None and expires_at <= approved_at:
+                errors.append(f"{location}.expires_at must be later than approved_at")
             if status == "pending_review":
                 if any(value is not None for value in (change_record, approved_by, approved_at, expires_at)):
                     errors.append(f"{location}: pending exceptions must not claim approval metadata")

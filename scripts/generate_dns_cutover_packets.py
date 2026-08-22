@@ -15,7 +15,7 @@ import re
 import shutil
 import sys
 import tempfile
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +34,7 @@ from validate_dns_governance import (
 
 CHANGE_RECORD = re.compile(r"^CHG-[A-Za-z0-9._-]+$")
 DOMAIN = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")
+DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$", re.IGNORECASE)
 
 
 def file_sha256(path: Path) -> str:
@@ -48,7 +49,31 @@ def canonical_bytes(value: Any) -> bytes:
     return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
-def load_snapshot(directory: Path, domain: str) -> tuple[dict[str, Any], str]:
+def canonical_sha256(value: Any) -> str:
+    return hashlib.sha256(canonical_bytes(value)).hexdigest()
+
+
+def canonical_dns_name(value: Any, field: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field} must be a DNS name")
+    candidate = value[:-1] if value.endswith(".") else value
+    if len(candidate) > 253 or not candidate:
+        raise ValueError(f"{field} must be a valid DNS name")
+    labels = candidate.split(".")
+    if any(not DNS_LABEL.fullmatch(label) for label in labels):
+        raise ValueError(f"{field} must be a valid DNS name")
+    return candidate.lower() + "."
+
+
+def parent_zone(domain: str) -> str:
+    canonical = canonical_dns_name(domain, "domain")
+    labels = canonical.rstrip(".").split(".")
+    if len(labels) < 2:
+        raise ValueError(f"domain has no authoritative parent zone: {domain}")
+    return ".".join(labels[1:]) + "."
+
+
+def load_snapshot(directory: Path, domain: str) -> tuple[dict[str, Any], str, datetime]:
     path = directory / f"{domain}.json"
     snapshot = load_json(path)
     required = {
@@ -68,23 +93,80 @@ def load_snapshot(directory: Path, domain: str) -> tuple[dict[str, Any], str]:
         isinstance(value, str) and value for value in nameservers
     ):
         raise ValueError(f"{path}.authoritative_nameservers must be a non-empty string array")
+    for index, nameserver in enumerate(nameservers):
+        canonical_dns_name(nameserver, f"{path}.authoritative_nameservers[{index}]")
     if not isinstance(snapshot.get("parent_ds"), list) or not isinstance(
         snapshot.get("records"), list
     ):
         raise ValueError(f"{path}.parent_ds and records must be arrays")
     timestamp_errors: list[str] = []
-    parse_timestamp(snapshot.get("captured_at"), f"{path}.captured_at", timestamp_errors)
+    captured = parse_timestamp(
+        snapshot.get("captured_at"), f"{path}.captured_at", timestamp_errors
+    )
+    if timestamp_errors or captured is None:
+        raise ValueError("; ".join(timestamp_errors))
+    return snapshot, canonical_sha256(snapshot), captured
+
+
+def _preflight_argv(domain: str, nameservers: list[str]) -> list[list[str]]:
+    domain_fqdn = canonical_dns_name(domain, "domain")
+    parent = parent_zone(domain)
+    commands = [
+        ["dig", "+trace", "+dnssec", "NS", parent],
+        ["dig", "+trace", "+dnssec", "DS", domain_fqdn],
+    ]
+    for nameserver in sorted(
+        {canonical_dns_name(value, "authoritative_nameserver") for value in nameservers}
+    ):
+        for record_type in ("SOA", "NS", "MX", "TXT", "CAA", "DNSKEY"):
+            commands.append(["dig", "+dnssec", f"@{nameserver}", record_type, domain_fqdn])
+    return commands
+
+
+def snapshot_evidence_binding(
+    evidence_entry: dict[str, Any],
+    gate_id: str,
+    snapshot_digest: str,
+    snapshot_captured_at: datetime,
+) -> dict[str, Any]:
+    gates = evidence_entry.get("gates", [])
+    matches = [
+        gate
+        for gate in gates
+        if isinstance(gate, dict) and gate.get("gate_id") == gate_id
+    ]
+    if len(matches) != 1:
+        raise ValueError(f"evidence must contain exactly one {gate_id} gate")
+    gate = matches[0]
+    expected = gate.get("sha256") if isinstance(gate.get("sha256"), str) else None
+    timestamp_errors: list[str] = []
+    observed = parse_timestamp(
+        gate.get("observed_at"), f"{gate_id}.observed_at", timestamp_errors
+    )
     if timestamp_errors:
         raise ValueError("; ".join(timestamp_errors))
-    return snapshot, file_sha256(path)
-
-
-def _preflight_commands(domain: str, nameservers: list[str]) -> list[str]:
-    commands = [f"dig +dnssec DS {domain} @a.gtld-servers.net"]
-    for nameserver in nameservers:
-        for record_type in ("SOA", "NS", "MX", "TXT", "CAA", "DNSKEY"):
-            commands.append(f"dig +dnssec {record_type} {domain} @{nameserver}")
-    return commands
+    digest_matches = expected == snapshot_digest
+    timestamp_matches = observed == snapshot_captured_at
+    if expected is not None and not digest_matches:
+        raise ValueError(
+            f"{gate_id} evidence digest does not match the supplied canonical snapshot"
+        )
+    if observed is not None and not timestamp_matches:
+        raise ValueError(
+            f"{gate_id} evidence observation time does not match snapshot captured_at"
+        )
+    bound = digest_matches and timestamp_matches
+    if gate.get("status") == "approved" and not bound:
+        raise ValueError(f"approved {gate_id} evidence is not bound to the supplied snapshot")
+    return {
+        "gate_id": gate_id,
+        "evidence_status": gate.get("status"),
+        "evidence_sha256": expected,
+        "evidence_observed_at": gate.get("observed_at"),
+        "snapshot_sha256": snapshot_digest,
+        "snapshot_captured_at": snapshot_captured_at.isoformat().replace("+00:00", "Z"),
+        "matches": bound,
+    }
 
 
 def build_packets(
@@ -115,13 +197,21 @@ def build_packets(
     assert generated is not None and start is not None and end is not None and lowered is not None
     if start >= end:
         raise ValueError("window_start must be before window_end")
+    if lowered > generated:
+        raise ValueError("ttl_lowered_at must not be later than generated_at")
+    if generated > start:
+        raise ValueError("generated_at must not be later than window_start")
     if start - lowered < timedelta(hours=48):
         raise ValueError("portable TTLs must be lowered at least 48 hours before the window")
+    evidence_from_file = load_json(evidence_path)
+    if evidence != evidence_from_file:
+        raise ValueError("evidence object must exactly match the evidence file being hashed")
     errors = validate_evidence_contract(evidence, inventory, generated)
     errors.extend(validate_exception_contract(exceptions, inventory, generated))
     if errors:
         raise ValueError("governance contracts are invalid: " + "; ".join(errors))
     inventory_domains = domain_map(inventory, "inventory", [])
+    evidence_domains = domain_map(evidence, "evidence", [])
     exception_domains = domain_map(exceptions, "exceptions", [])
     readiness = derive_readiness(inventory, evidence, exceptions, generated)
     evidence_digest = file_sha256(evidence_path)
@@ -132,8 +222,23 @@ def build_packets(
         state = readiness[domain]
         if require_ready and not state["delegation_ready"]:
             raise ValueError(f"{domain} is not delegation-ready: {state['delegation_blockers']}")
-        incumbent, incumbent_hash = load_snapshot(incumbent_dir, domain)
-        target, target_hash = load_snapshot(target_dir, domain)
+        incumbent, incumbent_hash, incumbent_captured = load_snapshot(incumbent_dir, domain)
+        target, target_hash, target_captured = load_snapshot(target_dir, domain)
+        if incumbent_captured > generated or target_captured > generated:
+            raise ValueError(f"{domain} snapshots must not be captured after generated_at")
+        incumbent_binding = snapshot_evidence_binding(
+            evidence_domains[domain],
+            "incumbent_zone_snapshot",
+            incumbent_hash,
+            incumbent_captured,
+        )
+        target_binding = snapshot_evidence_binding(
+            evidence_domains[domain], "target_zone_snapshot", target_hash, target_captured
+        )
+        if state["delegation_ready"] and not (
+            incumbent_binding["matches"] and target_binding["matches"]
+        ):
+            raise ValueError(f"{domain} cannot be READY without exact snapshot evidence binding")
         all_nameservers = list(
             dict.fromkeys(
                 incumbent["authoritative_nameservers"] + target["authoritative_nameservers"]
@@ -150,12 +255,20 @@ def build_packets(
             "readiness": state,
             "evidence_manifest_sha256": evidence_digest,
             "public_record_exceptions": exception_domains[domain].get("exceptions", []),
-            "incumbent_snapshot": {"sha256": incumbent_hash, "content": incumbent},
-            "target_snapshot": {"sha256": target_hash, "content": target},
-            "preflight_commands": _preflight_commands(domain, all_nameservers),
+            "incumbent_snapshot": {
+                "sha256": incumbent_hash,
+                "evidence_binding": incumbent_binding,
+                "content": incumbent,
+            },
+            "target_snapshot": {
+                "sha256": target_hash,
+                "evidence_binding": target_binding,
+                "content": target,
+            },
+            "preflight_argv": _preflight_argv(domain, all_nameservers),
             "cutover_steps": [
                 "Confirm the change window is open and the incumbent zone freeze is active.",
-                "Run every preflight command and attach complete output to the change record.",
+                "Execute every preflight argv directly without shell interpretation and attach complete output to the change record.",
                 "Confirm parent DS state directly before changing delegation.",
                 "Change registrar nameservers manually to the target snapshot nameservers.",
                 "Validate authoritative answers and service behavior before publishing target DS data.",

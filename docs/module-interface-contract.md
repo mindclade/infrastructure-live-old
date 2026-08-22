@@ -66,17 +66,28 @@ make validate-capacity-contract MONOREPO=../mindclade-internal-monorepo
 make validate-workload-identity-contract MONOREPO=../mindclade-internal-monorepo
 ```
 
-For the planned v0.4.0 source review, run the separate candidate gate:
+For worktree-only diagnosis of the planned v0.4.0 source, run the separate
+candidate checks. These commands are intentionally not release evidence:
 
 ```sh
-make validate-module-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
+make validate-module-worktree-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
 make validate-capacity-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
 make validate-workload-identity-candidate MONOREPO=../mindclade-internal-monorepo CANDIDATE_MODULE_VERSION=v0.4.0
-nix develop .#ci --command make validate-source-integration MONOREPO=../mindclade-internal-monorepo
 ```
 
-A candidate pass must never be presented as an immutable-ref pass and must not authorize a plan or
-apply. After the protected tag is published from the reviewed commit, remove reliance on candidate
+For review evidence, bind all three candidate validators to one exact locally
+available commit. The gate creates a detached snapshot and never reads dirty or
+uncommitted monorepo bytes:
+
+```sh
+nix develop .#ci --command make validate-source-integration \
+  MONOREPO=../mindclade-internal-monorepo \
+  CANDIDATE_MODULE_VERSION=v0.4.0 \
+  CANDIDATE_MODULE_REF=<40-character-lowercase-commit-sha>
+```
+
+A candidate pass must never be presented as an immutable release-tag pass and must not authorize a
+plan or apply. After the protected tag is published from the reviewed commit, remove reliance on candidate
 mode by running the exact integration target:
 
 ```sh
