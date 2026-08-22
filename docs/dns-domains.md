@@ -116,17 +116,25 @@ The strict target values in desired source do not authorize skipping this observ
 Static validation runs locally and in pull-request CI:
 
 ```sh
-nix develop .#ci --command python3 scripts/validate_dns_portfolio.py
+nix develop .#ci --command make validate-dns
 nix develop .#ci --command python3 scripts/validate_dns_portfolio.py --require-ready mindclade.dev
 ```
 
-The first command executes the committed Draft 2020-12 schema and validates roles, ownership,
-DNSSEC, record types, exact public-address allowlists and values, exact reviewed Google
-verification and Workspace MX/DKIM records, strict no-mail alignment, module release status,
-shared DNS module interfaces, and parity between the normalized inventory and live Terragrunt
-records. The second additionally fails unless the selected domain is explicitly ready. Qualify
-in the fixed order `mindclade.dev` → `mindclade.ai` → `mindclade.studio` →
-`mindclade.com`; never parallelize registrar delegation.
+The first command checks the generated projection, executes the committed Draft 2020-12 schema,
+runs the DNS-focused tests, and validates roles, ownership, DNSSEC, record types, exact
+public-address allowlists and values, exact reviewed Google verification and Workspace MX/DKIM
+records, strict no-mail alignment, module release status, shared DNS module interfaces, evidence
+governance, and parity between the normalized inventory and live Terragrunt records. The second
+additionally fails unless the selected domain is explicitly ready. Qualify in the fixed order
+`mindclade.dev` → `mindclade.ai` → `mindclade.studio` → `mindclade.com`; never parallelize
+registrar delegation.
+
+Independent reviewed comparison pins for verification and Workspace MX, plus the hash-only
+Workspace DKIM pin, live in the versioned
+[`dns-reviewed-record-pins.json`](../contracts/dns-reviewed-record-pins.json) contract governed by
+its adjacent Draft 2020-12 schema. `DNS-PINS-*` diagnostics cover loading, schema, and
+record-match failures for that contract and intentionally omit expected and observed RRdata and
+hashes; broader inventory diagnostics retain their existing messages.
 
 The manually dispatched **DNS cutover check** workflow is read-only. Its `preflight` phase
 compares every reviewed portable record on the incumbent and Cloud DNS nameservers. After the

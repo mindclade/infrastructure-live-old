@@ -23,6 +23,9 @@
 **/vpc-sc-perimeter/     @mindclade/security
 /contracts/argocd-image-exceptions.json @mindclade/platform @mindclade/security
 /scripts/validate-argocd-image-exceptions.py @mindclade/platform @mindclade/security
+/contracts/dns-reviewed-record-pins.json @mindclade/platform @mindclade/security
+/contracts/dns-reviewed-record-pins.schema.json @mindclade/platform @mindclade/security
+/scripts/validate_dns_portfolio.py @mindclade/platform @mindclade/security
 /5-workloads/shared/control-plane-identities/ @mindclade/platform @mindclade/security
 
 # Partner tenancy — isolation boundaries.

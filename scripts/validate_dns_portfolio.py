@@ -28,6 +28,10 @@ DEFAULT_INVENTORY = (
     ROOT / "contracts/dns-domain-inventory.json"
 )
 DEFAULT_SCHEMA = ROOT / "contracts/dns-domain-inventory.schema.json"
+DEFAULT_REVIEWED_RECORD_PINS = ROOT / "contracts/dns-reviewed-record-pins.json"
+DEFAULT_REVIEWED_RECORD_PINS_SCHEMA = (
+    ROOT / "contracts/dns-reviewed-record-pins.schema.json"
+)
 PUBLIC_ZONES = ROOT / "3-networks/shared/public-zones"
 SHARED_DNS_HUB = ROOT / "3-networks/shared/dns-hub/terragrunt.hcl"
 
@@ -140,40 +144,6 @@ APPROVED_PUBLIC_RECORD_ALLOWLISTS = {
     domain: set(APPROVED_PUBLIC_RECORDS.get(domain, {}))
     for domain in EXPECTED_DOMAINS
 }
-REVIEWED_GOOGLE_VERIFICATION = {
-    "mindclade.com": (
-        300,
-        "google-site-verification=VbOqcgzfjWHUJucvRZrLc6Ha2sbMuOyB0WAA6YnTqPY",
-    ),
-    "mindclade.ai": (
-        3600,
-        "google-site-verification=PySGrYrpdfTEzLQ4NEt-cil0BGPu0wrpKie4raR6RLk",
-    ),
-    "mindclade.dev": (
-        3600,
-        "google-site-verification=2RPVgJvXDrMYl1teBBy2ZUjXOTsXlPOxt9OIvtKp2C8",
-    ),
-    "mindclade.studio": (
-        3600,
-        "google-site-verification=6NVsg_ufGEcTcp75gxRFZTfDHrBHkxQSyDPLz3k39zI",
-    ),
-}
-REVIEWED_WORKSPACE_MX = (
-    300,
-    {
-        "1 aspmx.l.google.com.",
-        "5 alt1.aspmx.l.google.com.",
-        "5 alt2.aspmx.l.google.com.",
-        "10 alt3.aspmx.l.google.com.",
-        "10 alt4.aspmx.l.google.com.",
-    },
-)
-REVIEWED_WORKSPACE_DKIM = {
-    "google._domainkey": (
-        300,
-        "85f5ca64860205f5398e090043f0f6d8dec8e89610c9608c9dda1607beb0cd50",
-    )
-}
 FINAL_WORKSPACE_SPF = "v=spf1 include:_spf.google.com -all"
 FINAL_WORKSPACE_DMARC = (
     "v=DMARC1; p=reject; sp=reject; pct=100; adkim=s; aspf=s; "
@@ -195,6 +165,13 @@ RECORD_NAME = re.compile(
 BLOCKER = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SEMVER_REF = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 CHANGE_REFERENCE = re.compile(r"^(?:CHG|INC|SEC|DR)-[A-Za-z0-9][A-Za-z0-9._-]*$")
+RECORD_PINS_LOAD_ERROR = "DNS-PINS-001"
+RECORD_PINS_ROOT_ERROR = "DNS-PINS-002"
+RECORD_PINS_SCHEMA_ERROR = "DNS-PINS-003"
+RECORD_PIN_MISSING_ERROR = "DNS-PINS-101"
+RECORD_PIN_TTL_ERROR = "DNS-PINS-102"
+RECORD_PIN_RRDATA_ERROR = "DNS-PINS-103"
+RECORD_PIN_FAMILY_ERROR = "DNS-PINS-104"
 
 
 class InventoryError(ValueError):
@@ -208,6 +185,22 @@ def load_inventory(path: Path) -> dict[str, Any]:
         raise InventoryError(f"cannot read inventory {path}: {exc}") from exc
     if not isinstance(value, dict):
         raise InventoryError("inventory root must be a JSON object")
+    return value
+
+
+def load_reviewed_record_pins(
+    path: Path = DEFAULT_REVIEWED_RECORD_PINS,
+) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise InventoryError(
+            f"[{RECORD_PINS_LOAD_ERROR}] cannot read reviewed record-pins contract {path}"
+        ) from exc
+    if not isinstance(value, dict):
+        raise InventoryError(
+            f"[{RECORD_PINS_ROOT_ERROR}] reviewed record-pins root must be a JSON object"
+        )
     return value
 
 
@@ -258,43 +251,142 @@ def _json_path(parts: Any) -> str:
     return result
 
 
-def validate_inventory_schema(
-    inventory: dict[str, Any], schema_path: Path = DEFAULT_SCHEMA
-) -> list[str]:
-    """Validate the inventory against the committed Draft 2020-12 schema."""
-
+def _json_schema_diagnostics(
+    document: dict[str, Any], schema_path: Path, label: str
+) -> tuple[list[tuple[str, str, str]], str | None]:
     try:
         from jsonschema import Draft202012Validator, FormatChecker
         from jsonschema.exceptions import SchemaError
     except ImportError as exc:
-        return [
+        return [], (
             "JSON Schema validation requires the pinned jsonschema package from "
             f"`nix develop .#ci`: {exc}"
-        ]
+        )
 
     try:
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        return [f"cannot read inventory schema {schema_path}: {exc}"]
+        return [], f"cannot read {label} schema {schema_path}: {exc}"
 
     try:
         Draft202012Validator.check_schema(schema)
     except SchemaError as exc:
-        return [f"invalid inventory schema {schema_path}: {exc.message}"]
+        return [], f"invalid {label} schema {schema_path}: {exc.message}"
 
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     violations = sorted(
-        validator.iter_errors(inventory),
+        validator.iter_errors(document),
         key=lambda error: (
             tuple(str(part) for part in error.absolute_path),
             error.message,
         ),
     )
     return [
-        f"schema {_json_path(error.absolute_path)}: {error.validator} constraint "
-        f"failed at {_json_path(error.absolute_schema_path)}"
+        (
+            _json_path(error.absolute_path),
+            str(error.validator),
+            _json_path(error.absolute_schema_path),
+        )
         for error in violations
+    ], None
+
+
+def validate_inventory_schema(
+    inventory: dict[str, Any], schema_path: Path = DEFAULT_SCHEMA
+) -> list[str]:
+    """Validate the inventory against the committed Draft 2020-12 schema."""
+
+    violations, failure = _json_schema_diagnostics(
+        inventory, schema_path, "inventory"
+    )
+    if failure is not None:
+        return [failure]
+    return [
+        f"schema {path}: {validator} constraint failed at {absolute_schema_path}"
+        for path, validator, absolute_schema_path in violations
     ]
+
+
+def validate_reviewed_record_pins_schema(
+    record_pins: dict[str, Any],
+    schema_path: Path = DEFAULT_REVIEWED_RECORD_PINS_SCHEMA,
+) -> list[str]:
+    """Validate the versioned reviewed record-pins contract without exposing values."""
+
+    violations, failure = _json_schema_diagnostics(
+        record_pins, schema_path, "reviewed record-pins"
+    )
+    if failure is not None:
+        return [f"[{RECORD_PINS_SCHEMA_ERROR}] {failure}"]
+    return [
+        f"[{RECORD_PINS_SCHEMA_ERROR}] reviewed record-pins schema {path}: "
+        f"{validator} constraint failed at {absolute_schema_path}"
+        for path, validator, absolute_schema_path in violations
+    ]
+
+
+def _validate_reviewed_record_pins(
+    domain: str,
+    record_sets: dict[tuple[str, str], dict[str, Any]],
+    record_pins: list[dict[str, Any]],
+) -> list[str]:
+    errors: list[str] = []
+    domain_pins = [pin for pin in record_pins if pin.get("domain") == domain]
+    for pin in domain_pins:
+        pin_id = str(pin["id"])
+        record_contract = pin["record"]
+        owner = str(record_contract["name"]).lower()
+        record_type = str(record_contract["type"]).upper()
+        record = record_sets.get((owner, record_type))
+        if record is None:
+            errors.append(
+                f"[{RECORD_PIN_MISSING_ERROR}] {domain}: reviewed pin {pin_id} "
+                "record is missing"
+            )
+            continue
+        if record.get("ttl") != record_contract["ttl"]:
+            errors.append(
+                f"[{RECORD_PIN_TTL_ERROR}] {domain}: reviewed pin {pin_id} TTL mismatch"
+            )
+
+        values = _strings(record.get("rrdatas"))
+        match = pin["match"]
+        mode = match["mode"]
+        if mode == "filtered_exact_rrset":
+            prefix = str(match["filter_prefix"]).lower()
+            actual = {value for value in values if value.lower().startswith(prefix)}
+            expected = set(match["rrdatas"])
+        elif mode == "exact_rrset":
+            actual = set(values)
+            expected = set(match["rrdatas"])
+        else:
+            actual = {
+                hashlib.sha256(value.encode("utf-8")).hexdigest() for value in values
+            }
+            expected = set(match["rrdata_sha256"])
+        if actual != expected:
+            errors.append(
+                f"[{RECORD_PIN_RRDATA_ERROR}] {domain}: reviewed pin {pin_id} "
+                "RRdata mismatch"
+            )
+
+    expected_dkim_owners = {
+        str(pin["record"]["name"]).lower()
+        for pin in domain_pins
+        if pin.get("purpose") == "google_workspace_dkim"
+    }
+    if expected_dkim_owners:
+        actual_dkim_owners = {
+            owner
+            for owner, record_type in record_sets
+            if record_type == "TXT" and owner.endswith("._domainkey")
+        }
+        if actual_dkim_owners != expected_dkim_owners:
+            errors.append(
+                f"[{RECORD_PIN_FAMILY_ERROR}] {domain}: reviewed Workspace DKIM "
+                "owner set mismatch"
+            )
+    return errors
 
 
 def _dmarc_tags(value: str) -> dict[str, str] | None:
@@ -313,12 +405,28 @@ def _dmarc_tags(value: str) -> dict[str, str] | None:
 
 
 def validate_inventory(
-    inventory: dict[str, Any], require_ready: set[str] | None = None
+    inventory: dict[str, Any],
+    require_ready: set[str] | None = None,
+    *,
+    record_pins_path: Path = DEFAULT_REVIEWED_RECORD_PINS,
+    record_pins_schema_path: Path = DEFAULT_REVIEWED_RECORD_PINS_SCHEMA,
 ) -> list[str]:
     """Return every portfolio policy violation in stable order."""
 
     errors = validate_inventory_schema(inventory)
     require_ready = require_ready or set()
+    reviewed_record_pins: list[dict[str, Any]] = []
+    try:
+        record_pins = load_reviewed_record_pins(record_pins_path)
+    except InventoryError as exc:
+        errors.append(str(exc))
+    else:
+        record_pins_errors = validate_reviewed_record_pins_schema(
+            record_pins, record_pins_schema_path
+        )
+        errors.extend(record_pins_errors)
+        if not record_pins_errors:
+            reviewed_record_pins = record_pins["pins"]
 
     if inventory.get("schema_version") != 3:
         errors.append("schema_version must be 3")
@@ -666,23 +774,11 @@ def validate_inventory(
 
         record_sets = _record_sets(domain)
         apex_txt = _txt_values(record_sets, "@")
-        verification = [
-            value
-            for value in apex_txt
-            if value.lower().startswith("google-site-verification=")
-        ]
-        expected_verification_ttl, expected_verification = (
-            REVIEWED_GOOGLE_VERIFICATION[name]
-        )
-        apex_txt_record = record_sets.get(("@", "TXT"), {})
-        if (
-            verification != [expected_verification]
-            or apex_txt_record.get("ttl") != expected_verification_ttl
-        ):
-            errors.append(
-                f"{prefix}: apex TXT must retain the exact reviewed Google "
-                f"verification value at TTL {expected_verification_ttl}"
+        errors.extend(
+            _validate_reviewed_record_pins(
+                name, record_sets, reviewed_record_pins
             )
+        )
         if name in CERTIFICATE_DOMAINS:
             apex_caa = record_sets.get(("@", "CAA"))
             if apex_caa is None:
@@ -717,47 +813,6 @@ def validate_inventory(
                     f"{prefix}: no-mail policy requires exact DMARC p=reject, "
                     "sp=reject, adkim=s, and aspf=s"
                 )
-
-        if expected_mail == "google-workspace":
-            expected_mx_ttl, expected_mx_values = REVIEWED_WORKSPACE_MX
-            mx_record = record_sets.get(("@", "MX"), {})
-            if (
-                mx_record.get("ttl") != expected_mx_ttl
-                or set(_strings(mx_record.get("rrdatas"))) != expected_mx_values
-            ):
-                errors.append(
-                    f"{prefix}: apex MX must match the exact reviewed Google Workspace "
-                    f"record set at TTL {expected_mx_ttl}"
-                )
-
-            dkim_records = {
-                owner: record
-                for (owner, record_type), record in record_sets.items()
-                if record_type == "TXT" and owner.endswith("._domainkey")
-            }
-            if set(dkim_records) != set(REVIEWED_WORKSPACE_DKIM):
-                errors.append(
-                    f"{prefix}: DKIM TXT owners must match the exact reviewed Workspace set"
-                )
-            else:
-                for owner, (expected_ttl, expected_fingerprint) in (
-                    REVIEWED_WORKSPACE_DKIM.items()
-                ):
-                    dkim_record = dkim_records[owner]
-                    values = _strings(dkim_record.get("rrdatas"))
-                    fingerprint = (
-                        hashlib.sha256(values[0].encode("utf-8")).hexdigest()
-                        if len(values) == 1
-                        else ""
-                    )
-                    if (
-                        dkim_record.get("ttl") != expected_ttl
-                        or fingerprint != expected_fingerprint
-                    ):
-                        errors.append(
-                            f"{prefix}: {owner} TXT must match the exact reviewed "
-                            f"Workspace DKIM value at TTL {expected_ttl}"
-                        )
 
         if expected_mail == "google-workspace" and ready:
             spf = [value for value in apex_txt if value.lower().startswith("v=spf1 ")]

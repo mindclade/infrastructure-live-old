@@ -8,7 +8,9 @@
 from __future__ import annotations
 
 import copy
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -24,6 +26,7 @@ import validate_dns_portfolio as portfolio  # noqa: E402
 class DNSPortfolioTest(unittest.TestCase):
     def setUp(self) -> None:
         self.inventory = portfolio.load_inventory(portfolio.DEFAULT_INVENTORY)
+        self.record_pins = portfolio.load_reviewed_record_pins()
 
     def ready_workspace_inventory(self) -> dict:
         inventory = copy.deepcopy(self.inventory)
@@ -60,6 +63,21 @@ class DNSPortfolioTest(unittest.TestCase):
         self.assertEqual(portfolio.validate_inventory(self.inventory), [])
         self.assertEqual(portfolio.validate_live_parity(self.inventory), [])
         self.assertEqual(portfolio.validate_shared_dns_hub_interface(), [])
+
+    def test_committed_reviewed_record_pins_contract_is_valid(self) -> None:
+        self.assertEqual(
+            portfolio.validate_reviewed_record_pins_schema(self.record_pins), []
+        )
+
+    def test_reviewed_values_are_not_duplicated_in_validator_source(self) -> None:
+        validator_source = (ROOT / "scripts/validate_dns_portfolio.py").read_text(
+            encoding="utf-8"
+        )
+        for pin in self.record_pins["pins"]:
+            match = pin["match"]
+            for field in ("rrdatas", "rrdata_sha256"):
+                for value in match.get(field, []):
+                    self.assertNotIn(value, validator_source)
 
     def test_generated_domain_projection_is_current(self) -> None:
         expected = domains_projection.render(self.inventory)
@@ -245,8 +263,8 @@ class DNSPortfolioTest(unittest.TestCase):
         apex_txt["rrdatas"] = ["v=spf1 -all"]
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
-            "mindclade.studio: apex TXT must retain the exact reviewed Google "
-            "verification value at TTL 3600",
+            "[DNS-PINS-103] mindclade.studio: reviewed pin "
+            "mindclade-studio-google-verification RRdata mismatch",
             errors,
         )
 
@@ -263,8 +281,27 @@ class DNSPortfolioTest(unittest.TestCase):
         apex_txt["rrdatas"][-1] = "google-site-verification=unreviewed"
         errors = portfolio.validate_inventory(inventory)
         self.assertIn(
-            "mindclade.dev: apex TXT must retain the exact reviewed Google "
-            "verification value at TTL 3600",
+            "[DNS-PINS-103] mindclade.dev: reviewed pin "
+            "mindclade-dev-google-verification RRdata mismatch",
+            errors,
+        )
+        self.assertNotIn("unreviewed", "\n".join(errors))
+
+    def test_google_verification_ttl_is_exact(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.dev"
+        )
+        apex_txt = next(
+            record
+            for record in domain["records"]
+            if record["name"] == "@" and record["type"] == "TXT"
+        )
+        apex_txt["ttl"] = 300
+        errors = portfolio.validate_inventory(inventory)
+        self.assertIn(
+            "[DNS-PINS-102] mindclade.dev: reviewed pin "
+            "mindclade-dev-google-verification TTL mismatch",
             errors,
         )
 
@@ -345,6 +382,52 @@ class DNSPortfolioTest(unittest.TestCase):
             for record_value in record_values:
                 self.assertNotIn(record_value, error)
 
+    def test_record_pins_schema_requires_every_reviewed_identity(self) -> None:
+        record_pins = copy.deepcopy(self.record_pins)
+        record_pins["pins"].pop()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "record-pins.json"
+            path.write_text(json.dumps(record_pins), encoding="utf-8")
+            errors = portfolio.validate_inventory(
+                self.inventory, record_pins_path=path
+            )
+        self.assertTrue(
+            any(error.startswith("[DNS-PINS-003]") for error in errors)
+        )
+        pinned_values = {
+            value
+            for pin in record_pins["pins"]
+            for field in ("rrdatas", "rrdata_sha256")
+            for value in pin["match"].get(field, [])
+        }
+        for error in errors:
+            for pinned_value in pinned_values:
+                self.assertNotIn(pinned_value, error)
+
+    def test_missing_record_pins_contract_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            errors = portfolio.validate_inventory(
+                self.inventory,
+                record_pins_path=Path(directory) / "missing-record-pins.json",
+            )
+        self.assertTrue(
+            any(error.startswith("[DNS-PINS-001]") for error in errors)
+        )
+
+    def test_record_pins_contract_root_must_be_an_object(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "record-pins.json"
+            path.write_text("[]", encoding="utf-8")
+            errors = portfolio.validate_inventory(
+                self.inventory, record_pins_path=path
+            )
+        self.assertEqual(
+            [error for error in errors if error.startswith("[DNS-PINS-")],
+            [
+                "[DNS-PINS-002] reviewed record-pins root must be a JSON object"
+            ],
+        )
+
     def test_workspace_readiness_requires_complete_mail_authentication(self) -> None:
         inventory = self.ready_workspace_inventory()
         self.assertEqual(
@@ -360,8 +443,8 @@ class DNSPortfolioTest(unittest.TestCase):
         mx["rrdatas"] = ["1 smtp.google.com."]
         errors = portfolio.validate_inventory(inventory, {"mindclade.com"})
         self.assertIn(
-            "mindclade.com: apex MX must match the exact reviewed Google Workspace "
-            "record set at TTL 300",
+            "[DNS-PINS-103] mindclade.com: reviewed pin "
+            "mindclade-com-google-workspace-mx RRdata mismatch",
             errors,
         )
 
@@ -378,10 +461,31 @@ class DNSPortfolioTest(unittest.TestCase):
         dkim["rrdatas"] = ["v=DKIM1;k=rsa;p=unreviewed"]
         errors = portfolio.validate_inventory(inventory, {"mindclade.com"})
         self.assertIn(
-            "mindclade.com: google._domainkey TXT must match the exact reviewed "
-            "Workspace DKIM value at TTL 300",
+            "[DNS-PINS-103] mindclade.com: reviewed pin "
+            "mindclade-com-google-workspace-dkim RRdata mismatch",
             errors,
         )
+        self.assertNotIn("unreviewed", "\n".join(errors))
+
+    def test_workspace_dkim_owner_set_is_closed(self) -> None:
+        inventory = self.ready_workspace_inventory()
+        domain = next(
+            item for item in inventory["domains"] if item["domain"] == "mindclade.com"
+        )
+        domain["records"].append(
+            {
+                "name": "unreviewed._domainkey",
+                "type": "TXT",
+                "ttl": 300,
+                "rrdatas": ["v=DKIM1;k=rsa;p=unreviewed"],
+            }
+        )
+        errors = portfolio.validate_inventory(inventory, {"mindclade.com"})
+        self.assertIn(
+            "[DNS-PINS-104] mindclade.com: reviewed Workspace DKIM owner set mismatch",
+            errors,
+        )
+        self.assertNotIn("v=DKIM1;k=rsa;p=unreviewed", "\n".join(errors))
 
 
 class DNSDelegationTest(unittest.TestCase):

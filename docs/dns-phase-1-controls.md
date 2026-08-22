@@ -28,14 +28,15 @@ repository does not claim they have been uploaded or reviewed.
 Run:
 
 ~~~bash
-python3 scripts/validate_dns_governance.py
+nix develop .#ci --command make validate-dns
 ~~~
 
-The `inventory_complete` and `delegation_ready` values must equal the state
-derived from exact policy-owned portfolio and per-domain gate sets, evidence
-expiry, and public-address exception approvals. Missing, additional, or
-re-phased gates fail validation; editing either boolean without satisfying its
-evidence gates also fails.
+The target verifies the generated projection, portfolio and evidence governance,
+and DNS-focused tests in one pinned shell. The `inventory_complete` and
+`delegation_ready` values must equal the state derived from exact policy-owned
+portfolio and per-domain gate sets, evidence expiry, and public-address exception
+approvals. Missing, additional, or re-phased gates fail validation; editing either
+boolean without satisfying its evidence gates also fails.
 
 ## Public-address exceptions
 
