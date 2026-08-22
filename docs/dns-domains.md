@@ -179,4 +179,8 @@ No Workspace host, default-routing rule, outbound gateway, non-Gmail route, SMTP
 
 All four `google._domainkey` public selectors currently resolve and Google Admin reports DKIM authentication started for each domain. Removing the `.ai`, `.dev`, and `.studio` selectors from their target no-mail zones is therefore an intentional retirement that must be named in each change record, not treated as an inventory omission.
 
-Restricted evidence is stored at `/private/tmp/mindclade-dns-recovery-20260821/google-workspace-audit.md` with SHA-256 `6c7ff043b247814e6d26ba27ae22ebb009f19156403e7b9a8c6991c72c1d0376` and mode `0600`. Canonical readiness remains blocked until an independent reviewer accepts this evidence and all remaining DNS, certificate, site-retirement, release, project, and cutover gates are complete. No Google Admin or DNS mutation was performed during the audit.
+The redacted report was captured as restricted change evidence with SHA-256
+`6c7ff043b247814e6d26ba27ae22ebb009f19156403e7b9a8c6991c72c1d0376`. Canonical readiness
+remains blocked until an independent reviewer accepts that evidence and all remaining DNS,
+certificate, site-retirement, release, project, and cutover gates are complete. No Google Admin
+or DNS mutation was performed during the audit.
