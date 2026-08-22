@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mindclade.com/contracts/dns-reviewed-record-pins.schema.json",
+  "title": "Reviewed DNS record pins",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schema_version", "pins"],
+  "properties": {
+    "$schema": {"const": "./dns-reviewed-record-pins.schema.json"},
+    "schema_version": {"const": 1},
+    "pins": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {"$ref": "#/$defs/pin"},
+      "allOf": [
+        {"contains": {"properties": {"id": {"const": "mindclade-com-google-verification"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "mindclade-ai-google-verification"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "mindclade-dev-google-verification"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "mindclade-studio-google-verification"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "mindclade-com-google-workspace-mx"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "mindclade-com-google-workspace-dkim"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    }
+  },
+  "$defs": {
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "ttl"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^(?:@|[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?(?:\\.[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?)*)$"},
+        "type": {"enum": ["MX", "TXT"]},
+        "ttl": {"type": "integer", "minimum": 30, "maximum": 86400}
+      }
+    },
+    "match": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "filter_prefix", "rrdatas"],
+          "properties": {
+            "mode": {"const": "filtered_exact_rrset"},
+            "filter_prefix": {"const": "google-site-verification="},
+            "rrdatas": {"type": "array", "minItems": 1, "maxItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "rrdatas"],
+          "properties": {
+            "mode": {"const": "exact_rrset"},
+            "rrdatas": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "rrdata_sha256"],
+          "properties": {
+            "mode": {"const": "exact_rrset_sha256"},
+            "rrdata_sha256": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+          }
+        }
+      ]
+    },
+    "pin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "purpose", "domain", "record", "match"],
+      "properties": {
+        "id": {
+          "enum": [
+            "mindclade-com-google-verification",
+            "mindclade-ai-google-verification",
+            "mindclade-dev-google-verification",
+            "mindclade-studio-google-verification",
+            "mindclade-com-google-workspace-mx",
+            "mindclade-com-google-workspace-dkim"
+          ]
+        },
+        "purpose": {"enum": ["google_verification", "google_workspace_mx", "google_workspace_dkim"]},
+        "domain": {"enum": ["mindclade.com", "mindclade.ai", "mindclade.dev", "mindclade.studio"]},
+        "record": {"$ref": "#/$defs/record"},
+        "match": {"$ref": "#/$defs/match"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"id": {"const": "mindclade-com-google-verification"}}, "required": ["id"]},
+          "then": {"properties": {"purpose": {"const": "google_verification"}, "domain": {"const": "mindclade.com"}, "record": {"properties": {"name": {"const": "@"}, "type": {"const": "TXT"}}}, "match": {"properties": {"mode": {"const": "filtered_exact_rrset"}}}}}
+        },
+        {
+          "if": {"properties": {"id": {"const": "mindclade-ai-google-verification"}}, "required": ["id"]},
+          "then": {"properties": {"purpose": {"const": "google_verification"}, "domain": {"const": "mindclade.ai"}, "record": {"properties": {"name": {"const": "@"}, "type": {"const": "TXT"}}}, "match": {"properties": {"mode": {"const": "filtered_exact_rrset"}}}}}
+        },
+        {
+          "if": {"properties": {"id": {"const": "mindclade-dev-google-verification"}}, "required": ["id"]},
+          "then": {"properties": {"purpose": {"const": "google_verification"}, "domain": {"const": "mindclade.dev"}, "record": {"properties": {"name": {"const": "@"}, "type": {"const": "TXT"}}}, "match": {"properties": {"mode": {"const": "filtered_exact_rrset"}}}}}
+        },
+        {
+          "if": {"properties": {"id": {"const": "mindclade-studio-google-verification"}}, "required": ["id"]},
+          "then": {"properties": {"purpose": {"const": "google_verification"}, "domain": {"const": "mindclade.studio"}, "record": {"properties": {"name": {"const": "@"}, "type": {"const": "TXT"}}}, "match": {"properties": {"mode": {"const": "filtered_exact_rrset"}}}}}
+        },
+        {
+          "if": {"properties": {"id": {"const": "mindclade-com-google-workspace-mx"}}, "required": ["id"]},
+          "then": {"properties": {"purpose": {"const": "google_workspace_mx"}, "domain": {"const": "mindclade.com"}, "record": {"properties": {"name": {"const": "@"}, "type": {"const": "MX"}}}, "match": {"properties": {"mode": {"const": "exact_rrset"}}}}}
+        },
+        {
+          "if": {"properties": {"id": {"const": "mindclade-com-google-workspace-dkim"}}, "required": ["id"]},
+          "then": {"properties": {"purpose": {"const": "google_workspace_dkim"}, "domain": {"const": "mindclade.com"}, "record": {"properties": {"name": {"const": "google._domainkey"}, "type": {"const": "TXT"}}}, "match": {"properties": {"mode": {"const": "exact_rrset_sha256"}}}}}
+        }
+      ]
+    }
+  }
+}

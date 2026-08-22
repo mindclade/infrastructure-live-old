@@ -128,6 +128,13 @@ records. The second additionally fails unless the selected domain is explicitly 
 in the fixed order `mindclade.dev` → `mindclade.ai` → `mindclade.studio` →
 `mindclade.com`; never parallelize registrar delegation.
 
+Independent reviewed comparison pins for verification and Workspace MX, plus the hash-only
+Workspace DKIM pin, live in the versioned
+[`dns-reviewed-record-pins.json`](../contracts/dns-reviewed-record-pins.json) contract governed by
+its adjacent Draft 2020-12 schema. `DNS-PINS-*` diagnostics cover loading, schema, and
+record-match failures for that contract and intentionally omit expected and observed RRdata and
+hashes; broader inventory diagnostics retain their existing messages.
+
 The manually dispatched **DNS cutover check** workflow is read-only. Its `preflight` phase
 compares every reviewed portable record on the incumbent and Cloud DNS nameservers. After the
 old DS is removed, `predeligation` requires parent DS absence, target SOA and DNSKEY presence,

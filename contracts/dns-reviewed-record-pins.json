@@ -1,0 +1,76 @@
+{
+  "$schema": "./dns-reviewed-record-pins.schema.json",
+  "schema_version": 1,
+  "pins": [
+    {
+      "id": "mindclade-com-google-verification",
+      "purpose": "google_verification",
+      "domain": "mindclade.com",
+      "record": {"name": "@", "type": "TXT", "ttl": 300},
+      "match": {
+        "mode": "filtered_exact_rrset",
+        "filter_prefix": "google-site-verification=",
+        "rrdatas": ["google-site-verification=VbOqcgzfjWHUJucvRZrLc6Ha2sbMuOyB0WAA6YnTqPY"]
+      }
+    },
+    {
+      "id": "mindclade-ai-google-verification",
+      "purpose": "google_verification",
+      "domain": "mindclade.ai",
+      "record": {"name": "@", "type": "TXT", "ttl": 3600},
+      "match": {
+        "mode": "filtered_exact_rrset",
+        "filter_prefix": "google-site-verification=",
+        "rrdatas": ["google-site-verification=PySGrYrpdfTEzLQ4NEt-cil0BGPu0wrpKie4raR6RLk"]
+      }
+    },
+    {
+      "id": "mindclade-dev-google-verification",
+      "purpose": "google_verification",
+      "domain": "mindclade.dev",
+      "record": {"name": "@", "type": "TXT", "ttl": 3600},
+      "match": {
+        "mode": "filtered_exact_rrset",
+        "filter_prefix": "google-site-verification=",
+        "rrdatas": ["google-site-verification=2RPVgJvXDrMYl1teBBy2ZUjXOTsXlPOxt9OIvtKp2C8"]
+      }
+    },
+    {
+      "id": "mindclade-studio-google-verification",
+      "purpose": "google_verification",
+      "domain": "mindclade.studio",
+      "record": {"name": "@", "type": "TXT", "ttl": 3600},
+      "match": {
+        "mode": "filtered_exact_rrset",
+        "filter_prefix": "google-site-verification=",
+        "rrdatas": ["google-site-verification=6NVsg_ufGEcTcp75gxRFZTfDHrBHkxQSyDPLz3k39zI"]
+      }
+    },
+    {
+      "id": "mindclade-com-google-workspace-mx",
+      "purpose": "google_workspace_mx",
+      "domain": "mindclade.com",
+      "record": {"name": "@", "type": "MX", "ttl": 300},
+      "match": {
+        "mode": "exact_rrset",
+        "rrdatas": [
+          "1 aspmx.l.google.com.",
+          "5 alt1.aspmx.l.google.com.",
+          "5 alt2.aspmx.l.google.com.",
+          "10 alt3.aspmx.l.google.com.",
+          "10 alt4.aspmx.l.google.com."
+        ]
+      }
+    },
+    {
+      "id": "mindclade-com-google-workspace-dkim",
+      "purpose": "google_workspace_dkim",
+      "domain": "mindclade.com",
+      "record": {"name": "google._domainkey", "type": "TXT", "ttl": 300},
+      "match": {
+        "mode": "exact_rrset_sha256",
+        "rrdata_sha256": ["85f5ca64860205f5398e090043f0f6d8dec8e89610c9608c9dda1607beb0cd50"]
+      }
+    }
+  ]
+}
