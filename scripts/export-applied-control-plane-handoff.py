@@ -23,6 +23,8 @@ UNITS = {
     "automation_iam": ROOT / "1-org/automation-iam",
     "gitops_identities": ROOT / "5-workloads/shared/control-plane-identities",
     "binary_authorization": ROOT / "5-workloads/production/binary-authorization",
+    "qualification_evidence": ROOT
+    / "5-workloads/shared/production-qualification-evidence",
 }
 ATTESTORS = ("build-attestor", "qualification-attestor", "deployment-attestor")
 CAPABILITY_SERVICE_ACCOUNTS = {
@@ -155,6 +157,7 @@ def compile_contract(
     automation_outputs: dict[str, Any],
     gitops_outputs: dict[str, Any],
     binauthz_outputs: dict[str, Any],
+    qualification_outputs: dict[str, Any],
     source_commit: str,
 ) -> dict[str, Any]:
     if re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
@@ -233,6 +236,65 @@ def compile_contract(
         ),
         "github_config_identity_handoff",
     )
+    qualification_handoff = require_mapping(
+        output_value(
+            gitops_outputs,
+            "production_qualification_identity_handoff",
+            "gitops_identities",
+        ),
+        "production_qualification_identity_handoff",
+    )
+    qualification_identity = require_mapping(
+        output_value(
+            gitops_outputs,
+            "production_qualification_identity_contract",
+            "gitops_identities",
+        ),
+        "production_qualification_identity_contract",
+    )
+    try:
+        bootstrap_qualification_identity = json.loads(
+            require_string(
+                os.environ.get("PRODUCTION_QUALIFICATION_IDENTITY_JSON"),
+                "environment PRODUCTION_QUALIFICATION_IDENTITY_JSON",
+            )
+        )
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            "environment PRODUCTION_QUALIFICATION_IDENTITY_JSON is not valid JSON"
+        ) from error
+    qualification_fields = {
+        "workload_identity_provider",
+        "principal",
+        "subject",
+        "workflow_ref",
+    }
+    if (
+        not isinstance(bootstrap_qualification_identity, dict)
+        or set(bootstrap_qualification_identity) != qualification_fields
+        or set(qualification_identity) != qualification_fields
+        or qualification_identity != bootstrap_qualification_identity
+    ):
+        raise ValueError(
+            "applied production qualification identity differs from bootstrap"
+        )
+    if qualification_identity["workflow_ref"] != (
+        "mindclade/gitops/.github/workflows/"
+        "production-qualification-evidence.yml@refs/heads/main"
+    ):
+        raise ValueError("production qualification workflow_ref is not exact")
+    qualification_provider = require_string(
+        qualification_identity["workload_identity_provider"],
+        "production qualification workload identity provider",
+    )
+    if not qualification_provider.endswith(
+        "/workloadIdentityPools/github/providers/gh-production-qualification"
+    ):
+        raise ValueError("production qualification WIF provider is not exact")
+    if qualification_handoff.get(
+        "WIF_PROVIDER_PRODUCTION_QUALIFICATION"
+    ) != qualification_provider:
+        raise ValueError("production qualification handoff provider differs")
     project_id = require_string(
         output_value(binauthz_outputs, "project_id", "binary_authorization"),
         "binary_authorization.project_id",
@@ -271,6 +333,30 @@ def compile_contract(
     if KEY_VERSION.fullmatch(deployment_key) is None:
         raise ValueError("deployment attestor key is not an immutable KMS key version")
 
+    qualification_bucket = require_mapping(
+        output_value(
+            qualification_outputs, "bucket", "qualification_evidence"
+        ),
+        "qualification_evidence.bucket",
+    )
+    bucket_name = require_string(
+        qualification_bucket.get("name"), "qualification evidence bucket name"
+    )
+    if bucket_name != "mc-production-qualification-evidence":
+        raise ValueError("production qualification evidence bucket name is not exact")
+    qualification_project = require_string(
+        qualification_handoff.get("PRODUCTION_QUALIFICATION_PROJECT"),
+        "PRODUCTION_QUALIFICATION_PROJECT",
+    )
+    if qualification_project != "mc-common-security":
+        raise ValueError("production qualification project is not exact")
+    qualification_secret = require_string(
+        qualification_handoff.get("PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET"),
+        "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET",
+    )
+    if qualification_secret != "github-app-production-qualification-reader-pem":
+        raise ValueError("production qualification private-key secret ID is not exact")
+
     variables = {
         "CI_PROJECT_ID": ci_project_id,
         **release_service_accounts,
@@ -286,6 +372,22 @@ def compile_contract(
             expected_account="sa-gitops-verifier",
             project_suffix="-common-security",
         ),
+        "WIF_PROVIDER_PRODUCTION_QUALIFICATION": qualification_provider,
+        "SA_PRODUCTION_QUALIFICATION_READER": require_service_account(
+            qualification_handoff.get("SA_PRODUCTION_QUALIFICATION_READER"),
+            "SA_PRODUCTION_QUALIFICATION_READER",
+            expected_account="sa-prod-qual-reader",
+            project_suffix="-common-security",
+        ),
+        "SA_PRODUCTION_QUALIFICATION_WRITER": require_service_account(
+            qualification_handoff.get("SA_PRODUCTION_QUALIFICATION_WRITER"),
+            "SA_PRODUCTION_QUALIFICATION_WRITER",
+            expected_account="sa-prod-qual-writer",
+            project_suffix="-common-security",
+        ),
+        "PRODUCTION_QUALIFICATION_PROJECT": qualification_project,
+        "PRODUCTION_QUALIFICATION_BUCKET": bucket_name,
+        "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET": qualification_secret,
         "BINAUTHZ_BUILD_ATTESTOR_PROJECT": project_id,
         "BINAUTHZ_BUILD_ATTESTOR": exact_attestors["build-attestor"],
         "BINAUTHZ_QUALIFICATION_ATTESTOR_PROJECT": project_id,
@@ -295,7 +397,7 @@ def compile_contract(
         "BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION": deployment_key,
     }
     return {
-        "contract_version": "1.1.0",
+        "contract_version": "1.2.0",
         "producer": "mindclade/infrastructure-live",
         "source_commit": source_commit,
         "environment": "production",
@@ -344,6 +446,7 @@ def main() -> int:
             payloads["automation_iam"],
             payloads["gitops_identities"],
             payloads["binary_authorization"],
+            payloads["qualification_evidence"],
             commit,
         )
         write_contract(args.output, contract)

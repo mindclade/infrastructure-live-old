@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mindclade.com/contracts/dns-domain-inventory.schema.json",
+  "title": "Mindclade DNS domain inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "registrar", "authoritative_dns", "cloud_dns_project_id", "environment_naming", "certificate_policy", "migration_window", "module_contract", "domains"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"const": 2},
+    "registrar": {"const": "squarespace"},
+    "authoritative_dns": {"const": "google-cloud-dns"},
+    "cloud_dns_project_id": {"type": "string", "minLength": 6},
+    "environment_naming": {"type": "object", "required": ["production", "staging", "development", "wildcard_production_records_allowed", "consumer_alignment_complete", "hostnames"]},
+    "certificate_policy": {"type": "object", "required": ["owner_repository", "service", "scope", "exact_sans_only", "wildcard_issuance_allowed", "permitted_issuers", "incident_contact", "certificate_names", "dns_authorizations_ready", "issuer_inventory_complete", "caa_policy_ready"]},
+    "migration_window": {"type": "object"},
+    "module_contract": {"type": "object"},
+    "domains": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["domain", "role", "mail_policy", "certificate_serving", "dynamic_record_types", "dnssec_required", "inventory_complete", "delegation_ready", "activation_blockers", "records"],
+        "properties": {
+          "domain": {"type": "string"},
+          "role": {"type": "string"},
+          "mail_policy": {"enum": ["google-workspace", "no-mail"]},
+          "certificate_serving": {"type": "boolean"},
+          "dynamic_record_types": {"type": "array", "items": {"enum": ["CNAME"]}, "uniqueItems": true},
+          "dnssec_required": {"const": true},
+          "inventory_complete": {"type": "boolean"},
+          "delegation_ready": {"type": "boolean"},
+          "activation_blockers": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "type", "ttl", "rrdatas"],
+              "properties": {
+                "name": {"type": "string"},
+                "type": {"enum": ["CAA", "MX", "NS", "TXT"]},
+                "ttl": {"type": "integer", "minimum": 30, "maximum": 86400},
+                "rrdatas": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

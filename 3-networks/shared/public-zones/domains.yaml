@@ -2,24 +2,33 @@
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
 
-# MINDCLADE CONFIDENTIAL - PROPRIETARY AND TRADE SECRET
+# GENERATED from contracts/dns-domain-inventory.json. DO NOT EDIT.
 ---
-schema_version: 1
+schema_version: 2
 registrar: squarespace
 authoritative_dns: google-cloud-dns
+cloud_dns_project_id: mc-common-dns
 zones:
   - domain: mindclade.com
     role: corporate-identity-email-trust
     dnssec: required
+    certificate_serving: false
+    delegation_ready: false
   - domain: mindclade.ai
     role: production-product-api-auth
     dnssec: required
+    certificate_serving: true
+    delegation_ready: false
   - domain: mindclade.dev
     role: developer-documentation-sdks
     dnssec: required
+    certificate_serving: true
+    delegation_ready: false
   - domain: mindclade.studio
     role: isolated-demos-experiments
     dnssec: required
+    certificate_serving: true
+    delegation_ready: false
 mail_policy:
   mail_enabled: [mindclade.com]
   no_mail_by_default: [mindclade.ai, mindclade.dev, mindclade.studio]
@@ -27,3 +36,31 @@ change_policy:
   apex_records: terraform-reviewed
   wildcard_dns: forbidden
   external_dns_scope: delegated-subzones-only
+environment_naming:
+  production: <service>.mindclade.ai
+  staging: <service>.staging.mindclade.ai
+  development: <service>.dev.mindclade.ai
+  consumer_alignment_complete: true
+  hostnames:
+    development:
+      ai: [api.dev.mindclade.ai, train.dev.mindclade.ai, models.dev.mindclade.ai]
+      developer: [docs.dev.mindclade.dev, sdk.dev.mindclade.dev, go.dev.mindclade.dev, goproxy.dev.mindclade.dev]
+      studio: [dev.mindclade.studio]
+    staging:
+      ai: [api.staging.mindclade.ai, train.staging.mindclade.ai, models.staging.mindclade.ai]
+      developer: [docs.staging.mindclade.dev, sdk.staging.mindclade.dev, go.staging.mindclade.dev, goproxy.staging.mindclade.dev]
+      studio: [staging.mindclade.studio]
+    production:
+      ai: [api.mindclade.ai, train.mindclade.ai, models.mindclade.ai]
+      developer: [docs.mindclade.dev, sdk.mindclade.dev, go.mindclade.dev, goproxy.mindclade.dev]
+      studio: [mindclade.studio]
+certificate_policy:
+  owner_repository: infrastructure-live
+  service: google-certificate-manager
+  scope: regional-per-project
+  exact_sans_only: true
+  wildcard_issuance_allowed: false
+  permitted_issuers: [pki.goog, letsencrypt.org]
+  dns_authorizations_ready: false
+  caa_policy_ready: false
+migration_window: unapproved

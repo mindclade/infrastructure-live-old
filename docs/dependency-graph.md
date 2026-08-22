@@ -38,9 +38,17 @@ organization/common resources under `1-org`.
 | `3-networks/<env>/shared-vpc-host` | environment shared projects | Host-project identity |
 | `4-projects/<env>/<domain>` | environment folders and Shared VPC | Project placement and attachment |
 | `5-workloads/<env>/gke` | environment project, VPC, and KMS | Private cluster foundation |
+| `5-workloads/<env>/bazel-remote-cache` | environment project/KMS and shared cache access-log bucket | Protected rebuildable CAS/action-cache storage |
+| `5-workloads/<env>/bazel-remote-execution` | GKE, VPC pod range, and Bazel cache | Dedicated keyless multi-zone worker foundation |
+| `2-environments/<env>/kms-dr` | environment project inventory | Region-local `us-east4` recovery keys |
+| `5-workloads/<env>/artifact-registry-dr` | environment project and recovery KMS | Immutable U.S. recovery image repository |
+| `5-workloads/<env>/backup-dr` | GKE and recovery KMS | Encrypted cross-region cluster and object recovery |
+| `5-workloads/<env>/cloud-sql` | VPC, private service access, primary and recovery KMS | Private primary database and U.S. recovery replica |
+| `5-workloads/<env>/secret-manager` | environment project, primary and recovery KMS | Explicit two-region secret replicas |
+| `5-workloads/<env>/workload-identities` | research and platform projects | Create zero-role GSAs and bind exact environment KSAs |
 | `5-workloads/<env>/nodepools/*` | GKE | Cluster attachment |
 | `5-workloads/<env>/binary-authorization` | GKE and organization attestor/KMS | Admission trust |
-| `5-workloads/<env>/storage/*` | domain projects and networking | Data-plane ownership |
+| `5-workloads/<env>/storage/*` | domain projects, networking, and workload identities | Data-plane ownership and typed holdout deny principals |
 | `3-networks/shared/public-zones/*` | common DNS project | Authoritative public DNS |
 
 `5-workloads/<env>/argocd-prereqs` is documentation/cloud handoff only. Argo CD installation

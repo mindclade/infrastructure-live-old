@@ -15,7 +15,7 @@
 # reserved capacity from the moment the attachment exists, whether or not the circuit is up.
 #
 # Remove the exclude block when ALL of these are true:
-#   1. A colocation facility is contracted and the cross-connect is ordered.
+#   1. A U.S. colocation facility is contracted and the cross-connect is ordered.
 #   2. `interconnect_locations` below names the real facilities, from:
 #        gcloud compute interconnects locations list
 #   3. The peer ASN is agreed with whoever runs the far side.
@@ -78,7 +78,7 @@ inputs = {
   interconnects = {
     primary = {
       name        = "${include.root.locals.prefix}-ic-primary"
-      location    = "PLACEHOLDER-ams-zone1-1"
+      location    = "PLACEHOLDER-us-colo-zone1"
       description = "Primary circuit. Replace location before removing the exclude block."
 
       # 10G. The number that matters for a GPU estate is not throughput but whether the
@@ -90,7 +90,7 @@ inputs = {
 
     secondary = {
       name        = "${include.root.locals.prefix}-ic-secondary"
-      location    = "PLACEHOLDER-ams-zone2-1"
+      location    = "PLACEHOLDER-us-colo-zone2"
       description = "Secondary circuit. A DIFFERENT availability zone — see the note above."
 
       link_type            = "LINK_TYPE_ETHERNET_10G_LR"

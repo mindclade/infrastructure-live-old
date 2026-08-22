@@ -13,7 +13,7 @@
     "credential_material_included"
   ],
   "properties": {
-    "contract_version": { "const": "1.1.0" },
+    "contract_version": { "const": "1.2.0" },
     "producer": { "const": "mindclade/infrastructure-live" },
     "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "environment": { "const": "production" },
@@ -23,12 +23,14 @@
       "required": [
         "automation_iam",
         "gitops_identities",
-        "binary_authorization"
+        "binary_authorization",
+        "qualification_evidence"
       ],
       "properties": {
         "automation_iam": { "const": "1-org/automation-iam" },
         "gitops_identities": { "const": "5-workloads/shared/control-plane-identities" },
-        "binary_authorization": { "const": "5-workloads/production/binary-authorization" }
+        "binary_authorization": { "const": "5-workloads/production/binary-authorization" },
+        "qualification_evidence": { "const": "5-workloads/shared/production-qualification-evidence" }
       }
     },
     "variables": {
@@ -44,6 +46,12 @@
         "SA_ARTIFACT_PROMOTER",
         "SA_GITOPS_RENDER",
         "SA_GITOPS_VERIFIER",
+        "WIF_PROVIDER_PRODUCTION_QUALIFICATION",
+        "SA_PRODUCTION_QUALIFICATION_READER",
+        "SA_PRODUCTION_QUALIFICATION_WRITER",
+        "PRODUCTION_QUALIFICATION_PROJECT",
+        "PRODUCTION_QUALIFICATION_BUCKET",
+        "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET",
         "BINAUTHZ_BUILD_ATTESTOR_PROJECT",
         "BINAUTHZ_BUILD_ATTESTOR",
         "BINAUTHZ_QUALIFICATION_ATTESTOR_PROJECT",
@@ -88,6 +96,21 @@
         "SA_GITOPS_VERIFIER": {
           "type": "string",
           "pattern": "^sa-gitops-verifier@[a-z][a-z0-9-]*-common-security\\.iam\\.gserviceaccount\\.com$"
+        },
+        "WIF_PROVIDER_PRODUCTION_QUALIFICATION": {
+          "type": "string",
+          "pattern": "^projects/[0-9]+/locations/global/workloadIdentityPools/github/providers/gh-production-qualification$"
+        },
+        "SA_PRODUCTION_QUALIFICATION_READER": {
+          "const": "sa-prod-qual-reader@mc-common-security.iam.gserviceaccount.com"
+        },
+        "SA_PRODUCTION_QUALIFICATION_WRITER": {
+          "const": "sa-prod-qual-writer@mc-common-security.iam.gserviceaccount.com"
+        },
+        "PRODUCTION_QUALIFICATION_PROJECT": { "const": "mc-common-security" },
+        "PRODUCTION_QUALIFICATION_BUCKET": { "const": "mc-production-qualification-evidence" },
+        "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET": {
+          "const": "github-app-production-qualification-reader-pem"
         },
         "BINAUTHZ_BUILD_ATTESTOR_PROJECT": { "$ref": "#/$defs/productionProjectId" },
         "BINAUTHZ_BUILD_ATTESTOR": { "const": "build-attestor" },

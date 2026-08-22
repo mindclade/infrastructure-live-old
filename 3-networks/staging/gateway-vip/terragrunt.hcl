@@ -6,7 +6,7 @@
 #
 # One per environment, and the single VIP behind `mindclade.studio`, `*.mindclade.ai`, and
 # `*.mindclade.dev` in that environment. The GKE Gateway binds to it by NAME; the private DNS
-# zones in ../dns-hub point their A records at its VALUE. Both of those are read from this
+# zones in ../private-service-dns point their A records at its VALUE. Both are read from this
 # unit's outputs rather than restated, because a VIP that moves and a DNS record that does not
 # is an outage with no error anywhere.
 #
@@ -54,9 +54,9 @@ dependency "vpc" {
       production  = "mc-production-net"
     }
     subnet_self_links = {
-      development = { gateway-vip = "projects/mock/regions/europe-west4/subnetworks/gateway-vip" }
-      staging     = { gateway-vip = "projects/mock/regions/europe-west4/subnetworks/gateway-vip" }
-      production  = { gateway-vip = "projects/mock/regions/europe-west4/subnetworks/gateway-vip" }
+      development = { gateway-vip = "projects/mock/regions/us-central1/subnetworks/gateway-vip" }
+      staging     = { gateway-vip = "projects/mock/regions/us-central1/subnetworks/gateway-vip" }
+      production  = { gateway-vip = "projects/mock/regions/us-central1/subnetworks/gateway-vip" }
     }
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]

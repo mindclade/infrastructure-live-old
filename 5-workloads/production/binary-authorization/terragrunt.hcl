@@ -30,7 +30,7 @@ dependency "gke" {
 
   mock_outputs = {
     cluster_name = "mc-production"
-    location     = "europe-west4"
+    location     = "us-central1"
     project_id   = "mc-production-platform"
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
@@ -62,7 +62,7 @@ dependency "kms" {
   # them — they are asymmetric SIGN keys bound to a specific attestor, which is why they are
   # not declared alongside the symmetric keys there.
   mock_outputs = {
-    key_ring_name = "projects/mock/locations/europe-west4/keyRings/mock-binauthz"
+    key_ring_name = "projects/mock/locations/us-central1/keyRings/mock-binauthz"
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }

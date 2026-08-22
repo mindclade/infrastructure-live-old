@@ -24,7 +24,7 @@ distinct deployment attestation.
 | `BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION` | `5-workloads/production/binary-authorization.attestor_key_versions["deployment-attestor"]` |
 
 `bootstrap` enforces immutable organization/repository IDs, exact audiences, trusted-main caller,
-push-only execution, and an exact v4 reusable workflow for every capability. Each non-signer
+push-only execution, and an exact v5 reusable workflow for every capability. Each non-signer
 provider maps a capability-prefixed `google.subject`, preventing cross-provider subject
 collisions. `infrastructure-live` binds each exported principal only to its matching normal-plane
 service account. Do not replace these bindings with a repository-wide principal set.

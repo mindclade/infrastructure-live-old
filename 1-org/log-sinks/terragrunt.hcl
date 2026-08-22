@@ -58,7 +58,7 @@ dependency "kms" {
 
   mock_outputs = {
     crypto_key_ids = {
-      logs = "projects/mock/locations/europe-west4/keyRings/mock-global/cryptoKeys/logs"
+      logs = "projects/mock/locations/us-central1/keyRings/mock-global/cryptoKeys/logs"
     }
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]

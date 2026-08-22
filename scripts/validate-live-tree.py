@@ -44,6 +44,11 @@ for required in (
     "5-workloads/shared/control-plane-identities/terragrunt.hcl",
     "scripts/validate-account.py",
     "docs/automation-identity-handoff.md",
+    "5-workloads/shared/production-qualification-evidence/terragrunt.hcl",
+    "5-workloads/shared/production-qualification-evidence/.terraform.lock.hcl",
+    "5-workloads/shared/production-qualification-access-logs/terragrunt.hcl",
+    "5-workloads/shared/production-qualification-access-logs/.terraform.lock.hcl",
+    "1-org/kms-dr-evidence/terragrunt.hcl",
 ):
     if not ROOT.joinpath(required).is_file():
         errors.append(f"missing control-plane handoff file: {required}")
@@ -64,7 +69,9 @@ for environment in ("development", "staging", "production"):
     required = (
         "gke",
         "artifact-registry",
+        "artifact-registry-dr",
         "binary-authorization",
+        "workload-identities",
         "secret-manager",
         "observability",
         "backup-dr",
@@ -74,6 +81,10 @@ for environment in ("development", "staging", "production"):
             "5-workloads", environment, unit, "terragrunt.hcl"
         ).is_file():
             errors.append(f"missing {environment} workload unit: {unit}")
+    if not ROOT.joinpath(
+        "2-environments", environment, "kms-dr", "terragrunt.hcl"
+    ).is_file():
+        errors.append(f"missing {environment} recovery-region KMS unit")
     if ROOT.joinpath("5-workloads", environment, "argocd", "terragrunt.hcl").exists():
         errors.append(f"Terraform still owns Argo CD installation in {environment}")
     prereq = ROOT / "5-workloads" / environment / "argocd-prereqs"

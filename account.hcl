@@ -12,8 +12,11 @@ locals {
   org_policy_activation_phase = get_env("ORG_POLICY_ACTIVATION_PHASE", "baseline")
   domain                      = get_env("DOMAIN", "mindclade.com")
   prefix                      = get_env("RESOURCE_PREFIX", "mc")
+  residency_profile           = get_env("RESIDENCY_PROFILE", "us-only-v1")
   region                      = get_env("PRIMARY_REGION", "us-central1")
   gpu_zone                    = get_env("GPU_ZONE", "${local.region}-b")
+  dr_region                   = get_env("DR_REGION", "us-east4")
+  dr_gpu_zone                 = get_env("DR_GPU_ZONE", "${local.dr_region}-b")
 
   seed_project_id      = get_env("BOOTSTRAP_SEED_PROJECT_ID")
   cicd_project_id      = get_env("BOOTSTRAP_CICD_PROJECT_ID")
@@ -32,6 +35,9 @@ locals {
   # outputs are exported.
   artifact_release_identities = jsondecode(coalesce(get_env("ARTIFACT_RELEASE_IDENTITIES_JSON", ""), "{}"))
   dr_evidence_identity        = jsondecode(coalesce(get_env("DR_EVIDENCE_IDENTITY_JSON", ""), "{}"))
+  production_qualification_identity = jsondecode(
+    coalesce(get_env("PRODUCTION_QUALIFICATION_IDENTITY_JSON", ""), "{}"),
+  )
 
   infrastructure_live_service_accounts = {
     plan        = get_env("SA_TF_LIVE_PLAN")

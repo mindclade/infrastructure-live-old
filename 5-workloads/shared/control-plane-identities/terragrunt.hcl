@@ -63,6 +63,7 @@ inputs = {
   secret_kms_key_id                  = dependency.global_kms.outputs.crypto_key_ids["ci_secrets"]
   github_wif_pool_name               = include.root.locals.account_vars.locals.github_wif_pool_name
   github_org                         = include.root.locals.github_org
+  production_qualification_identity  = include.root.locals.account_vars.locals.production_qualification_identity
   ci_project_id                      = dependency.common_projects.outputs.project_ids["ci"]
   ci_project_number                  = dependency.common_projects.outputs.project_numbers["ci"]
   arc_promoter_service_account_email = dependency.automation.outputs.supply_chain_service_accounts["promoter"]

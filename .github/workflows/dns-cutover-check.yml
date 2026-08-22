@@ -13,16 +13,17 @@ on:
         type: choice
         required: true
         options:
-          - mindclade.studio
           - mindclade.dev
           - mindclade.ai
+          - mindclade.studio
           - mindclade.com
       phase:
-        description: Preflight compares incumbent and Cloud DNS; postcutover checks public delegation.
+        description: Preflight compares zones; predeligation requires parent DS absence; postcutover checks public delegation.
         type: choice
         required: true
         options:
           - preflight
+          - predeligation
           - postcutover
       incumbent_nameservers:
         description: Comma- or space-separated current nameservers; required for preflight.
@@ -44,6 +45,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: dns-cutover-check-${{ inputs.domain }}
@@ -75,6 +77,25 @@ jobs:
             experimental-features = nix-command flakes
             accept-flake-config = false
 
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_PLAN }}
+          service_account: ${{ vars.SA_TF_LIVE_PLAN }}
+
+      - name: Snapshot the complete target authoritative zone
+        if: inputs.phase != 'preflight'
+        env:
+          DOMAIN_NAME: ${{ inputs.domain }}
+          SNAPSHOT_PATH: ${{ runner.temp }}/cloud-dns-records.json
+        run: |
+          set -euo pipefail
+          managed_zone="mindclade-${DOMAIN_NAME##*.}"
+          nix develop .#ci --command gcloud dns record-sets list \
+            --project=mc-common-dns \
+            --zone="$managed_zone" \
+            --format=json > "$SNAPSHOT_PATH"
+          test -s "$SNAPSHOT_PATH"
+
       - id: dns
         name: Collect DNS evidence
         continue-on-error: true
@@ -86,6 +107,7 @@ jobs:
           EXPECT_DNSSEC: ${{ inputs.expect_dnssec }}
           CHANGE_REFERENCE: ${{ inputs.change_reference }}
           EVIDENCE_PATH: ${{ runner.temp }}/dns-evidence.json
+          SNAPSHOT_PATH: ${{ runner.temp }}/cloud-dns-records.json
         run: |
           set -euo pipefail
           args=(
@@ -96,6 +118,9 @@ jobs:
             --change-reference "$CHANGE_REFERENCE"
             --output "$EVIDENCE_PATH"
           )
+          if [[ -s "$SNAPSHOT_PATH" ]]; then
+            args+=(--authoritative-snapshot "$SNAPSHOT_PATH")
+          fi
           if [[ "$EXPECT_DNSSEC" == "true" ]]; then
             args+=(--expect-dnssec)
           fi
