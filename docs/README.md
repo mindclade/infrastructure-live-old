@@ -43,6 +43,8 @@
 - [Supply-chain signer contract](supply-chain-signer-contract.md) — builder, qualifier, signer,
   and admission separation.
 - [Environment automation IAM](../1-org/automation-iam/README.md) — plan/apply folder scope.
+- [Common CI Bazel cache](../5-workloads/ci/bazel-remote-cache/README.md) — source-only identity,
+  storage, activation, and client-semantics handoff.
 - [Authoritative DNS project](../3-networks/shared/dns-project/README.md) — shared project
   ownership without duplicate creation.
 - [Partner projects](../4-projects/partners/README.md) — activation and isolation requirements.

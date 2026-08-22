@@ -13,7 +13,7 @@
     "credential_material_included"
   ],
   "properties": {
-    "contract_version": { "const": "1.3.0" },
+    "contract_version": { "const": "1.4.0" },
     "producer": { "const": "mindclade/infrastructure-live" },
     "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "environment": { "const": "production" },
@@ -38,6 +38,9 @@
       "additionalProperties": false,
       "required": [
         "CI_PROJECT_ID",
+        "WIF_PROVIDER_BAZEL_CACHE",
+        "SA_BAZEL_CACHE_READER",
+        "SA_BAZEL_CACHE_WRITER",
         "SA_ARC_CANARY",
         "SA_ARTIFACT_BUILDER",
         "SA_ARTIFACT_QUALIFICATION_READER",
@@ -67,6 +70,18 @@
         "CI_PROJECT_ID": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9-]*-common-ci$"
+        },
+        "WIF_PROVIDER_BAZEL_CACHE": {
+          "type": "string",
+          "pattern": "^projects/[0-9]+/locations/global/workloadIdentityPools/github/providers/gh-bazel-cache$"
+        },
+        "SA_BAZEL_CACHE_READER": {
+          "type": "string",
+          "pattern": "^bazel-cache-reader@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
+        "SA_BAZEL_CACHE_WRITER": {
+          "type": "string",
+          "pattern": "^bazel-cache-writer@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
         },
         "SA_ARC_CANARY": {
           "type": "string",

@@ -35,6 +35,7 @@ locals {
   # outputs are exported.
   artifact_release_identities = jsondecode(coalesce(get_env("ARTIFACT_RELEASE_IDENTITIES_JSON", ""), "{}"))
   dr_evidence_identity        = jsondecode(coalesce(get_env("DR_EVIDENCE_IDENTITY_JSON", ""), "{}"))
+  bazel_cache_identity        = jsondecode(coalesce(get_env("BAZEL_CACHE_IDENTITY_JSON", ""), "{}"))
   production_qualification_identity = jsondecode(
     coalesce(get_env("PRODUCTION_QUALIFICATION_IDENTITY_JSON", ""), "{}"),
   )

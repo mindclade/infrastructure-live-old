@@ -5,22 +5,22 @@
 output "service_accounts" {
   description = "Normal-plane GitOps render and verification service-account emails."
   value = {
-    gitops_render                   = google_service_account.gitops_render.email
-    gitops_verifier                 = google_service_account.gitops_verifier.email
+    gitops_render                      = google_service_account.gitops_render.email
+    gitops_verifier                    = google_service_account.gitops_verifier.email
     production_qualification_evaluator = google_service_account.production_qualification["evaluator"].email
-    production_qualification_reader = google_service_account.production_qualification["reader"].email
-    production_qualification_writer = google_service_account.production_qualification["writer"].email
+    production_qualification_reader    = google_service_account.production_qualification["reader"].email
+    production_qualification_writer    = google_service_account.production_qualification["writer"].email
   }
 }
 
 output "github_config_identity_handoff" {
   description = "Exact non-secret variables that github-config must re-export after this unit is applied."
   value = {
-    SA_GITOPS_RENDER                   = google_service_account.gitops_render.email
-    SA_GITOPS_VERIFIER                 = google_service_account.gitops_verifier.email
+    SA_GITOPS_RENDER                      = google_service_account.gitops_render.email
+    SA_GITOPS_VERIFIER                    = google_service_account.gitops_verifier.email
     SA_PRODUCTION_QUALIFICATION_EVALUATOR = google_service_account.production_qualification["evaluator"].email
-    SA_PRODUCTION_QUALIFICATION_READER = google_service_account.production_qualification["reader"].email
-    SA_PRODUCTION_QUALIFICATION_WRITER = google_service_account.production_qualification["writer"].email
+    SA_PRODUCTION_QUALIFICATION_READER    = google_service_account.production_qualification["reader"].email
+    SA_PRODUCTION_QUALIFICATION_WRITER    = google_service_account.production_qualification["writer"].email
   }
 }
 
@@ -45,8 +45,8 @@ output "production_qualification_identity_handoff" {
     SA_PRODUCTION_QUALIFICATION_WRITER          = google_service_account.production_qualification["writer"].email
     PRODUCTION_QUALIFICATION_PROJECT            = var.security_project_id
     PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET = google_secret_manager_secret.github_app_production_qualification_pem.secret_id
-    PRODUCTION_ELIGIBILITY_SIGNING_KEY_ID        = "production-eligibility-v1"
-    PRODUCTION_ELIGIBILITY_KMS_KEY_VERSION       = google_kms_crypto_key_version.production_eligibility.name
+    PRODUCTION_ELIGIBILITY_SIGNING_KEY_ID       = "production-eligibility-v1"
+    PRODUCTION_ELIGIBILITY_KMS_KEY_VERSION      = google_kms_crypto_key_version.production_eligibility.name
   }
 }
 

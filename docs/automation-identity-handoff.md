@@ -7,6 +7,8 @@ The enterprise control plane uses a two-stage ownership model.
 Bootstrap creates:
 
 - the GitHub Workload Identity Federation pool and repository-isolated providers;
+- a dedicated `gh-bazel-cache` provider with one pull-request read route and separate protected
+  main, merge-queue, and scheduled-nightly write routes;
 - six capability-specific ARC provider conditions and exact protected-main/release principals;
 - one read-only infrastructure plan service account;
 - foundation, development, staging, and production apply service accounts;
@@ -29,6 +31,39 @@ for every other artifact capability. Provider-specific subject prefixes prevent
 one accepted ARC token from crossing into another capability's IAM binding. The IDs come from
 bootstrap outputs and are never invented here.
 See [`supply-chain-signer-contract.md`](supply-chain-signer-contract.md).
+
+### Bazel cache identity handoff
+
+The source contract for `1-org/automation-iam` creates separate `bazel-cache-reader` and
+`bazel-cache-writer` service accounts in the common CI project. It binds only the exact
+bootstrap-exported route principals: pull requests may impersonate the reader, while protected
+main pushes, merge-group validation, and scheduled nightly runs may impersonate the writer.
+Manual dispatch, tags, feature branches, alternate workflows, wrong immutable repository IDs,
+and wrong provider audiences remain outside the provider contract.
+
+The applied normal-plane outputs are the only authoritative handoff values:
+
+```text
+WIF_PROVIDER_BAZEL_CACHE
+SA_BAZEL_CACHE_READER
+SA_BAZEL_CACHE_WRITER
+```
+
+Do not construct these values from naming conventions. `github-config` may publish them only
+after protected automation applies bootstrap contract `1.5.0` and the foundation IAM unit, then
+connected qualification proves each positive route and the corresponding cross-route negative
+cases. The cache bucket remains independently owned by
+[`5-workloads/ci/bazel-remote-cache`](../5-workloads/ci/bazel-remote-cache/README.md); its module
+owns bucket IAM and exports the authenticated endpoints. KMS owns the Cloud Storage service-agent
+grant. This source change does not prove that any provider, account, binding, key grant, or bucket
+exists.
+
+The applied-output exporter emits these three values only in handoff contract `1.4.0`, preserving
+the production-eligibility inventory that already owns `1.3.0`. It requires the authoritative
+`bazel_cache_identity_contract` Terraform output to match `BAZEL_CACHE_IDENTITY_JSON` byte-for-byte,
+then independently verifies the exact provider, routes, immutable repository IDs, and distinct
+common-CI reader/writer accounts. Missing applied state, a stale bootstrap JSON value, or any
+substitution blocks export.
 
 The foundation identity remains the only automation principal for:
 
@@ -71,10 +106,11 @@ python3 scripts/export-applied-control-plane-handoff.py \
   --output /protected/evidence/infrastructure-control-plane-handoff.json
 ```
 
-The destination must be outside the repository. The generated file is mode 0600 and carries
-all six ARC service accounts plus the exact GitOps, qualification, evidence-bucket, attestor,
-project, and immutable key-version values. It compares the applied qualification WIF contract
-byte-for-byte with `PRODUCTION_QUALIFICATION_IDENTITY_JSON` from bootstrap before exporting.
+The destination must be outside the repository. The generated `1.4.0` file is mode 0600 and
+carries all six ARC service accounts plus the exact GitOps, qualification, Bazel-cache,
+evidence-bucket, attestor, project, and immutable key-version values. It compares the applied
+qualification and Bazel-cache WIF contracts byte-for-byte with their bootstrap JSON inputs before
+exporting.
 Feed that file to
 the `github-config` exporter, review its resulting plan, then reapply `github-config` so the
 GitOps and monorepo repositories receive the authoritative values. Repeat the export and

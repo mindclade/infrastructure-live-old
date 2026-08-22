@@ -38,6 +38,7 @@ organization/common resources under `1-org`.
 | `3-networks/<env>/shared-vpc-host` | environment shared projects | Host-project identity |
 | `4-projects/<env>/<domain>` | environment folders and Shared VPC | Project placement and attachment |
 | `5-workloads/<env>/gke` | environment project, VPC, and KMS | Private cluster foundation |
+| `5-workloads/ci/bazel-remote-cache` | common CI project, global KMS, shared cache access logs, and automation IAM | GitHub-hosted Bazel read/cache foundation |
 | `5-workloads/<env>/bazel-remote-cache` | environment project/KMS and shared cache access-log bucket | Protected rebuildable CAS/action-cache storage |
 | `5-workloads/<env>/bazel-remote-execution` | GKE, VPC pod range, and Bazel cache | Dedicated keyless multi-zone worker foundation |
 | `2-environments/<env>/kms-dr` | environment project inventory | Region-local `us-east4` recovery keys |
@@ -65,6 +66,10 @@ TG_STRICT_MODE=true terragrunt run --all --non-interactive -- plan
 The protected apply workflow saves plans with Terragrunt `--out-dir` and applies the same
 plans after environment approval. External dependencies are read from remote state and are
 not implicitly applied with another privilege scope.
+
+`5-workloads/ci` is a shared control-plane path selected only by the protected **foundation**
+scope. Development, staging, and production environment identities cannot plan or apply the
+common GitHub cache unit.
 
 ## Recovery
 

@@ -21,7 +21,12 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SCOPE_PREFIXES: dict[str, tuple[str, ...]] = {
-    "foundation": ("1-org/", "3-networks/shared/", "5-workloads/shared/"),
+    "foundation": (
+        "1-org/",
+        "3-networks/shared/",
+        "5-workloads/shared/",
+        "5-workloads/ci/",
+    ),
     "development": (
         "2-environments/development/",
         "3-networks/development/",

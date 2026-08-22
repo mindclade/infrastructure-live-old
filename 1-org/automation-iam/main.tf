@@ -168,6 +168,90 @@ resource "google_service_account_iam_member" "dr_evidence_github_wif" {
   member             = each.value
 }
 
+locals {
+  bazel_cache_accounts = {
+    reader = {
+      account_id   = "bazel-cache-reader"
+      display_name = "Mindclade Bazel cache reader"
+      description  = "Keyless read-only identity for pull-request Bazel cache access."
+    }
+    writer = {
+      account_id   = "bazel-cache-writer"
+      display_name = "Mindclade Bazel cache writer"
+      description  = "Keyless create-only writer for trusted Bazel cache routes."
+    }
+  }
+  bazel_cache_route_contract = {
+    pull-request-read = {
+      access        = "read"
+      event_name    = "pull_request"
+      ref_policy    = "pull-request-merge"
+      workflow_path = "${var.github_org}/mindclade-internal-monorepo/.github/workflows/presubmit.yml"
+    }
+    trusted-main-write = {
+      access        = "write"
+      event_name    = "push"
+      ref_policy    = "protected-main"
+      workflow_path = "${var.github_org}/mindclade-internal-monorepo/.github/workflows/presubmit.yml"
+    }
+    merge-group-write = {
+      access        = "write"
+      event_name    = "merge_group"
+      ref_policy    = "protected-merge-queue"
+      workflow_path = "${var.github_org}/mindclade-internal-monorepo/.github/workflows/presubmit.yml"
+    }
+    nightly-write = {
+      access        = "write"
+      event_name    = "schedule"
+      ref_policy    = "protected-main"
+      workflow_path = "${var.github_org}/mindclade-internal-monorepo/.github/workflows/nightly.yml"
+    }
+  }
+}
+
+resource "google_service_account" "bazel_cache" {
+  for_each = local.bazel_cache_accounts
+
+  project         = var.ci_project_id
+  account_id      = each.value.account_id
+  display_name    = each.value.display_name
+  description     = each.value.description
+  disabled        = false
+  deletion_policy = "PREVENT"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_service_account_iam_member" "bazel_cache_github_wif" {
+  for_each = var.bazel_cache_identity.routes
+
+  service_account_id = google_service_account.bazel_cache[each.key == "pull-request-read" ? "reader" : "writer"].name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = each.value.principal
+}
+
+check "bazel_cache_trust_contract" {
+  assert {
+    condition = (
+      var.bazel_cache_identity.workload_identity_provider == "${var.github_wif_pool_name}/providers/gh-bazel-cache" &&
+      var.bazel_cache_identity.repository == "${var.github_org}/mindclade-internal-monorepo" &&
+      can(regex("^[0-9]+$", var.bazel_cache_identity.repository_owner_id)) &&
+      can(regex("^[0-9]+$", var.bazel_cache_identity.repository_id)) &&
+      alltrue([
+        for route, expected in local.bazel_cache_route_contract :
+        var.bazel_cache_identity.routes[route].access == expected.access &&
+        var.bazel_cache_identity.routes[route].event_name == expected.event_name &&
+        var.bazel_cache_identity.routes[route].ref_policy == expected.ref_policy &&
+        var.bazel_cache_identity.routes[route].workflow_path == expected.workflow_path &&
+        var.bazel_cache_identity.routes[route].principal == "principal://iam.googleapis.com/${var.github_wif_pool_name}/subject/bazel-cache:${route}"
+      ])
+    )
+    error_message = "Bazel cache trust must match bootstrap contract 1.5.0 with pull-request read and exact trusted write routes."
+  }
+}
+
 resource "google_project_iam_member" "arc_system_nodes" {
   for_each = toset(["roles/container.defaultNodeServiceAccount"])
   project  = var.ci_project_id

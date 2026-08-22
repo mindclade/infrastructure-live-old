@@ -23,7 +23,11 @@ uses a separate read-only identity. No human credential or service-account key i
 | Foundation apply | Organization and shared control surfaces | Environment workload mutation unless explicitly delegated |
 
 The unit also publishes `environment_apply_authority`, normal-plane supply-chain service accounts,
-and the non-secret signer identity contract consumed by `github-config`. Treat output names as an
+and the non-secret signer identity contract consumed by `github-config`. It owns separate common-CI
+`bazel-cache-reader` and `bazel-cache-writer` accounts and binds the exact bootstrap `1.5.0` route
+principals without granting bucket IAM here. The stable cache handoff exposes
+`WIF_PROVIDER_BAZEL_CACHE`, `SA_BAZEL_CACHE_READER`, and `SA_BAZEL_CACHE_WRITER`; the cache module
+owns object access and KMS owns the storage-service-agent key grant. Treat output names as an
 interface: coordinate consumers before renaming them.
 
 ## Review and validation
