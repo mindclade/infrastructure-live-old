@@ -23,7 +23,8 @@ Do not delegate a domain unless all of these are true:
 - The approved migration window has a change reference and bounded start/end timestamps.
 - Certificate Manager DNS authorizations, issuer inventory, and CAA policy are ready for every
   certificate-serving domain; public and private endpoint names match the environment contract.
-- `python3 scripts/validate_dns_portfolio.py --require-ready <domain>` passes.
+- `nix develop .#ci --command python3 scripts/validate_dns_portfolio.py --require-ready <domain>`
+  passes.
 - The protected Cloud DNS plan and apply completed for the exact reviewed commit.
 - A preflight evidence run passes against every incumbent and Cloud DNS nameserver.
 - The incumbent zone remains unchanged through the rollback window.
@@ -60,7 +61,7 @@ explicitly review its origin and behavior before approving a DNS-only target.
 Validate source state first:
 
 ```sh
-python3 scripts/validate_dns_portfolio.py --require-ready mindclade.dev
+nix develop .#ci --command python3 scripts/validate_dns_portfolio.py --require-ready mindclade.dev
 ```
 
 Run the manual **DNS cutover check** workflow from `main` with:
