@@ -170,3 +170,13 @@ Keep the incumbent zone unchanged through the rollback window. If critical answe
 DNSSEC is re-established, restore the previous registrar nameservers and DS state using the
 approved change record, then verify cached and authoritative responses. Preserve query output,
 timestamps, resolver locations, and registrar audit evidence.
+
+## Google Workspace read-only audit (2026-08-22)
+
+A read-only Google Admin and Gmail audit completed at `2026-08-22T03:55:41Z` confirmed that `mindclade.com`, `mindclade.ai`, `mindclade.dev`, and `mindclade.studio` are verified and currently report Gmail activated. The tenant has one active user, `robpearc@mindclade.com`, with no populated alternate addresses. Its eight groups all use `mindclade.com` and expose no aliases under the three no-mail domains.
+
+No Workspace host, default-routing rule, outbound gateway, non-Gmail route, SMTP relay, recipient map, inbound gateway, compliance route, spam route, mailbox forward, Gmail filter, delegate, external SMTP send-as identity, or secondary-domain send-as identity was found. Organization policy allows automatic forwarding, but the sole mailbox has no configured forwarding address; mail delegation and per-user outbound gateways are off.
+
+All four `google._domainkey` public selectors currently resolve and Google Admin reports DKIM authentication started for each domain. Removing the `.ai`, `.dev`, and `.studio` selectors from their target no-mail zones is therefore an intentional retirement that must be named in each change record, not treated as an inventory omission.
+
+Restricted evidence is stored at `/private/tmp/mindclade-dns-recovery-20260821/google-workspace-audit.md` with SHA-256 `6c7ff043b247814e6d26ba27ae22ebb009f19156403e7b9a8c6991c72c1d0376` and mode `0600`. Canonical readiness remains blocked until an independent reviewer accepts this evidence and all remaining DNS, certificate, site-retirement, release, project, and cutover gates are complete. No Google Admin or DNS mutation was performed during the audit.
