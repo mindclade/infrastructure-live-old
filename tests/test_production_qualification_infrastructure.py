@@ -16,6 +16,33 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProductionQualificationInfrastructureTest(unittest.TestCase):
+    def test_eligibility_signer_is_immutable_and_least_privilege(self) -> None:
+        main = (
+            ROOT / "5-workloads/shared/control-plane-identities/main.tf"
+        ).read_text(encoding="utf-8")
+        outputs = (
+            ROOT / "5-workloads/shared/control-plane-identities/outputs.tf"
+        ).read_text(encoding="utf-8")
+        for required in (
+            'purpose                       = "ASYMMETRIC_SIGN"',
+            'algorithm        = "EC_SIGN_ED25519"',
+            'protection_level = "HSM"',
+            'role          = "roles/cloudkms.signer"',
+            'role          = "roles/cloudkms.publicKeyViewer"',
+            'for_each = toset(["evaluator", "writer"])',
+            'role               = "roles/iam.serviceAccountTokenCreator"',
+            'role    = "roles/iap.httpsResourceAccessor"',
+            'prevent_destroy = true',
+        ):
+            self.assertIn(required, main)
+        self.assertNotIn("roles/cloudkms.admin", main)
+        self.assertIn("PRODUCTION_ELIGIBILITY_KMS_KEY_VERSION", outputs)
+        self.assertIn("SA_PRODUCTION_QUALIFICATION_EVALUATOR", outputs)
+        self.assertIn(
+            'production_qualification[each.value].email',
+            main,
+        )
+
     def test_reader_and_writer_authorities_are_separate(self) -> None:
         main = (
             ROOT / "5-workloads/shared/control-plane-identities/main.tf"

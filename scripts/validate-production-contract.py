@@ -329,10 +329,13 @@ elif REPOSITORY == "infrastructure-live":
     for output_name in (
         "SA_GITOPS_RENDER",
         "SA_GITOPS_VERIFIER",
+        "SA_PRODUCTION_QUALIFICATION_EVALUATOR",
         "SA_PRODUCTION_QUALIFICATION_READER",
         "SA_PRODUCTION_QUALIFICATION_WRITER",
         "WIF_PROVIDER_PRODUCTION_QUALIFICATION",
         "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET",
+        "PRODUCTION_ELIGIBILITY_SIGNING_KEY_ID",
+        "PRODUCTION_ELIGIBILITY_KMS_KEY_VERSION",
     ):
         if output_name not in control_plane_outputs:
             error(f"GitOps control-plane identity output omits: {output_name}")
@@ -367,6 +370,9 @@ elif REPOSITORY == "infrastructure-live":
             "production_qualification_identity_contract",
             "qualification_evidence",
             "PRODUCTION_QUALIFICATION_BUCKET",
+            "SA_PRODUCTION_QUALIFICATION_EVALUATOR",
+            "PRODUCTION_ELIGIBILITY_SIGNING_KEY_ID",
+            "PRODUCTION_ELIGIBILITY_KMS_KEY_VERSION",
             '"project_id"',
             '"attestor_names"',
             '"attestor_key_versions"',
@@ -394,6 +400,20 @@ elif REPOSITORY == "infrastructure-live":
         error("GitOps verifier cannot read the applied Binary Authorization policy")
     if "roles/binaryauthorization.attestorsViewer" in control_plane_iam:
         error("GitOps verifier retains list-only Binary Authorization access")
+    for required in (
+        'purpose                       = "ASYMMETRIC_SIGN"',
+        'algorithm        = "EC_SIGN_ED25519"',
+        'protection_level = "HSM"',
+        'role          = "roles/cloudkms.signer"',
+        'role          = "roles/cloudkms.publicKeyViewer"',
+        'for_each = toset(["evaluator", "writer"])',
+        'role    = "roles/iap.httpsResourceAccessor"',
+        'role               = "roles/iam.serviceAccountTokenCreator"',
+    ):
+        if required not in control_plane_iam:
+            error(f"production eligibility signer contract omits: {required}")
+    if "roles/cloudkms.admin" in control_plane_iam:
+        error("production eligibility runtime may not administer its signing key")
 
     production_supply_chain = (
         ROOT / "5-workloads/production/supply-chain-iam/main.tf"

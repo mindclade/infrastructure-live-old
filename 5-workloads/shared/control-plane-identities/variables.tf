@@ -17,6 +17,15 @@ variable "secret_kms_key_id" {
   description = "CMEK used for control-plane secret containers."
 }
 
+variable "eligibility_signing_key_ring_id" {
+  type        = string
+  description = "Org-scoped Cloud KMS key ring that owns the production-eligibility decision signer."
+  validation {
+    condition     = can(regex("^projects/[a-z][a-z0-9-]+/locations/[a-z0-9-]+/keyRings/[A-Za-z0-9_-]+$", var.eligibility_signing_key_ring_id))
+    error_message = "eligibility_signing_key_ring_id must be a full Cloud KMS key-ring resource name."
+  }
+}
+
 variable "github_wif_pool_name" {
   type        = string
   description = "Bootstrap-managed GitHub workload identity pool resource name."
@@ -72,4 +81,18 @@ variable "platform_project_ids" {
     production  = string
   })
   description = "Environment platform projects containing Artifact Registry and Binary Authorization resources."
+}
+
+variable "platform_project_numbers" {
+  type = object({
+    staging    = string
+    production = string
+  })
+  description = "Numeric platform project identifiers used for exact GKE workload principals."
+  validation {
+    condition = alltrue([
+      for number in values(var.platform_project_numbers) : can(regex("^[0-9]{6,30}$", number))
+    ])
+    error_message = "platform_project_numbers must contain numeric staging and production project numbers."
+  }
 }

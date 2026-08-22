@@ -35,25 +35,35 @@ dependency "global_kms" {
   config_path = "../../../1-org/kms"
   mock_outputs = {
     crypto_key_ids = { ci_secrets = "projects/mock/locations/us-central1/keyRings/mock/cryptoKeys/ci-secrets" }
+    key_ring_name  = "projects/mock/locations/us-central1/keyRings/mock-global"
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
 dependency "development" {
-  config_path                             = "../../../2-environments/development/shared-projects"
-  mock_outputs                            = { project_ids = { platform = "mc-development-platform" } }
+  config_path = "../../../2-environments/development/shared-projects"
+  mock_outputs = {
+    project_ids     = { platform = "mc-development-platform" }
+    project_numbers = { platform = "100000000001" }
+  }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
 dependency "staging" {
-  config_path                             = "../../../2-environments/staging/shared-projects"
-  mock_outputs                            = { project_ids = { platform = "mc-staging-platform" } }
+  config_path = "../../../2-environments/staging/shared-projects"
+  mock_outputs = {
+    project_ids     = { platform = "mc-staging-platform" }
+    project_numbers = { platform = "100000000002" }
+  }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
 dependency "production" {
-  config_path                             = "../../../2-environments/production/shared-projects"
-  mock_outputs                            = { project_ids = { platform = "mc-production-platform" } }
+  config_path = "../../../2-environments/production/shared-projects"
+  mock_outputs = {
+    project_ids     = { platform = "mc-production-platform" }
+    project_numbers = { platform = "100000000003" }
+  }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
 
@@ -61,6 +71,7 @@ inputs = {
   security_project_id                = dependency.common_projects.outputs.project_ids["security"]
   region                             = include.root.locals.region
   secret_kms_key_id                  = dependency.global_kms.outputs.crypto_key_ids["ci_secrets"]
+  eligibility_signing_key_ring_id    = dependency.global_kms.outputs.key_ring_name
   github_wif_pool_name               = include.root.locals.account_vars.locals.github_wif_pool_name
   github_org                         = include.root.locals.github_org
   production_qualification_identity  = include.root.locals.account_vars.locals.production_qualification_identity
@@ -73,5 +84,10 @@ inputs = {
     development = dependency.development.outputs.project_ids["platform"]
     staging     = dependency.staging.outputs.project_ids["platform"]
     production  = dependency.production.outputs.project_ids["platform"]
+  }
+
+  platform_project_numbers = {
+    staging    = dependency.staging.outputs.project_numbers["platform"]
+    production = dependency.production.outputs.project_numbers["platform"]
   }
 }

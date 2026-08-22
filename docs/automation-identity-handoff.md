@@ -41,7 +41,9 @@ The foundation identity remains the only automation principal for:
 ### GitOps identity re-export
 
 `5-workloads/shared/control-plane-identities` is authoritative for both GitOps workflow
-identities and for the isolated production-qualification reader/writer pair. Its applied
+identities and for the isolated production-qualification reader, writer, and evaluator. The
+evaluator uses a keyless, short-lived service-account JWT through IAP; the staging and production
+admin workload principals alone can invoke the HSM-backed Ed25519 decision signer. Its applied
 outputs expose the exact non-secret handoff values as:
 
 ```text
@@ -50,9 +52,12 @@ SA_GITOPS_VERIFIER
 WIF_PROVIDER_PRODUCTION_QUALIFICATION
 SA_PRODUCTION_QUALIFICATION_READER
 SA_PRODUCTION_QUALIFICATION_WRITER
+SA_PRODUCTION_QUALIFICATION_EVALUATOR
 PRODUCTION_QUALIFICATION_PROJECT
 PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET
 PRODUCTION_QUALIFICATION_BUCKET
+PRODUCTION_ELIGIBILITY_SIGNING_KEY_ID
+PRODUCTION_ELIGIBILITY_KMS_KEY_VERSION
 ```
 
 These values are outputs, not naming conventions. `github-config` must not construct or

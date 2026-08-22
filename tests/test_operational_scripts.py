@@ -482,12 +482,23 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
                     "SA_PRODUCTION_QUALIFICATION_READER": (
                         "sa-prod-qual-reader@mc-common-security.iam.gserviceaccount.com"
                     ),
+                    "SA_PRODUCTION_QUALIFICATION_EVALUATOR": (
+                        "sa-prod-qual-evaluator@mc-common-security.iam.gserviceaccount.com"
+                    ),
                     "SA_PRODUCTION_QUALIFICATION_WRITER": (
                         "sa-prod-qual-writer@mc-common-security.iam.gserviceaccount.com"
                     ),
                     "PRODUCTION_QUALIFICATION_PROJECT": "mc-common-security",
                     "PRODUCTION_QUALIFICATION_PRIVATE_KEY_SECRET": (
                         "github-app-production-qualification-reader-pem"
+                    ),
+                    "PRODUCTION_ELIGIBILITY_SIGNING_KEY_ID": (
+                        "production-eligibility-v1"
+                    ),
+                    "PRODUCTION_ELIGIBILITY_KMS_KEY_VERSION": (
+                        "projects/mc-common-security/locations/us-central1/keyRings/"
+                        "mc-global/cryptoKeys/production-eligibility-decisions/"
+                        "cryptoKeyVersions/1"
                     ),
                 }
             ),
@@ -531,8 +542,8 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
             contract["variables"]["BINAUTHZ_DEPLOYMENT_ATTESTOR"],
             "deployment-attestor",
         )
-        self.assertEqual(len(contract["variables"]), 22)
-        self.assertEqual(contract["contract_version"], "1.2.0")
+        self.assertEqual(len(contract["variables"]), 25)
+        self.assertEqual(contract["contract_version"], "1.3.0")
         self.assertFalse(contract["credential_material_included"])
 
     def test_sensitive_output_is_rejected(self) -> None:
