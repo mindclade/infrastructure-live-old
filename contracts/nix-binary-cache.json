@@ -1,0 +1,115 @@
+{
+  "$schema": "./nix-binary-cache.schema.json",
+  "backend": {
+    "bucket_name": "mc-common-ci-nix-cache",
+    "create_only": true,
+    "hmac_created_by_terraform": false,
+    "object_admin_members": [],
+    "protocol": "gcs-s3-xml-hmac",
+    "service_account": "nix-cache-storage@mc-common-ci.iam.gserviceaccount.com",
+    "unit": "5-workloads/ci/nix-binary-cache"
+  },
+  "blockers": [
+    "attic-client-server-compatibility-qualified",
+    "attic-endpoint-tls-qualified",
+    "attic-image-mirrored-attested",
+    "attic-private-read-auth-qualified",
+    "attic-scoped-token-policy-qualified",
+    "attic-upstream-production-acceptance",
+    "cache-cost-and-growth-limits-approved",
+    "cold-warm-tamper-loss-tests-passed",
+    "credentialed-saved-plans-retained",
+    "gcs-hmac-issued-rotated-out-of-band",
+    "gcs-s3-multipart-and-duplicate-writes-qualified",
+    "github-environment-applied",
+    "infrastructure-resources-applied-qualified",
+    "nix-module-v0-4-0-published",
+    "nixpkgs-release-line-qualified",
+    "postgresql-ha-backup-restore-qualified",
+    "protected-publication-caller-reviewed",
+    "secret-versions-and-sync-qualified",
+    "server-signing-and-token-recovery-qualified",
+    "workflow-contract-v5-0-0-published"
+  ],
+  "client": {
+    "enabled": false,
+    "private_read_authentication_qualified": false,
+    "signing_key_in_scope": false,
+    "substituter_uri": null,
+    "trusted_public_key": null
+  },
+  "evidence": {
+    "backend_semantics": false,
+    "cold_warm_builds": false,
+    "cost_capacity": false,
+    "database_restore": false,
+    "hmac_rotation": false,
+    "negative_authentication": false,
+    "secret_rotation": false,
+    "signature_tamper": false,
+    "tls_endpoint": false
+  },
+  "module": {
+    "path": "infra/terraform/modules/nix_binary_cache",
+    "release": "v0.4.0",
+    "release_status": "planned"
+  },
+  "nixpkgs": {
+    "current_ref": "nixos-unstable",
+    "release_line_migration": "separate-qualified-change",
+    "x86_64_darwin": "unsupported-until-release-line-qualified"
+  },
+  "publication": {
+    "attic_client_commit": "7a19204df10d606c5070e6bb72615c3461900c05",
+    "caller_workflow": "mindclade/mindclade-internal-monorepo/.github/workflows/nix-cache.yml@refs/heads/main",
+    "client_signing_key_in_scope": false,
+    "enabled": false,
+    "environment": "nix-cache-publication",
+    "package_selector": ".#packages.x86_64-linux.*",
+    "pull_request_write": false,
+    "shells": [
+      "ci-bazel",
+      "ci-infra",
+      "ci-lint",
+      "ci-terraform"
+    ],
+    "trusted_events": [
+      "push",
+      "schedule",
+      "workflow_dispatch"
+    ],
+    "workflow": "mindclade/.github/.github/workflows/reusable-nix-cache-populate.yml@refs/tags/v5.0.0"
+  },
+  "qualification_evidence": {
+    "archive_boundary": "5-workloads/shared/production-qualification-evidence",
+    "object_generation": null,
+    "object_uri": null,
+    "reviewed_at": null,
+    "reviewer": null,
+    "sha256": null,
+    "verification_digest": null
+  },
+  "schema_version": 1,
+  "secrets": {
+    "github_accessor": false,
+    "secret_ids": [
+      "attic-database-url",
+      "attic-gcs-hmac-access-key-id",
+      "attic-gcs-hmac-secret-access-key",
+      "attic-token-rs256-private-key"
+    ],
+    "unit": "5-workloads/ci/nix-cache-secrets",
+    "versions_created_by_terraform": false
+  },
+  "server": {
+    "active_gitops_target": false,
+    "amd64_image": "ghcr.io/zhaofengli/attic@sha256:fbb4f72df38f9262eab039c54f1d2722ba710a4cadd72bb282ea8a99e03de677",
+    "automatic_garbage_collection": false,
+    "commit": "9eda345a743f50999de04f59a170806c3e029eea",
+    "endpoint": null,
+    "replicas": 0,
+    "source_root": "infra/kubernetes/platform/nix-cache",
+    "upstream_maturity": "early-prototype"
+  },
+  "status": "proposed"
+}

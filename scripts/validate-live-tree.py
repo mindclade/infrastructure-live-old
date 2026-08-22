@@ -51,6 +51,15 @@ for required in (
     "5-workloads/ci/bazel-remote-cache/terragrunt.hcl",
     "5-workloads/ci/bazel-remote-cache/.terraform.lock.hcl",
     "5-workloads/ci/bazel-remote-cache/README.md",
+    "5-workloads/ci/nix-binary-cache/terragrunt.hcl",
+    "5-workloads/ci/nix-binary-cache/.terraform.lock.hcl",
+    "5-workloads/ci/nix-binary-cache/README.md",
+    "5-workloads/ci/nix-cache-secrets/terragrunt.hcl",
+    "5-workloads/ci/nix-cache-secrets/.terraform.lock.hcl",
+    "5-workloads/ci/nix-cache-secrets/README.md",
+    "contracts/nix-binary-cache.json",
+    "contracts/nix-binary-cache.schema.json",
+    "scripts/validate_nix_binary_cache.py",
     "1-org/kms-dr-evidence/terragrunt.hcl",
 ):
     if not ROOT.joinpath(required).is_file():

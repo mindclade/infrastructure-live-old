@@ -85,3 +85,8 @@ output "bazel_cache_identity_contract" {
     routes                   = var.bazel_cache_identity.routes
   }
 }
+
+output "nix_cache_storage_service_account" {
+  description = "Dedicated non-federated Attic GCS backend identity; no HMAC secret is created or exported"
+  value       = google_service_account.nix_cache_storage.email
+}
