@@ -40,6 +40,10 @@ and exact-ref validation. If an incumbent inventory needs any different public a
 stop and reconcile the public-service architecture through a separate module-and-inventory
 review rather than omitting the record or weakening validation.
 
+Generated Certificate Manager authorization CNAMEs remain owned by the certificate module and
+never use this static allowlist. A proxied Cloudflare record is not automatically portable:
+explicitly review its origin and behavior before approving a DNS-only target.
+
 ## Symptoms and impact
 
 | Symptom | Likely failure | Impact |
@@ -95,7 +99,13 @@ Perform one domain at a time in this fixed order: `mindclade.dev`, `mindclade.ai
 `mindclade.studio`, then `mindclade.com`. The first three prove the no-mail path before the
 mail-enabled corporate domain is exposed to change.
 
-1. Confirm the preflight evidence status is `PASS`.
+Use a separate `CHG-` record and bounded UTC window for each domain. Lower portable incumbent
+record TTLs to 300 at least 48 hours before its window, then freeze the incumbent zone. Require
+48 hours of stable operation after `.dev`, another 48 hours after `.ai`, seven days after
+`.studio` before `.com`, and a seven-day `.com` rollback hold. Do not overlap windows.
+
+1. Confirm the preflight evidence status is `PASS`, the Workspace/no-mail identity audit for the
+   domain is complete, and every incumbent and Cloud DNS authoritative server agrees.
 2. At Squarespace, remove or disable the incumbent DNSSEC/DS chain. Wait the approved interval
    derived from the current DS and DNSKEY TTLs before changing nameservers.
 3. Run **DNS cutover check** with `phase=predeligation` and retain its passing evidence. Do not
