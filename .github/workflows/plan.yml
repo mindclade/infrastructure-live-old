@@ -128,10 +128,8 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-      - name: Test operational script safety
-        run: nix develop .#ci --command env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py'
-      - name: Validate DNS portfolio policy and live-record parity
-        run: nix develop .#ci --command python3 scripts/validate_dns_portfolio.py
+      - name: Test operational scripts and validate DNS contracts
+        run: nix develop .#ci --command make test validate-dns-source
       - name: Validate account contract source
         run: python3 scripts/validate-account.py
 
