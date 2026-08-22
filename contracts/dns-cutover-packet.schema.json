@@ -4,7 +4,7 @@
   "title": "DNS cutover packet",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "status", "domain", "change_id", "generated_at", "window", "ttl_lowered_at", "readiness", "evidence_manifest_sha256", "public_record_exceptions", "incumbent_snapshot", "target_snapshot", "preflight_commands", "cutover_steps", "rollback_steps"],
+  "required": ["schema_version", "status", "domain", "change_id", "generated_at", "window", "ttl_lowered_at", "readiness", "evidence_manifest_sha256", "public_record_exceptions", "incumbent_snapshot", "target_snapshot", "preflight_argv", "cutover_steps", "rollback_steps"],
   "properties": {
     "schema_version": {"const": 1},
     "status": {"enum": ["DRAFT", "READY"]},
@@ -21,23 +21,56 @@
       }
     },
     "ttl_lowered_at": {"type": "string", "format": "date-time"},
-    "readiness": {"type": "object"},
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inventory_complete", "delegation_ready", "inventory_blockers", "delegation_blockers"],
+      "properties": {
+        "inventory_complete": {"type": "boolean"},
+        "delegation_ready": {"type": "boolean"},
+        "inventory_blockers": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "delegation_blockers": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
     "evidence_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "public_record_exceptions": {"type": "array"},
     "incumbent_snapshot": {"$ref": "#/$defs/snapshot"},
     "target_snapshot": {"$ref": "#/$defs/snapshot"},
-    "preflight_commands": {"type": "array", "items": {"type": "string", "minLength": 1}},
-    "cutover_steps": {"type": "array", "items": {"type": "string", "minLength": 1}},
-    "rollback_steps": {"type": "array", "items": {"type": "string", "minLength": 1}}
+    "preflight_argv": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "items": {"type": "string", "minLength": 1}
+      }
+    },
+    "cutover_steps": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "rollback_steps": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
   },
   "$defs": {
     "snapshot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sha256", "content"],
+      "required": ["sha256", "evidence_binding", "content"],
       "properties": {
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "content": {"type": "object"}
+        "evidence_binding": {"$ref": "#/$defs/evidence_binding"},
+        "content": {"$ref": "dns-authoritative-snapshot.schema.json"}
+      }
+    },
+    "evidence_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate_id", "evidence_status", "evidence_sha256", "evidence_observed_at", "snapshot_sha256", "snapshot_captured_at", "matches"],
+      "properties": {
+        "gate_id": {"enum": ["incumbent_zone_snapshot", "target_zone_snapshot"]},
+        "evidence_status": {"enum": ["pending", "pending_upload", "pending_review", "approved", "rejected"]},
+        "evidence_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "evidence_observed_at": {"type": ["string", "null"], "format": "date-time"},
+        "snapshot_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "snapshot_captured_at": {"type": "string", "format": "date-time"},
+        "matches": {"type": "boolean"}
       }
     }
   }

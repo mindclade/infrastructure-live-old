@@ -88,9 +88,9 @@ module_contract_docs = (ROOT / "docs/module-interface-contract.md").read_text(
 )
 for required_make_contract in (
     "validate-integration: validate validate-module-interfaces validate-capacity-contract",
-    "validate-source-integration: validate validate-module-candidate validate-capacity-candidate",
+    "validate-source-integration: validate validate-module-candidate",
     'python3 scripts/validate-module-interfaces.py --monorepo "$(MONOREPO)"',
-    'python3 scripts/validate-module-interfaces.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"',
+    'python3 scripts/validate-module-release-candidate.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)" --candidate-ref "$(CANDIDATE_MODULE_REF)"',
     'python3 scripts/validate-capacity-contract.py --monorepo "$(MONOREPO)"',
     'python3 scripts/validate-capacity-contract.py --monorepo "$(MONOREPO)" --candidate-version "$(CANDIDATE_MODULE_VERSION)"',
     'python3 scripts/validate-workload-identity-contract.py --monorepo "$(MONOREPO)"',
@@ -106,9 +106,8 @@ if (
     not in module_contract_docs
 ):
     error("module interface documentation omits the executable integration target")
-if (
-    "make validate-source-integration MONOREPO=../mindclade-internal-monorepo"
-    not in module_contract_docs
+if "make validate-source-integration" not in module_contract_docs or (
+    "CANDIDATE_MODULE_REF=<40-character-lowercase-commit-sha>" not in module_contract_docs
 ):
     error("module interface documentation omits the planned-source integration target")
 
