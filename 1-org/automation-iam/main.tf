@@ -224,6 +224,19 @@ resource "google_service_account" "bazel_cache" {
   }
 }
 
+resource "google_service_account" "nix_cache_storage" {
+  project         = var.ci_project_id
+  account_id      = "nix-cache-storage"
+  display_name    = "Mindclade Nix cache storage"
+  description     = "Private Attic backend identity; HMAC creation and GitHub federation are intentionally out of scope."
+  disabled        = false
+  deletion_policy = "PREVENT"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 resource "google_service_account_iam_member" "bazel_cache_github_wif" {
   for_each = var.bazel_cache_identity.routes
 

@@ -15,6 +15,11 @@ not reconstructed or relabeled here.
   scope selection. The applied-output exporter now emits the combined exact `1.4.0` handoff only
   after its Terraform output matches the bootstrap identity JSON. Activation remains blocked on
   the unpublished `v0.4.0` module and qualified create-only client semantics.
+- Added the source-only private Nix binary-cache foundation: dedicated create-only GCS backend,
+  server-only secret containers, zero-replica Attic source, protected population workflow
+  contract, stable redacted validation codes, and an explicit proposed → qualifying → qualified
+  → activated lifecycle. No substituter, public key, endpoint, secret value, or write caller is
+  activated.
 - Added the exact estate-wide `LEGAL.md` reliance policy and made it part of
   the repository contract.
 

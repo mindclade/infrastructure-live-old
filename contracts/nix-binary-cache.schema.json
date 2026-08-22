@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindclade.internal/nix-binary-cache.schema.json",
+  "type": "object",
+  "required": [
+    "$schema",
+    "backend",
+    "blockers",
+    "client",
+    "evidence",
+    "module",
+    "nixpkgs",
+    "publication",
+    "schema_version",
+    "secrets",
+    "server",
+    "status"
+  ],
+  "properties": {
+    "$schema": {"const": "./nix-binary-cache.schema.json"},
+    "schema_version": {"const": 1},
+    "status": {"enum": ["proposed", "qualifying", "qualified", "activated"]},
+    "backend": {
+      "type": "object",
+      "required": ["bucket_name", "create_only", "hmac_created_by_terraform", "object_admin_members", "protocol", "service_account", "unit"],
+      "properties": {
+        "bucket_name": {"const": "mc-common-ci-nix-cache"},
+        "create_only": {"const": true},
+        "hmac_created_by_terraform": {"const": false},
+        "object_admin_members": {"const": []},
+        "protocol": {"const": "gcs-s3-xml-hmac"},
+        "service_account": {"const": "nix-cache-storage@mc-common-ci.iam.gserviceaccount.com"},
+        "unit": {"const": "5-workloads/ci/nix-binary-cache"}
+      },
+      "additionalProperties": false
+    },
+    "blockers": {
+      "type": "array",
+      "minItems": 0,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
+    },
+    "client": {
+      "type": "object",
+      "required": ["enabled", "private_read_authentication_qualified", "signing_key_in_scope", "substituter_uri", "trusted_public_key"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "private_read_authentication_qualified": {"type": "boolean"},
+        "signing_key_in_scope": {"const": false},
+        "substituter_uri": {"type": ["string", "null"], "format": "uri"},
+        "trusted_public_key": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9._-]+:[A-Za-z0-9+/]+={0,2}$"}
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["backend_semantics", "cold_warm_builds", "cost_capacity", "database_restore", "hmac_rotation", "negative_authentication", "secret_rotation", "signature_tamper", "tls_endpoint"],
+      "properties": {
+        "backend_semantics": {"type": "boolean"},
+        "cold_warm_builds": {"type": "boolean"},
+        "cost_capacity": {"type": "boolean"},
+        "database_restore": {"type": "boolean"},
+        "hmac_rotation": {"type": "boolean"},
+        "negative_authentication": {"type": "boolean"},
+        "secret_rotation": {"type": "boolean"},
+        "signature_tamper": {"type": "boolean"},
+        "tls_endpoint": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "module": {
+      "type": "object",
+      "required": ["path", "release", "release_status"],
+      "properties": {
+        "path": {"const": "infra/terraform/modules/nix_binary_cache"},
+        "release": {"const": "v0.4.0"},
+        "release_status": {"enum": ["planned", "published"]}
+      },
+      "additionalProperties": false
+    },
+    "nixpkgs": {
+      "type": "object",
+      "required": ["current_ref", "release_line_migration", "x86_64_darwin"],
+      "properties": {
+        "current_ref": {"const": "nixos-unstable"},
+        "release_line_migration": {"const": "separate-qualified-change"},
+        "x86_64_darwin": {"const": "unsupported-until-release-line-qualified"}
+      },
+      "additionalProperties": false
+    },
+    "publication": {
+      "type": "object",
+      "required": ["attic_client_commit", "caller_workflow", "client_signing_key_in_scope", "enabled", "environment", "package_selector", "pull_request_write", "shells", "trusted_events", "workflow"],
+      "properties": {
+        "attic_client_commit": {"const": "7a19204df10d606c5070e6bb72615c3461900c05"},
+        "caller_workflow": {"const": "mindclade/mindclade-internal-monorepo/.github/workflows/nix-cache.yml@refs/heads/main"},
+        "client_signing_key_in_scope": {"const": false},
+        "enabled": {"type": "boolean"},
+        "environment": {"const": "nix-cache-publication"},
+        "package_selector": {"const": ".#packages.x86_64-linux.*"},
+        "pull_request_write": {"const": false},
+        "shells": {"const": ["ci-bazel", "ci-infra", "ci-lint", "ci-terraform"]},
+        "trusted_events": {"const": ["push", "schedule", "workflow_dispatch"]},
+        "workflow": {"const": "mindclade/.github/.github/workflows/reusable-nix-cache-populate.yml@refs/tags/v5.0.0"}
+      },
+      "additionalProperties": false
+    },
+    "secrets": {
+      "type": "object",
+      "required": ["github_accessor", "secret_ids", "unit", "versions_created_by_terraform"],
+      "properties": {
+        "github_accessor": {"const": false},
+        "secret_ids": {"const": ["attic-database-url", "attic-gcs-hmac-access-key-id", "attic-gcs-hmac-secret-access-key", "attic-token-rs256-private-key"]},
+        "unit": {"const": "5-workloads/ci/nix-cache-secrets"},
+        "versions_created_by_terraform": {"const": false}
+      },
+      "additionalProperties": false
+    },
+    "server": {
+      "type": "object",
+      "required": ["active_gitops_target", "amd64_image", "automatic_garbage_collection", "commit", "endpoint", "replicas", "source_root", "upstream_maturity"],
+      "properties": {
+        "active_gitops_target": {"type": "boolean"},
+        "amd64_image": {"const": "ghcr.io/zhaofengli/attic@sha256:fbb4f72df38f9262eab039c54f1d2722ba710a4cadd72bb282ea8a99e03de677"},
+        "automatic_garbage_collection": {"const": false},
+        "commit": {"const": "9eda345a743f50999de04f59a170806c3e029eea"},
+        "endpoint": {"type": ["string", "null"], "format": "uri"},
+        "replicas": {"type": "integer", "minimum": 0},
+        "source_root": {"const": "infra/kubernetes/platform/nix-cache"},
+        "upstream_maturity": {"const": "early-prototype"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "proposed"}}},
+      "then": {
+        "properties": {
+          "blockers": {"minItems": 1},
+          "client": {"properties": {"enabled": {"const": false}, "private_read_authentication_qualified": {"const": false}, "substituter_uri": {"const": null}, "trusted_public_key": {"const": null}}},
+          "evidence": {
+            "properties": {
+              "backend_semantics": {"const": false},
+              "cold_warm_builds": {"const": false},
+              "cost_capacity": {"const": false},
+              "database_restore": {"const": false},
+              "hmac_rotation": {"const": false},
+              "negative_authentication": {"const": false},
+              "secret_rotation": {"const": false},
+              "signature_tamper": {"const": false},
+              "tls_endpoint": {"const": false}
+            }
+          },
+          "publication": {"properties": {"enabled": {"const": false}}},
+          "server": {"properties": {"active_gitops_target": {"const": false}, "endpoint": {"const": null}, "replicas": {"const": 0}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "qualifying"}}},
+      "then": {
+        "properties": {
+          "blockers": {"minItems": 1},
+          "client": {"properties": {"enabled": {"const": false}, "substituter_uri": {"type": "string", "pattern": "^https://"}, "trusted_public_key": {"type": "string"}}},
+          "module": {"properties": {"release_status": {"const": "published"}}},
+          "publication": {"properties": {"enabled": {"const": true}}},
+          "server": {"properties": {"active_gitops_target": {"const": true}, "endpoint": {"type": "string", "pattern": "^https://"}, "replicas": {"minimum": 2}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"enum": ["qualified", "activated"]}}},
+      "then": {
+        "properties": {
+          "blockers": {"maxItems": 0},
+          "client": {"properties": {"private_read_authentication_qualified": {"const": true}, "substituter_uri": {"type": "string", "pattern": "^https://"}, "trusted_public_key": {"type": "string"}}},
+          "evidence": {
+            "properties": {
+              "backend_semantics": {"const": true},
+              "cold_warm_builds": {"const": true},
+              "cost_capacity": {"const": true},
+              "database_restore": {"const": true},
+              "hmac_rotation": {"const": true},
+              "negative_authentication": {"const": true},
+              "secret_rotation": {"const": true},
+              "signature_tamper": {"const": true},
+              "tls_endpoint": {"const": true}
+            }
+          },
+          "module": {"properties": {"release_status": {"const": "published"}}},
+          "publication": {"properties": {"enabled": {"const": true}}},
+          "server": {"properties": {"active_gitops_target": {"const": true}, "endpoint": {"type": "string", "pattern": "^https://"}, "replicas": {"minimum": 2}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "qualified"}}},
+      "then": {
+        "properties": {
+          "client": {"properties": {"enabled": {"const": false}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "activated"}}},
+      "then": {
+        "properties": {
+          "client": {"properties": {"enabled": {"const": true}}}
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

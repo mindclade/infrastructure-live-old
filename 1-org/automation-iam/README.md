@@ -30,6 +30,12 @@ principals without granting bucket IAM here. The stable cache handoff exposes
 owns object access and KMS owns the storage-service-agent key grant. Treat output names as an
 interface: coordinate consumers before renaming them.
 
+The unit also owns `nix-cache-storage`, a separate deletion-protected service account used only
+by the proposed private Attic backend bucket. It has no GitHub WIF binding and no project role.
+The Nix cache module grants bucket-scoped create/read access. Terraform must never create a
+`google_storage_hmac_key`: the secret would enter state. HMAC issuance, rotation, revocation, and
+Secret Manager version writes remain out-of-band protected operations after qualification.
+
 ## Review and validation
 
 Review folder IDs and service-account emails against bootstrap outputs; mock outputs are valid only

@@ -45,6 +45,8 @@
 - [Environment automation IAM](../1-org/automation-iam/README.md) — plan/apply folder scope.
 - [Common CI Bazel cache](../5-workloads/ci/bazel-remote-cache/README.md) — source-only identity,
   storage, activation, and client-semantics handoff.
+- [Nix binary-cache activation](runbooks/nix-binary-cache-activation.md) — proposed, qualified,
+  and activated lifecycle with private Attic/GCS and protected publication boundaries.
 - [Authoritative DNS project](../3-networks/shared/dns-project/README.md) — shared project
   ownership without duplicate creation.
 - [Partner projects](../4-projects/partners/README.md) — activation and isolation requirements.
