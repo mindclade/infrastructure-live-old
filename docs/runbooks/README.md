@@ -15,6 +15,7 @@
 | [Cloud SQL restore](cloud-sql-restore.md) | Restore a database into an isolated target and prove data/application integrity |
 | [Failed production apply](failed-production-apply.md) | Contain and recover a partial or failed live apply |
 | [GKE reconstruction](gke-reconstruction.md) | Recreate the cluster control plane and hand back to GitOps |
+| [Nix binary-cache activation](nix-binary-cache-activation.md) | Qualify, activate, and safely detach the private Attic cache |
 | [Organization-policy rollback](org-policy-rollback.md) | Remove a bad normal-plane policy change without weakening the estate broadly |
 | [Protected-bucket restore](protected-bucket-restore.md) | Recover versioned data without overwriting the protected source bucket |
 | [security.txt publication](security-txt-publication.md) | Publish, qualify, renew, and roll back RFC 9116 contact files |

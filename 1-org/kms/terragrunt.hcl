@@ -22,7 +22,10 @@ include "root" {
 dependency "common_projects" {
   config_path = "../common-projects"
   mock_outputs = {
-    project_numbers = { ci = "000000000001" }
+    project_numbers = {
+      ci      = "000000000001"
+      logging = "000000000002"
+    }
   }
   mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
 }
@@ -61,6 +64,12 @@ inputs = {
   }
 
   encrypter_decrypters = {
+    logs = [
+      "serviceAccount:service-${dependency.common_projects.outputs.project_numbers["logging"]}@gs-project-accounts.iam.gserviceaccount.com",
+    ]
+    ci_secrets = [
+      "serviceAccount:service-${dependency.common_projects.outputs.project_numbers["ci"]}@gcp-sa-secretmanager.iam.gserviceaccount.com",
+    ]
     ci_artifacts = [
       "serviceAccount:service-${dependency.common_projects.outputs.project_numbers["ci"]}@gs-project-accounts.iam.gserviceaccount.com",
     ]

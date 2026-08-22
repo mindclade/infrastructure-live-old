@@ -1059,10 +1059,26 @@ elif REPOSITORY == "infrastructure-live":
     kms = (ROOT / "1-org/kms/terragrunt.hcl").read_text(
         "utf-8", errors="ignore"
     )
+    project_number_mock = re.search(
+        r"project_numbers\s*=\s*\{(?P<body>.*?)\n\s*\}", kms, re.DOTALL
+    )
+    mocked_projects = (
+        set(
+            re.findall(
+                r'(?m)^\s*([a-z][a-z0-9_]*)\s*=\s*"[0-9]+"\s*$',
+                project_number_mock.group("body"),
+            )
+        )
+        if project_number_mock
+        else set()
+    )
+    if not {"ci", "logging"}.issubset(mocked_projects):
+        error("common cache KMS dependency must mock CI and logging project numbers")
     for kms_contract in (
-        'project_numbers = { ci = "000000000001" }',
         "encrypter_decrypters = {",
         'service-${dependency.common_projects.outputs.project_numbers["ci"]}@gs-project-accounts.iam.gserviceaccount.com',
+        'service-${dependency.common_projects.outputs.project_numbers["ci"]}@gcp-sa-secretmanager.iam.gserviceaccount.com',
+        'service-${dependency.common_projects.outputs.project_numbers["logging"]}@gs-project-accounts.iam.gserviceaccount.com',
     ):
         if kms_contract not in kms:
             error(f"common CI cache CMEK contract omits: {kms_contract}")
