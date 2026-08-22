@@ -11,9 +11,9 @@ a controlled per-domain delegation.
 | Domain | Role | Mail policy |
 |---|---|---|
 | `mindclade.com` | company, identity, email, trust | mail-enabled; import existing MX/SPF/DKIM/DMARC before delegation |
-| `mindclade.ai` | production product, API, console, authentication | no-mail until explicitly changed |
-| `mindclade.dev` | developer documentation, SDKs, schemas | no-mail until explicitly changed |
-| `mindclade.studio` | demos, playgrounds, isolated experiments | no-mail until explicitly changed |
+| `mindclade.ai` | production product, API, console, authentication; approved Squarespace apex and `www` exception | no-mail |
+| `mindclade.dev` | developer documentation, SDKs, schemas; approved Squarespace apex and `www` exception | no-mail |
+| `mindclade.studio` | demos, playgrounds, isolated experiments; public Squarespace site to retire | no-mail |
 
 The four apex zones are owned by `3-networks/shared/public-zones`. Kubernetes Gateway/Ingress
 objects remain in `gitops`; application host configuration remains in the monorepo. Do not
@@ -44,7 +44,16 @@ live-state repository.
 
 The normalized inventory in
 [`contracts/dns-domain-inventory.json`](../contracts/dns-domain-inventory.json)
-marks all four domains as blocked pending review. The committed `mindclade.com` record map in
+marks all four domains as blocked pending review. On 2026-08-21 the owning Cloudflare account
+was recovered through `robpearc@mindclade.com`. The complete authoritative `mindclade.com` BIND
+export has SHA-256 `c0c54f51f6d4ba853e140dac5e10009294c3424ee54c4b395d2fdfbd185925ca`.
+It contains five Google MX records, Google verification TXT, the 2048-bit Workspace DKIM TXT,
+and a proxied `_domainconnect` CNAME to Squarespace. Workers Routes, legacy Page Rules, custom,
+rate-limit, and managed WAF rules, Email Routing destinations, Load Balancing, and Bulk
+Redirects were empty or disabled. The raw export remains outside the repository as restricted
+change evidence.
+
+The committed `mindclade.com` record map in
 [`3-networks/shared/public-zones/mindclade-com/terragrunt.hcl`](../3-networks/shared/public-zones/mindclade-com/terragrunt.hcl)
 preserves the legacy Google MX set, Google verification TXT record, and 2048-bit
 `google._domainkey` DKIM value observed through a read-only Admin-console and public-DNS
@@ -53,7 +62,9 @@ DMARC reject targets. Cloudflare remains authoritative through `cleo.ns.cloudfla
 `rosa.ns.cloudflare.com`; the public zone did not serve those SPF or DMARC targets during the
 read-only observation. Their presence in desired source is not connected evidence, so the
 inventory remains incomplete and explicitly blocked on mail-authentication observation, sender
-review, and an independent full incumbent-zone review. **Do not change registrar nameservers or
+review, independent export review, and disposition of the proxied `_domainconnect` record.
+Cloud DNS cannot preserve its proxy semantics, so desired source omits it until a reviewer
+approves either a DNS-only exception or retirement. **Do not change registrar nameservers or
 DNSSEC delegation** until every authoritative web, identity, mail, verification, and security
 record has been inventoried, reviewed, and applied to Cloud DNS. A partially inventoried managed
 zone is not a delegation-ready zone.
@@ -65,8 +76,11 @@ TTL, and answer values. Allowlisting one record never authorizes another, stale 
 wildcards fail closed, and `mindclade.com` has no public-address exception. Public address
 answers were also observed for `mindclade.studio`, but they remain absent from desired source and
 carry a separate reconciliation blocker because the target private-only service plane conflicts
-with them. These observations are not zone exports and do not make any incumbent inventory
-complete.
+with them. A historical, non-authoritative Cloudflare `.studio` export was also preserved with
+SHA-256 `56a21b9de85df38466f333f0c1814ddcfcd5e0b67a8c0add8677d205d4d4b38d`.
+It is stale and lacks the Google MX and verification records currently served by Squarespace;
+it is evidence only. Retire `.studio` public A, CNAME, and HTTPS records only after required
+content is captured and redirect or application dependencies are disproved.
 
 The v0.4.0 candidate live units use the typed `dns_name` interface and explicit record `name`
 overrides, so multiple record types can safely share an owner such as the apex. Its
@@ -80,6 +94,22 @@ Do not point a live unit at a branch or delegate an empty or partially inventori
 The normalized contract also keeps the migration window `unapproved`; approving it requires a
 change reference and bounded, timezone-aware start/end timestamps before any domain blocker may
 be cleared.
+
+## Mail enforcement sequence
+
+Before no-mail DNS is applied, audit Workspace users, aliases, groups, routing, and send-as
+identities under `@mindclade.ai`, `@mindclade.dev`, and `@mindclade.studio`. Move every legitimate
+identity to `mindclade.com`; any remaining secondary-domain sender or recipient blocks migration.
+The final no-mail record sets are null MX `0 .`, SPF `v=spf1 -all`, and DMARC
+`p=reject; sp=reject; adkim=s; aspf=s`. Each apex TXT record set also retains its exact Google
+verification value.
+
+Treat Google Workspace as the only authorized `mindclade.com` sender unless the sender audit
+proves otherwise. First publish incumbent SPF `v=spf1 include:_spf.google.com ~all` and DMARC
+`p=none; sp=none; pct=100; adkim=s; aspf=s` with aggregate reports to
+`security@mindclade.com`. Observe real reports for 14 days. Only after every legitimate sender is
+accounted for may incumbent and target advance to SPF `-all` and DMARC `p=reject; sp=reject`.
+The strict target values in desired source do not authorize skipping this observation period.
 
 ## Automated controls
 
@@ -113,8 +143,8 @@ mail tests, evidence, and rollback order.
 
 1. Export the current authoritative zone and independently inventory apex, `www`, identity,
    MX, SPF, DKIM, DMARC, CAA, verification, and service records.
-2. Add the reviewed records to the appropriate Terragrunt unit. Preserve mail TTLs and semantics;
-   do not synthesize missing values.
+2. Normalize only reviewed portable records. Preserve mail TTLs and semantics; do not synthesize
+   missing values or silently convert a proxied Cloudflare record to DNS-only behavior.
 3. Apply through the protected infrastructure workflow and record the Cloud DNS nameservers.
 4. Query each new authoritative nameserver directly and compare answers with the incumbent zone.
 5. Lower incumbent TTLs far enough in advance for cached answers to expire.
