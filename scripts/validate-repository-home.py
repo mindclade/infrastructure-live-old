@@ -12,6 +12,7 @@ import datetime as dt
 import hashlib
 import html
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -72,6 +73,8 @@ CANONICAL_DOCUMENT_DIGESTS = {
 }
 SOURCE_HEADER_PATH = ".github/MINDCLADE_PROPRIETARY_SOURCE_HEADER.txt"
 SOURCE_HEADER_DIGEST = "0f2b024dbf454c08d57b663d8ad8e469215984a7007ef66bd37d651e046e0029"
+THIRD_PARTY_NOTICE_TOOL_DIGEST = "5c344b342d487242b5ff96dec64cf2f22afe52a3bbf8d1b6b97922cb0151d28f"
+SPDX_LICENSE_TOOL_DIGEST = "c6e3077d817d7f9181f35e42a55944c65dc36acb28a2228ff5abbab90633f7bd"
 
 LEGAL_CLAIM_PATTERNS = (
     (
@@ -205,6 +208,61 @@ def validate_legal_claims(root: Path) -> list[str]:
                     )
             if line.strip() and pending_annotation and line_number - pending_annotation[0] > 3:
                 pending_annotation = None
+    return errors
+
+
+def validate_third_party_notices(root: Path) -> list[str]:
+    """Require deterministic, complete notice generation from reviewed provenance."""
+    errors: list[str] = []
+    for required in ("contracts/third-party-materials.json", "THIRD_PARTY_NOTICES.md"):
+        if not (root / required).is_file():
+            errors.append(f"missing required third-party notice artifact: {required}")
+    tool = next(
+        (
+            candidate
+            for candidate in (
+                root / "scripts" / "generate-third-party-notices.py",
+                root / "tools" / "third_party_notices.py",
+            )
+            if candidate.is_file()
+        ),
+        None,
+    )
+    if tool is None:
+        errors.append("missing canonical third-party notice validator")
+        return errors
+    if hashlib.sha256(tool.read_bytes()).hexdigest() != THIRD_PARTY_NOTICE_TOOL_DIGEST:
+        errors.append("third-party notice validator differs from the policy bundle")
+        return errors
+    spdx_tool = next(
+        (
+            candidate
+            for candidate in (
+                root / "scripts" / "enrich-spdx-license.py",
+                root / "tools" / "enrich_spdx_license.py",
+            )
+            if candidate.is_file()
+        ),
+        None,
+    )
+    if spdx_tool is None:
+        errors.append("missing canonical SPDX proprietary-license enricher")
+        return errors
+    if hashlib.sha256(spdx_tool.read_bytes()).hexdigest() != SPDX_LICENSE_TOOL_DIGEST:
+        errors.append("SPDX proprietary-license enricher differs from the policy bundle")
+        return errors
+    if errors:
+        return errors
+    result = subprocess.run(
+        [sys.executable, str(tool), "--root", str(root)],
+        cwd=root,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        errors.append(f"third-party notice validation failed: {detail}")
     return errors
 
 
@@ -584,6 +642,7 @@ def validate(root: Path) -> list[str]:
 
     errors.extend(validate_common_documents(root, repository))
     errors.extend(validate_legal_claims(root))
+    errors.extend(validate_third_party_notices(root))
 
     for filename, label, key in CORE_BADGES:
         relative = f"docs/assets/badges/{filename}.svg"

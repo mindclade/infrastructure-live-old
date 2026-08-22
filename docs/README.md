@@ -13,6 +13,7 @@
 | Determine safe apply order | [Dependency graph](dependency-graph.md) | Identify unit dependencies and CI execution order |
 | Import or activate existing resources | [Initial import](initial-import.md) | Reconcile state before protected mutation |
 | Qualify production | [Production activation gates](production-activation-gates.md) | Collect required cloud, identity, and recovery evidence |
+| Publish vulnerability contact metadata | [security.txt publication](runbooks/security-txt-publication.md) | Serve and renew exact RFC 9116 files on every controlled HTTPS origin |
 | Diagnose or recover an incident | [Runbooks](runbooks/README.md) | Start from an observable failure and preserve state |
 
 ## Getting started
@@ -31,6 +32,8 @@
 - [Module interface contract](module-interface-contract.md) — immutable module references and
   preflight behavior.
 - [DNS domains](dns-domains.md) — registrar, authoritative DNS, mail, and delegation ownership.
+- [security.txt publication](runbooks/security-txt-publication.md) — generated contact files,
+  HTTPS-origin activation, connected evidence, renewal, and rollback.
 
 ## Handoffs and component boundaries
 

@@ -17,6 +17,7 @@
 | [GKE reconstruction](gke-reconstruction.md) | Recreate the cluster control plane and hand back to GitOps |
 | [Organization-policy rollback](org-policy-rollback.md) | Remove a bad normal-plane policy change without weakening the estate broadly |
 | [Protected-bucket restore](protected-bucket-restore.md) | Recover versioned data without overwriting the protected source bucket |
+| [security.txt publication](security-txt-publication.md) | Publish, qualify, renew, and roll back RFC 9116 contact files |
 | [State lock stuck](state-lock-stuck.md) | Verify ownership before force-unlocking state |
 | [VPC Service Controls denial](vpc-sc-denial.md) | Diagnose dry-run or enforced perimeter denials |
 | [Workload identity and holdout qualification](workload-identity-holdout-qualification.md) | Prove exact KSA/GSA trust and evaluation-data denial |

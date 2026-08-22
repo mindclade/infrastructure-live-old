@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "contact": "mailto:security@mindclade.com",
+  "policy": "https://mindclade.com/security",
+  "preferredLanguages": ["en"],
+  "expires": "2027-02-21T00:00:00Z",
+  "domains": [
+    "mindclade.com",
+    "mindclade.ai",
+    "mindclade.dev",
+    "mindclade.studio"
+  ],
+  "publication": {
+    "status": "blocked",
+    "mechanism": "https-origin-owned-by-platform",
+    "activationBlockers": [
+      "https-origin-routing-not-implemented",
+      "public-policy-url-not-qualified",
+      "connected-endpoint-evidence-absent"
+    ],
+    "connectedEvidence": null
+  }
+}

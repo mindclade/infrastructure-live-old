@@ -4,8 +4,8 @@ MONOREPO ?= ../mindclade-internal-monorepo
 GITOPS ?= ../gitops
 CANDIDATE_MODULE_VERSION ?= v0.4.0
 
-.PHONY: validate validate-integration validate-source-integration validate-module-interfaces validate-module-candidate validate-capacity-contract validate-capacity-candidate validate-workload-identity-contract validate-workload-identity-candidate validate-gitops-integration validate-argocd-image-exceptions validate-dns-portfolio validate-repository-home test format plan-development plan-staging plan-production
-validate: validate-production-contract validate-repository-home validate-argocd-image-exceptions validate-dns-portfolio test
+.PHONY: validate validate-integration validate-source-integration validate-module-interfaces validate-module-candidate validate-capacity-contract validate-capacity-candidate validate-workload-identity-contract validate-workload-identity-candidate validate-gitops-integration validate-argocd-image-exceptions validate-dns-portfolio validate-security-txt validate-repository-home test format plan-development plan-staging plan-production
+validate: validate-production-contract validate-repository-home validate-argocd-image-exceptions validate-dns-portfolio validate-security-txt test
 	python3 scripts/verify-provider-locks.py
 	./scripts/validate-live-tree.py
 	./scripts/validate-dependency-order.py
@@ -44,6 +44,9 @@ test:
 
 validate-dns-portfolio:
 	python3 scripts/validate_dns_portfolio.py
+
+validate-security-txt:
+	python3 scripts/validate_security_txt.py
 
 validate-repository-home:
 	python3 scripts/validate-repository-home.py --root .
