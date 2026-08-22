@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mindclade.com/contracts/dns-public-record-exceptions.schema.json",
+  "title": "DNS public address exceptions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schema_version", "domains"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"const": 1},
+    "domains": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["domain", "exceptions"],
+        "properties": {
+          "domain": {"type": "string", "format": "hostname"},
+          "exceptions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["record_key", "record_type", "review_status", "justification", "change_record", "approved_by", "approved_at", "expires_at"],
+              "properties": {
+                "record_key": {"type": "string", "minLength": 1},
+                "record_type": {"enum": ["A", "AAAA", "CNAME"]},
+                "review_status": {"enum": ["pending_review", "approved", "rejected"]},
+                "justification": {"type": "string", "minLength": 20},
+                "change_record": {"type": ["string", "null"], "pattern": "^CHG-[A-Za-z0-9._-]+$"},
+                "approved_by": {"type": ["string", "null"], "format": "email"},
+                "approved_at": {"type": ["string", "null"], "format": "date-time"},
+                "expires_at": {"type": ["string", "null"], "format": "date-time"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mindclade.com/contracts/dns-change-evidence.schema.json",
+  "title": "DNS change evidence manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schema_version", "evidence_store", "portfolio_gates", "domains"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"const": 1},
+    "evidence_store": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri_prefix", "retention_mode", "object_versioning_required"],
+      "properties": {
+        "uri_prefix": {"type": "string", "pattern": "^gs://[^/]+/.+/$"},
+        "retention_mode": {"const": "locked"},
+        "object_versioning_required": {"const": true}
+      }
+    },
+    "portfolio_gates": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/gate"}},
+    "domains": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["domain", "gates"],
+        "properties": {
+          "domain": {"type": "string", "format": "hostname"},
+          "gates": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/gate"}}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate_id", "phase", "status"],
+      "properties": {
+        "gate_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "phase": {"enum": ["inventory", "delegation"]},
+        "status": {"enum": ["pending", "pending_upload", "pending_review", "approved", "rejected"]},
+        "uri": {"type": ["string", "null"]},
+        "observed_at": {"type": ["string", "null"], "format": "date-time"},
+        "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "reviewer": {"type": ["string", "null"], "format": "email"},
+        "reviewed_at": {"type": ["string", "null"], "format": "date-time"},
+        "expires_at": {"type": ["string", "null"], "format": "date-time"}
+      }
+    }
+  }
+}

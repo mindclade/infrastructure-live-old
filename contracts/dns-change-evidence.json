@@ -1,0 +1,82 @@
+{
+  "$schema": "./dns-change-evidence.schema.json",
+  "schema_version": 1,
+  "evidence_store": {
+    "uri_prefix": "gs://mc-common-dns-change-evidence/dns/",
+    "retention_mode": "locked",
+    "object_versioning_required": true
+  },
+  "portfolio_gates": [
+    {"gate_id": "evidence_store_ready", "phase": "inventory", "status": "pending"},
+    {"gate_id": "immutable_module_release", "phase": "delegation", "status": "pending"},
+    {"gate_id": "common_dns_project", "phase": "delegation", "status": "pending"},
+    {"gate_id": "protected_automation_access", "phase": "delegation", "status": "pending"}
+  ],
+  "domains": [
+    {
+      "domain": "mindclade.ai",
+      "gates": [
+        {"gate_id": "authoritative_export", "phase": "inventory", "status": "pending"},
+        {"gate_id": "portable_record_review", "phase": "inventory", "status": "pending"},
+        {"gate_id": "workspace_identity_audit", "phase": "inventory", "status": "pending_upload", "uri": "gs://mc-common-dns-change-evidence/dns/portfolio/google-workspace-audit-20260822.md", "observed_at": "2026-08-22T00:00:00-04:00", "sha256": "6c7ff043b247814e6d26ba27ae22ebb009f19156403e7b9a8c6991c72c1d0376"},
+        {"gate_id": "certificate_issuer_inventory", "phase": "inventory", "status": "pending"},
+        {"gate_id": "public_address_exceptions", "phase": "delegation", "status": "pending"},
+        {"gate_id": "target_zone_snapshot", "phase": "delegation", "status": "pending"},
+        {"gate_id": "certificate_authorization", "phase": "delegation", "status": "pending"},
+        {"gate_id": "dnssec_preflight", "phase": "delegation", "status": "pending"},
+        {"gate_id": "change_record", "phase": "delegation", "status": "pending"},
+        {"gate_id": "rollback_packet", "phase": "delegation", "status": "pending"},
+        {"gate_id": "independent_review", "phase": "delegation", "status": "pending"}
+      ]
+    },
+    {
+      "domain": "mindclade.dev",
+      "gates": [
+        {"gate_id": "authoritative_export", "phase": "inventory", "status": "pending"},
+        {"gate_id": "portable_record_review", "phase": "inventory", "status": "pending"},
+        {"gate_id": "workspace_identity_audit", "phase": "inventory", "status": "pending_upload", "uri": "gs://mc-common-dns-change-evidence/dns/portfolio/google-workspace-audit-20260822.md", "observed_at": "2026-08-22T00:00:00-04:00", "sha256": "6c7ff043b247814e6d26ba27ae22ebb009f19156403e7b9a8c6991c72c1d0376"},
+        {"gate_id": "certificate_issuer_inventory", "phase": "inventory", "status": "pending"},
+        {"gate_id": "public_address_exceptions", "phase": "delegation", "status": "pending"},
+        {"gate_id": "target_zone_snapshot", "phase": "delegation", "status": "pending"},
+        {"gate_id": "certificate_authorization", "phase": "delegation", "status": "pending"},
+        {"gate_id": "dnssec_preflight", "phase": "delegation", "status": "pending"},
+        {"gate_id": "change_record", "phase": "delegation", "status": "pending"},
+        {"gate_id": "rollback_packet", "phase": "delegation", "status": "pending"},
+        {"gate_id": "independent_review", "phase": "delegation", "status": "pending"}
+      ]
+    },
+    {
+      "domain": "mindclade.studio",
+      "gates": [
+        {"gate_id": "authoritative_export", "phase": "inventory", "status": "pending"},
+        {"gate_id": "portable_record_review", "phase": "inventory", "status": "pending"},
+        {"gate_id": "workspace_identity_audit", "phase": "inventory", "status": "pending_upload", "uri": "gs://mc-common-dns-change-evidence/dns/portfolio/google-workspace-audit-20260822.md", "observed_at": "2026-08-22T00:00:00-04:00", "sha256": "6c7ff043b247814e6d26ba27ae22ebb009f19156403e7b9a8c6991c72c1d0376"},
+        {"gate_id": "certificate_issuer_inventory", "phase": "inventory", "status": "pending"},
+        {"gate_id": "website_dependency_review", "phase": "inventory", "status": "pending"},
+        {"gate_id": "target_zone_snapshot", "phase": "delegation", "status": "pending"},
+        {"gate_id": "certificate_authorization", "phase": "delegation", "status": "pending"},
+        {"gate_id": "dnssec_preflight", "phase": "delegation", "status": "pending"},
+        {"gate_id": "change_record", "phase": "delegation", "status": "pending"},
+        {"gate_id": "rollback_packet", "phase": "delegation", "status": "pending"},
+        {"gate_id": "independent_review", "phase": "delegation", "status": "pending"}
+      ]
+    },
+    {
+      "domain": "mindclade.com",
+      "gates": [
+        {"gate_id": "authoritative_export", "phase": "inventory", "status": "pending_upload", "uri": "gs://mc-common-dns-change-evidence/dns/mindclade.com/cloudflare-zone-20260821.txt", "observed_at": "2026-08-21T00:00:00-04:00", "sha256": "c0c54f51f6d4ba853e140dac5e10009294c3424ee54c4b395d2fdfbd185925ca"},
+        {"gate_id": "portable_record_review", "phase": "inventory", "status": "pending"},
+        {"gate_id": "workspace_identity_audit", "phase": "inventory", "status": "pending_upload", "uri": "gs://mc-common-dns-change-evidence/dns/portfolio/google-workspace-audit-20260822.md", "observed_at": "2026-08-22T00:00:00-04:00", "sha256": "6c7ff043b247814e6d26ba27ae22ebb009f19156403e7b9a8c6991c72c1d0376"},
+        {"gate_id": "certificate_issuer_inventory", "phase": "inventory", "status": "pending"},
+        {"gate_id": "cloudflare_feature_review", "phase": "inventory", "status": "pending"},
+        {"gate_id": "dmarc_observation", "phase": "inventory", "status": "pending"},
+        {"gate_id": "target_zone_snapshot", "phase": "delegation", "status": "pending"},
+        {"gate_id": "certificate_authorization", "phase": "delegation", "status": "pending"},
+        {"gate_id": "dnssec_preflight", "phase": "delegation", "status": "pending"},
+        {"gate_id": "change_record", "phase": "delegation", "status": "pending"},
+        {"gate_id": "rollback_packet", "phase": "delegation", "status": "pending"},
+        {"gate_id": "independent_review", "phase": "delegation", "status": "pending"}
+      ]
+    }
+  ]
+}

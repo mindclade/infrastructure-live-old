@@ -1,0 +1,58 @@
+{
+  "$schema": "./dns-public-record-exceptions.schema.json",
+  "schema_version": 1,
+  "domains": [
+    {
+      "domain": "mindclade.ai",
+      "exceptions": [
+        {
+          "record_key": "apex-a",
+          "record_type": "A",
+          "review_status": "pending_review",
+          "justification": "Preserve the reviewed Squarespace apex website during the controlled DNS migration.",
+          "change_record": null,
+          "approved_by": null,
+          "approved_at": null,
+          "expires_at": null
+        },
+        {
+          "record_key": "www-cname",
+          "record_type": "CNAME",
+          "review_status": "pending_review",
+          "justification": "Preserve the reviewed Squarespace www hostname during the controlled DNS migration.",
+          "change_record": null,
+          "approved_by": null,
+          "approved_at": null,
+          "expires_at": null
+        }
+      ]
+    },
+    {
+      "domain": "mindclade.dev",
+      "exceptions": [
+        {
+          "record_key": "apex-a",
+          "record_type": "A",
+          "review_status": "pending_review",
+          "justification": "Preserve the reviewed Squarespace apex website during the controlled DNS migration.",
+          "change_record": null,
+          "approved_by": null,
+          "approved_at": null,
+          "expires_at": null
+        },
+        {
+          "record_key": "www-cname",
+          "record_type": "CNAME",
+          "review_status": "pending_review",
+          "justification": "Preserve the reviewed Squarespace www hostname during the controlled DNS migration.",
+          "change_record": null,
+          "approved_by": null,
+          "approved_at": null,
+          "expires_at": null
+        }
+      ]
+    },
+    {"domain": "mindclade.studio", "exceptions": []},
+    {"domain": "mindclade.com", "exceptions": []}
+  ]
+}
