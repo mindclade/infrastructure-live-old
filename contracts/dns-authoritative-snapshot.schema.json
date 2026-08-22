@@ -9,7 +9,7 @@
     "schema_version": {"const": 1},
     "domain": {"type": "string", "format": "hostname"},
     "captured_at": {"type": "string", "format": "date-time"},
-    "authoritative_nameservers": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "authoritative_nameservers": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^(?=.{1,254}\\.?$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.?$"}},
     "parent_ds": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
     "records": {"type": "array", "items": {"type": "object", "minProperties": 1}}
   }

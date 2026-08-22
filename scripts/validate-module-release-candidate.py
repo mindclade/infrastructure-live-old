@@ -62,7 +62,6 @@ def validate_candidate(repo: Path, candidate_version: str, candidate_ref: str) -
     if not SEMVER.fullmatch(candidate_version):
         raise CandidateError("candidate version must be an exact vMAJOR.MINOR.PATCH version")
     resolve_exact_commit(repo, candidate_ref)
-    validator = Path(__file__).with_name("validate-module-interfaces.py")
     with tempfile.TemporaryDirectory(prefix="mindclade-module-candidate-") as temporary:
         snapshot = Path(temporary) / "monorepo"
         _run(
@@ -82,16 +81,22 @@ def validate_candidate(repo: Path, candidate_version: str, candidate_ref: str) -
         ).stdout.strip()
         if checked_out != candidate_ref:
             raise CandidateError(f"detached snapshot resolved to unexpected commit {checked_out}")
-        _run(
-            [
-                sys.executable,
-                str(validator),
-                "--monorepo",
-                str(snapshot),
-                "--candidate-version",
-                candidate_version,
-            ]
-        )
+        for validator_name in (
+            "validate-module-interfaces.py",
+            "validate-capacity-contract.py",
+            "validate-workload-identity-contract.py",
+        ):
+            validator = Path(__file__).with_name(validator_name)
+            _run(
+                [
+                    sys.executable,
+                    str(validator),
+                    "--monorepo",
+                    str(snapshot),
+                    "--candidate-version",
+                    candidate_version,
+                ]
+            )
 
 
 def main() -> int:
@@ -106,7 +111,8 @@ def main() -> int:
         print(f"release-candidate validation failed: {error}", file=sys.stderr)
         return 1
     print(
-        f"module interfaces match {args.candidate_version} at exact commit {args.candidate_ref}"
+        f"module, capacity, and workload identity interfaces match {args.candidate_version} "
+        f"at exact commit {args.candidate_ref}"
     )
     return 0
 
