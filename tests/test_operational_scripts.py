@@ -14,6 +14,7 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -127,6 +128,62 @@ def production_qualification_identity(
     }
 
 
+def bazel_cache_identity(
+    pool: str = "projects/123456789/locations/global/workloadIdentityPools/github",
+) -> dict[str, Any]:
+    repository = "mindclade/mindclade-internal-monorepo"
+    route_specs = {
+        "pull-request-read": (
+            "read",
+            "pull_request",
+            "pull-request-merge",
+            f"{repository}/.github/workflows/presubmit.yml",
+        ),
+        "trusted-main-write": (
+            "write",
+            "push",
+            "protected-main",
+            f"{repository}/.github/workflows/presubmit.yml",
+        ),
+        "merge-group-write": (
+            "write",
+            "merge_group",
+            "protected-merge-queue",
+            f"{repository}/.github/workflows/presubmit.yml",
+        ),
+        "nightly-write": (
+            "write",
+            "schedule",
+            "protected-main",
+            f"{repository}/.github/workflows/nightly.yml",
+        ),
+    }
+    return {
+        "workload_identity_provider": f"{pool}/providers/gh-bazel-cache",
+        "repository": repository,
+        "repository_owner_id": "316676129",
+        "repository_id": "1333792222",
+        "routes": {
+            route: {
+                "access": access,
+                "event_name": event_name,
+                "principal": (
+                    f"principal://iam.googleapis.com/{pool}/subject/"
+                    f"bazel-cache:{route}"
+                ),
+                "ref_policy": ref_policy,
+                "workflow_path": workflow_path,
+            }
+            for route, (
+                access,
+                event_name,
+                ref_policy,
+                workflow_path,
+            ) in route_specs.items()
+        },
+    }
+
+
 class PlanSafetyTest(unittest.TestCase):
     def test_repository_root_is_never_a_plan_directory(self) -> None:
         with self.assertRaises(ValueError):
@@ -227,6 +284,45 @@ class PlanSafetyTest(unittest.TestCase):
             ACCOUNT_VALIDATOR.dr_evidence_identity_errors(
                 json.dumps(identity), pool, "mindclade"
             )
+        )
+
+    def test_bazel_cache_identity_contract_is_route_exact(self) -> None:
+        pool = "projects/123456789/locations/global/workloadIdentityPools/github"
+        identity = bazel_cache_identity(pool)
+        self.assertEqual(
+            ACCOUNT.validated_bazel_cache_identity(identity, pool, "mindclade"),
+            identity,
+        )
+        self.assertEqual(
+            ACCOUNT_VALIDATOR.bazel_cache_identity_errors(
+                json.dumps(identity), pool, "mindclade"
+            ),
+            [],
+        )
+
+    def test_bazel_cache_identity_rejects_read_escalation_and_stale_routes(
+        self,
+    ) -> None:
+        pool = "projects/123456789/locations/global/workloadIdentityPools/github"
+        escalated = bazel_cache_identity(pool)
+        escalated["routes"]["pull-request-read"]["access"] = "write"
+        with self.assertRaisesRegex(ValueError, "pull-request-read"):
+            ACCOUNT.validated_bazel_cache_identity(escalated, pool, "mindclade")
+        self.assertTrue(
+            ACCOUNT_VALIDATOR.bazel_cache_identity_errors(
+                json.dumps(escalated), pool, "mindclade"
+            )
+        )
+
+        stale = bazel_cache_identity(pool)
+        stale["routes"]["manual-write"] = stale["routes"]["nightly-write"]
+        with self.assertRaisesRegex(ValueError, "inventory is not exact"):
+            ACCOUNT.validated_bazel_cache_identity(stale, pool, "mindclade")
+        self.assertIn(
+            "Bazel cache identity route inventory is not exact",
+            ACCOUNT_VALIDATOR.bazel_cache_identity_errors(
+                json.dumps(stale), pool, "mindclade"
+            ),
         )
 
     def test_state_prefix_accepts_only_exact_no_object_result(self) -> None:
@@ -414,6 +510,7 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
         self.previous_qualification = os.environ.get(
             "PRODUCTION_QUALIFICATION_IDENTITY_JSON"
         )
+        self.previous_bazel_cache = os.environ.get("BAZEL_CACHE_IDENTITY_JSON")
         os.environ["ARTIFACT_RELEASE_IDENTITIES_JSON"] = json.dumps(
             release_identities(), sort_keys=True, separators=(",", ":")
         )
@@ -421,6 +518,9 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
             production_qualification_identity(),
             sort_keys=True,
             separators=(",", ":"),
+        )
+        os.environ["BAZEL_CACHE_IDENTITY_JSON"] = json.dumps(
+            bazel_cache_identity(), sort_keys=True, separators=(",", ":")
         )
 
     def tearDown(self) -> None:
@@ -434,6 +534,10 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
             os.environ["PRODUCTION_QUALIFICATION_IDENTITY_JSON"] = (
                 self.previous_qualification
             )
+        if self.previous_bazel_cache is None:
+            os.environ.pop("BAZEL_CACHE_IDENTITY_JSON", None)
+        else:
+            os.environ["BAZEL_CACHE_IDENTITY_JSON"] = self.previous_bazel_cache
 
     @staticmethod
     def output(value, sensitive: bool = False):
@@ -462,6 +566,25 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
                 applied_release_identities
             ),
             "ci_project_id": self.output("mc-common-ci"),
+            "bazel_cache_identity_contract": self.output(
+                {
+                    "WIF_PROVIDER_BAZEL_CACHE": bazel_cache_identity()[
+                        "workload_identity_provider"
+                    ],
+                    "SA_BAZEL_CACHE_READER": (
+                        "bazel-cache-reader@mc-common-ci.iam.gserviceaccount.com"
+                    ),
+                    "SA_BAZEL_CACHE_WRITER": (
+                        "bazel-cache-writer@mc-common-ci.iam.gserviceaccount.com"
+                    ),
+                    "repository": bazel_cache_identity()["repository"],
+                    "repository_owner_id": bazel_cache_identity()[
+                        "repository_owner_id"
+                    ],
+                    "repository_id": bazel_cache_identity()["repository_id"],
+                    "routes": bazel_cache_identity()["routes"],
+                }
+            ),
         }
         gitops = {
             "github_config_identity_handoff": self.output(
@@ -542,9 +665,39 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
             contract["variables"]["BINAUTHZ_DEPLOYMENT_ATTESTOR"],
             "deployment-attestor",
         )
-        self.assertEqual(len(contract["variables"]), 25)
-        self.assertEqual(contract["contract_version"], "1.3.0")
+        self.assertEqual(len(contract["variables"]), 28)
+        self.assertEqual(contract["contract_version"], "1.4.0")
+        self.assertEqual(
+            contract["variables"]["SA_BAZEL_CACHE_READER"],
+            "bazel-cache-reader@mc-common-ci.iam.gserviceaccount.com",
+        )
         self.assertFalse(contract["credential_material_included"])
+
+    def test_bazel_cache_applied_output_must_match_bootstrap_and_role_split(self) -> None:
+        automation, gitops, binauthz, qualification = self.fixtures()
+        automation["bazel_cache_identity_contract"]["value"]["routes"][
+            "pull-request-read"
+        ]["access"] = "write"
+        with self.assertRaisesRegex(ValueError, "differs from bootstrap"):
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
+
+        automation, gitops, binauthz, qualification = self.fixtures()
+        automation["bazel_cache_identity_contract"]["value"][
+            "SA_BAZEL_CACHE_WRITER"
+        ] = "bazel-cache-reader@mc-common-ci.iam.gserviceaccount.com"
+        with self.assertRaisesRegex(ValueError, "wrong service account"):
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
+
+        automation, gitops, binauthz, qualification = self.fixtures()
+        os.environ["BAZEL_CACHE_IDENTITY_JSON"] = "{}"
+        with self.assertRaisesRegex(ValueError, "field inventory"):
+            HANDOFF.compile_contract(
+                automation, gitops, binauthz, qualification, "a" * 40
+            )
 
     def test_sensitive_output_is_rejected(self) -> None:
         automation, gitops, binauthz, qualification = self.fixtures()

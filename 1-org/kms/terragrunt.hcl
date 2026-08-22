@@ -19,6 +19,14 @@ include "root" {
   expose = true
 }
 
+dependency "common_projects" {
+  config_path = "../common-projects"
+  mock_outputs = {
+    project_numbers = { ci = "000000000001" }
+  }
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+}
+
 terraform {
   source = "${include.root.locals.module_source_base}//kms?ref=${local.module_version}"
 }
@@ -50,6 +58,12 @@ inputs = {
       rotation_period_seconds = 7776000 # 90 days
       protection_level        = "HSM"
     }
+  }
+
+  encrypter_decrypters = {
+    ci_artifacts = [
+      "serviceAccount:service-${dependency.common_projects.outputs.project_numbers["ci"]}@gs-project-accounts.iam.gserviceaccount.com",
+    ]
   }
 
   labels = include.root.locals.common_labels

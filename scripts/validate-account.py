@@ -26,6 +26,7 @@ REQUIRED = {
     "GITHUB_WIF_POOL_NAME": r"^projects/[0-9]+/locations/global/workloadIdentityPools/[a-z0-9-]+$",
     "ARTIFACT_RELEASE_IDENTITIES_JSON": r"^\{.+\}$",
     "DR_EVIDENCE_IDENTITY_JSON": r"^\{.+\}$",
+    "BAZEL_CACHE_IDENTITY_JSON": r"^\{.+\}$",
     "PRODUCTION_QUALIFICATION_IDENTITY_JSON": r"^\{.+\}$",
     "TFSTATE_BUCKET_DEVELOPMENT": r"^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$",
     "TFSTATE_BUCKET_STAGING": r"^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$",
@@ -193,6 +194,78 @@ def production_qualification_identity_errors(
     return errors
 
 
+def bazel_cache_identity_errors(
+    payload: str, pool: str, organization: str
+) -> list[str]:
+    try:
+        identity = json.loads(payload)
+    except json.JSONDecodeError:
+        return ["BAZEL_CACHE_IDENTITY_JSON is not valid JSON"]
+    required = {
+        "workload_identity_provider",
+        "repository",
+        "repository_owner_id",
+        "repository_id",
+        "routes",
+    }
+    if not isinstance(identity, dict) or set(identity) != required:
+        return ["Bazel cache identity contract is not exact"]
+    repository = f"{organization}/mindclade-internal-monorepo"
+    errors: list[str] = []
+    if identity.get("workload_identity_provider") != (
+        f"{pool}/providers/gh-bazel-cache"
+    ):
+        errors.append("Bazel cache identity provider differs")
+    if identity.get("repository") != repository:
+        errors.append("Bazel cache identity repository differs")
+    for field in ("repository_owner_id", "repository_id"):
+        value = identity.get(field)
+        if not isinstance(value, str) or re.fullmatch(r"[0-9]+", value) is None:
+            errors.append(f"Bazel cache identity {field} differs")
+    route_specs = {
+        "pull-request-read": (
+            "read",
+            "pull_request",
+            "pull-request-merge",
+            f"{repository}/.github/workflows/presubmit.yml",
+        ),
+        "trusted-main-write": (
+            "write",
+            "push",
+            "protected-main",
+            f"{repository}/.github/workflows/presubmit.yml",
+        ),
+        "merge-group-write": (
+            "write",
+            "merge_group",
+            "protected-merge-queue",
+            f"{repository}/.github/workflows/presubmit.yml",
+        ),
+        "nightly-write": (
+            "write",
+            "schedule",
+            "protected-main",
+            f"{repository}/.github/workflows/nightly.yml",
+        ),
+    }
+    routes = identity.get("routes")
+    if not isinstance(routes, dict) or set(routes) != set(route_specs):
+        return errors + ["Bazel cache identity route inventory is not exact"]
+    for route, (access, event_name, ref_policy, workflow_path) in route_specs.items():
+        expected = {
+            "access": access,
+            "event_name": event_name,
+            "principal": (
+                f"principal://iam.googleapis.com/{pool}/subject/bazel-cache:{route}"
+            ),
+            "ref_policy": ref_policy,
+            "workflow_path": workflow_path,
+        }
+        if routes[route] != expected:
+            errors.append(f"Bazel cache identity route differs: {route}")
+    return errors
+
+
 def source_errors() -> list[str]:
     text = SOURCE.read_text(encoding="utf-8")
     errors = []
@@ -254,6 +327,13 @@ def runtime_values() -> tuple[dict[str, str], list[str]]:
     errors.extend(
         production_qualification_identity_errors(
             values["PRODUCTION_QUALIFICATION_IDENTITY_JSON"],
+            values["GITHUB_WIF_POOL_NAME"],
+            values["MONOREPO_ORG"],
+        )
+    )
+    errors.extend(
+        bazel_cache_identity_errors(
+            values["BAZEL_CACHE_IDENTITY_JSON"],
             values["GITHUB_WIF_POOL_NAME"],
             values["MONOREPO_ORG"],
         )

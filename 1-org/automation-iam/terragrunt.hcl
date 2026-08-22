@@ -36,6 +36,7 @@ inputs = {
   github_org                  = include.root.locals.account_vars.locals.github_org
   artifact_release_identities = include.root.locals.account_vars.locals.artifact_release_identities
   dr_evidence_identity        = include.root.locals.account_vars.locals.dr_evidence_identity
+  bazel_cache_identity        = include.root.locals.account_vars.locals.bazel_cache_identity
 
   environment_folder_ids = {
     development = dependency.folders.outputs.folder_ids["development"]

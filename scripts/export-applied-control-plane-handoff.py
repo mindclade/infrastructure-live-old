@@ -158,6 +158,142 @@ def require_service_account(
     return account
 
 
+def bazel_cache_handoff(
+    automation_outputs: dict[str, Any], ci_project_id: str
+) -> dict[str, str]:
+    applied = require_mapping(
+        output_value(
+            automation_outputs,
+            "bazel_cache_identity_contract",
+            "automation_iam",
+        ),
+        "bazel_cache_identity_contract",
+    )
+    applied_fields = {
+        "WIF_PROVIDER_BAZEL_CACHE",
+        "SA_BAZEL_CACHE_READER",
+        "SA_BAZEL_CACHE_WRITER",
+        "repository",
+        "repository_owner_id",
+        "repository_id",
+        "routes",
+    }
+    if set(applied) != applied_fields:
+        raise ValueError("applied Bazel cache identity field inventory is not exact")
+    try:
+        bootstrap = json.loads(
+            require_string(
+                os.environ.get("BAZEL_CACHE_IDENTITY_JSON"),
+                "environment BAZEL_CACHE_IDENTITY_JSON",
+            )
+        )
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            "environment BAZEL_CACHE_IDENTITY_JSON is not valid JSON"
+        ) from error
+    bootstrap_fields = {
+        "workload_identity_provider",
+        "repository",
+        "repository_owner_id",
+        "repository_id",
+        "routes",
+    }
+    if not isinstance(bootstrap, dict) or set(bootstrap) != bootstrap_fields:
+        raise ValueError("bootstrap Bazel cache identity field inventory is not exact")
+    applied_source = {
+        "workload_identity_provider": applied["WIF_PROVIDER_BAZEL_CACHE"],
+        "repository": applied["repository"],
+        "repository_owner_id": applied["repository_owner_id"],
+        "repository_id": applied["repository_id"],
+        "routes": applied["routes"],
+    }
+    if applied_source != bootstrap:
+        raise ValueError("applied Bazel cache identity differs from bootstrap")
+
+    provider = require_string(
+        applied["WIF_PROVIDER_BAZEL_CACHE"], "WIF_PROVIDER_BAZEL_CACHE"
+    )
+    provider_match = re.fullmatch(
+        r"(projects/[0-9]+/locations/global/workloadIdentityPools/github)"
+        r"/providers/gh-bazel-cache",
+        provider,
+    )
+    if provider_match is None:
+        raise ValueError("WIF_PROVIDER_BAZEL_CACHE is not the dedicated provider")
+    repository = "mindclade/mindclade-internal-monorepo"
+    if applied["repository"] != repository:
+        raise ValueError("applied Bazel cache repository is not exact")
+    for field in ("repository_owner_id", "repository_id"):
+        if re.fullmatch(r"[0-9]+", str(applied[field])) is None:
+            raise ValueError(f"applied Bazel cache {field} is not immutable")
+
+    route_specs = {
+        "pull-request-read": (
+            "read",
+            "pull_request",
+            "pull-request-merge",
+            f"{repository}/.github/workflows/presubmit.yml",
+        ),
+        "trusted-main-write": (
+            "write",
+            "push",
+            "protected-main",
+            f"{repository}/.github/workflows/presubmit.yml",
+        ),
+        "merge-group-write": (
+            "write",
+            "merge_group",
+            "protected-merge-queue",
+            f"{repository}/.github/workflows/presubmit.yml",
+        ),
+        "nightly-write": (
+            "write",
+            "schedule",
+            "protected-main",
+            f"{repository}/.github/workflows/nightly.yml",
+        ),
+    }
+    routes = applied["routes"]
+    if not isinstance(routes, dict) or set(routes) != set(route_specs):
+        raise ValueError("applied Bazel cache route inventory is not exact")
+    for route, (access, event_name, ref_policy, workflow_path) in route_specs.items():
+        expected = {
+            "access": access,
+            "event_name": event_name,
+            "principal": (
+                "principal://iam.googleapis.com/"
+                f"{provider_match.group(1)}/subject/bazel-cache:{route}"
+            ),
+            "ref_policy": ref_policy,
+            "workflow_path": workflow_path,
+        }
+        if routes[route] != expected:
+            raise ValueError(f"applied Bazel cache route is not exact: {route}")
+
+    reader = require_service_account(
+        applied["SA_BAZEL_CACHE_READER"],
+        "SA_BAZEL_CACHE_READER",
+        expected_account="bazel-cache-reader",
+        project_suffix="-common-ci",
+    )
+    writer = require_service_account(
+        applied["SA_BAZEL_CACHE_WRITER"],
+        "SA_BAZEL_CACHE_WRITER",
+        expected_account="bazel-cache-writer",
+        project_suffix="-common-ci",
+    )
+    if not all(
+        account.endswith(f"@{ci_project_id}.iam.gserviceaccount.com")
+        for account in (reader, writer)
+    ):
+        raise ValueError("Bazel cache service accounts disagree with ci_project_id")
+    return {
+        "WIF_PROVIDER_BAZEL_CACHE": provider,
+        "SA_BAZEL_CACHE_READER": reader,
+        "SA_BAZEL_CACHE_WRITER": writer,
+    }
+
+
 def compile_contract(
     automation_outputs: dict[str, Any],
     gitops_outputs: dict[str, Any],
@@ -234,6 +370,7 @@ def compile_contract(
         for account in release_service_accounts.values()
     ):
         raise ValueError("ARC service accounts disagree with automation_iam.ci_project_id")
+    cache_variables = bazel_cache_handoff(automation_outputs, ci_project_id)
 
     identities = require_mapping(
         output_value(
@@ -377,6 +514,7 @@ def compile_contract(
     variables = {
         "CI_PROJECT_ID": ci_project_id,
         **release_service_accounts,
+        **cache_variables,
         "SA_GITOPS_RENDER": require_service_account(
             identities.get("SA_GITOPS_RENDER"),
             "SA_GITOPS_RENDER",
@@ -422,7 +560,7 @@ def compile_contract(
         "BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION": deployment_key,
     }
     return {
-        "contract_version": "1.3.0",
+        "contract_version": "1.4.0",
         "producer": "mindclade/infrastructure-live",
         "source_commit": source_commit,
         "environment": "production",

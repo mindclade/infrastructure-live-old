@@ -320,6 +320,40 @@ elif REPOSITORY == "infrastructure-live":
         if output_name not in automation_outputs:
             error(f"artifact signer identity output omits: {output_name}")
 
+    for identity in ("bazel-cache-reader", "bazel-cache-writer"):
+        if identity not in automation_text:
+            error(f"normal-plane Bazel cache identity missing: {identity}")
+    for cache_trust_value in (
+        'resource "google_service_account_iam_member" "bazel_cache_github_wif"',
+        'role               = "roles/iam.workloadIdentityUser"',
+        'each.key == "pull-request-read" ? "reader" : "writer"',
+        'subject/bazel-cache:${route}',
+        'check "bazel_cache_trust_contract"',
+    ):
+        if cache_trust_value not in automation_main:
+            error(f"Bazel cache trust contract omits: {cache_trust_value}")
+    automation_variables = (ROOT / "1-org/automation-iam/variables.tf").read_text(
+        "utf-8", errors="ignore"
+    )
+    for blocking_trust_value in (
+        'variable "bazel_cache_identity"',
+        'try(',
+        'subject/bazel-cache:${route}',
+        'error_message = "bazel_cache_identity must match the exact blocking bootstrap contract 1.5.0',
+    ):
+        if blocking_trust_value not in automation_variables:
+            error(f"blocking Bazel cache input contract omits: {blocking_trust_value}")
+    if "roles/storage.objectAdmin" in automation_text:
+        error("normal-plane Bazel cache identities receive object-admin authority")
+    for output_name in (
+        "WIF_PROVIDER_BAZEL_CACHE",
+        "SA_BAZEL_CACHE_READER",
+        "SA_BAZEL_CACHE_WRITER",
+        "bazel_cache_identity_contract",
+    ):
+        if output_name not in automation_outputs:
+            error(f"Bazel cache identity output omits: {output_name}")
+
     control_plane_outputs = (
         ROOT / "5-workloads/shared/control-plane-identities/outputs.tf"
     ).read_text("utf-8", errors="ignore")
@@ -355,6 +389,25 @@ elif REPOSITORY == "infrastructure-live":
         error("missing applied control-plane handoff exporter")
     if not handoff_schema_path.is_file():
         error("missing applied control-plane handoff schema")
+    else:
+        handoff_schema = json.loads(handoff_schema_path.read_text("utf-8"))
+        handoff_properties = handoff_schema.get("properties", {})
+        handoff_variables = handoff_properties.get("variables", {})
+        if handoff_properties.get("contract_version", {}).get("const") != "1.4.0":
+            error("applied control-plane handoff schema must declare version 1.4.0")
+        for cache_variable in (
+            "WIF_PROVIDER_BAZEL_CACHE",
+            "SA_BAZEL_CACHE_READER",
+            "SA_BAZEL_CACHE_WRITER",
+        ):
+            if (
+                cache_variable not in handoff_variables.get("required", [])
+                or cache_variable not in handoff_variables.get("properties", {})
+            ):
+                error(
+                    "applied control-plane handoff schema omits exact Bazel cache variable: "
+                    f"{cache_variable}"
+                )
     if handoff_exporter_path.is_file():
         handoff_exporter = handoff_exporter_path.read_text(
             "utf-8", errors="ignore"
@@ -363,6 +416,11 @@ elif REPOSITORY == "infrastructure-live":
             "artifact_release_identity_contract",
             "ARTIFACT_RELEASE_IDENTITIES_JSON",
             "PRODUCTION_QUALIFICATION_IDENTITY_JSON",
+            "BAZEL_CACHE_IDENTITY_JSON",
+            "bazel_cache_identity_contract",
+            "WIF_PROVIDER_BAZEL_CACHE",
+            "SA_BAZEL_CACHE_READER",
+            "SA_BAZEL_CACHE_WRITER",
             "SA_ARC_CANARY",
             "SA_ARTIFACT_QUALIFICATION_READER",
             "SA_ARTIFACT_PROMOTER",
@@ -378,6 +436,7 @@ elif REPOSITORY == "infrastructure-live":
             '"attestor_key_versions"',
             '"ENFORCED_BLOCK_AND_AUDIT_LOG"',
             '"deployment-attestor"',
+            '"contract_version": "1.4.0"',
             "infrastructure-live source tree must be clean before export",
             "source commit differs from --expected-source-commit",
             "applied handoff evidence must be written outside the repository",
@@ -528,6 +587,11 @@ elif REPOSITORY == "infrastructure-live":
             "DR_EVIDENCE_IDENTITY_JSON",
             "DR evidence identity",
         ),
+        (
+            "bazel_cache_identity",
+            "BAZEL_CACHE_IDENTITY_JSON",
+            "Bazel cache identity",
+        ),
     ):
         guarded_decode = (
             rf'{local_name}\s*=\s*jsondecode\(coalesce\('
@@ -552,10 +616,12 @@ elif REPOSITORY == "infrastructure-live":
         "validated_retired_buildkite" not in bootstrap_account
         or '"ARTIFACT_RELEASE_IDENTITIES_JSON"' not in bootstrap_account
         or '"DR_EVIDENCE_IDENTITY_JSON"' not in bootstrap_account
+        or '"BAZEL_CACHE_IDENTITY_JSON"' not in bootstrap_account
         or "validated_release_identities" not in bootstrap_account
         or "validated_dr_evidence_identity" not in bootstrap_account
+        or "validated_bazel_cache_identity" not in bootstrap_account
     ):
-        error("bootstrap account exporter omits an exact v5 identity contract")
+        error("bootstrap account exporter omits an exact identity contract")
     initial_import = (ROOT / "docs/initial-import.md").read_text(
         "utf-8", errors="ignore"
     )
@@ -581,7 +647,7 @@ elif REPOSITORY == "infrastructure-live":
     if (
         '"platform_contract"' not in bootstrap_account
         or '"output"' not in bootstrap_account
-        or 'contract.get("contract_version") != "1.4.0"' not in bootstrap_account
+        or 'contract.get("contract_version") != "1.5.0"' not in bootstrap_account
     ):
         error(
             "bootstrap account exporter bypasses the versioned Ring-0 platform contract"
@@ -773,6 +839,7 @@ elif REPOSITORY == "infrastructure-live":
             "ORG_POLICY_ACTIVATION_PHASE",
             "ARTIFACT_RELEASE_IDENTITIES_JSON",
             "DR_EVIDENCE_IDENTITY_JSON",
+            "BAZEL_CACHE_IDENTITY_JSON",
         ):
             if (
                 f"{required_variable}: ${{{{ vars.{required_variable} }}}}"
@@ -970,13 +1037,61 @@ elif REPOSITORY == "infrastructure-live":
     selector = (ROOT / "scripts/select-apply-scopes.py").read_text(
         "utf-8", errors="ignore"
     )
-    if (
-        '"foundation": ("1-org/", "3-networks/shared/", "5-workloads/shared/")'
-        not in selector
+    for foundation_prefix in (
+        '"1-org/"',
+        '"3-networks/shared/"',
+        '"5-workloads/shared/"',
+        '"5-workloads/ci/"',
     ):
-        error(
-            "shared control-plane identities are not assigned to foundation authority"
-        )
+        if foundation_prefix not in selector:
+            error(f"foundation apply selector omits: {foundation_prefix}")
+    scope_runner = (ROOT / "scripts/terragrunt-scope.py").read_text(
+        "utf-8", errors="ignore"
+    )
+    if '"5-workloads/ci"' not in scope_runner:
+        error("protected foundation runner omits common CI workloads")
+
+    common_projects = (ROOT / "1-org/common-projects/terragrunt.hcl").read_text(
+        "utf-8", errors="ignore"
+    )
+    if '"storage.googleapis.com"' not in common_projects:
+        error("common CI project does not enable the Cloud Storage API")
+    kms = (ROOT / "1-org/kms/terragrunt.hcl").read_text(
+        "utf-8", errors="ignore"
+    )
+    for kms_contract in (
+        'project_numbers = { ci = "000000000001" }',
+        "encrypter_decrypters = {",
+        'service-${dependency.common_projects.outputs.project_numbers["ci"]}@gs-project-accounts.iam.gserviceaccount.com',
+    ):
+        if kms_contract not in kms:
+            error(f"common CI cache CMEK contract omits: {kms_contract}")
+    cache_unit_path = ROOT / "5-workloads/ci/bazel-remote-cache/terragrunt.hcl"
+    cache_readme_path = ROOT / "5-workloads/ci/bazel-remote-cache/README.md"
+    if cache_unit_path.is_file():
+        cache_unit = cache_unit_path.read_text("utf-8", errors="ignore")
+        for cache_contract in (
+            '//bazel_remote_cache?ref=${local.module_version}',
+            'module_version = "v0.4.0"',
+            'project_ids["ci"]',
+            'crypto_key_ids["ci_artifacts"]',
+            'config_path = "../../shared/bazel-cache-access-logs"',
+            "bazel_cache_service_accounts.reader",
+            "bazel_cache_service_accounts.writer",
+            'access_log_object_prefix = "bazel-remote-cache/common-ci/"',
+        ):
+            if cache_contract not in cache_unit:
+                error(f"common CI Bazel cache caller omits: {cache_contract}")
+    if cache_readme_path.is_file():
+        cache_readme = cache_readme_path.read_text("utf-8", errors="ignore")
+        for activation_hold in (
+            "planned contract `v0.4.0`",
+            "does not assert that the tag is published or any resource is live",
+            "ordinary `PUT` requests",
+            "`ifGenerationMatch=0`",
+        ):
+            if activation_hold not in cache_readme:
+                error(f"common CI Bazel cache activation hold omits: {activation_hold}")
 
     for workflow_name in ("plan.yml", "drift.yml"):
         workflow = (ROOT / f".github/workflows/{workflow_name}").read_text(

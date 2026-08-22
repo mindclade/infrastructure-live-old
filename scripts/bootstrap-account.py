@@ -229,6 +229,83 @@ def validated_production_qualification_identity(
     return expected
 
 
+def validated_bazel_cache_identity(
+    value: Any, github_pool: str, github_org: str
+) -> dict[str, Any]:
+    required = {
+        "workload_identity_provider",
+        "repository",
+        "repository_owner_id",
+        "repository_id",
+        "routes",
+    }
+    if not isinstance(value, dict) or set(value) != required:
+        raise ValueError("platform_contract Bazel cache identity is not exact")
+    repository = f"{github_org}/mindclade-internal-monorepo"
+    if value["workload_identity_provider"] != (
+        f"{github_pool}/providers/gh-bazel-cache"
+    ):
+        raise ValueError("platform_contract Bazel cache provider is wrong")
+    if value["repository"] != repository:
+        raise ValueError("platform_contract Bazel cache repository is wrong")
+    for field in ("repository_owner_id", "repository_id"):
+        if not isinstance(value[field], str) or re.fullmatch(
+            r"[0-9]+", value[field]
+        ) is None:
+            raise ValueError(f"platform_contract Bazel cache {field} is wrong")
+    route_specs = {
+        "pull-request-read": (
+            "read",
+            "pull_request",
+            "pull-request-merge",
+            f"{repository}/.github/workflows/presubmit.yml",
+        ),
+        "trusted-main-write": (
+            "write",
+            "push",
+            "protected-main",
+            f"{repository}/.github/workflows/presubmit.yml",
+        ),
+        "merge-group-write": (
+            "write",
+            "merge_group",
+            "protected-merge-queue",
+            f"{repository}/.github/workflows/presubmit.yml",
+        ),
+        "nightly-write": (
+            "write",
+            "schedule",
+            "protected-main",
+            f"{repository}/.github/workflows/nightly.yml",
+        ),
+    }
+    routes = value["routes"]
+    if not isinstance(routes, dict) or set(routes) != set(route_specs):
+        raise ValueError("platform_contract Bazel cache route inventory is not exact")
+    validated_routes: dict[str, dict[str, str]] = {}
+    for route, (access, event_name, ref_policy, workflow_path) in route_specs.items():
+        expected = {
+            "access": access,
+            "event_name": event_name,
+            "principal": (
+                f"principal://iam.googleapis.com/{github_pool}/subject/"
+                f"bazel-cache:{route}"
+            ),
+            "ref_policy": ref_policy,
+            "workflow_path": workflow_path,
+        }
+        if routes[route] != expected:
+            raise ValueError(f"platform_contract Bazel cache route is wrong: {route}")
+        validated_routes[route] = expected
+    return {
+        "repository": repository,
+        "repository_id": value["repository_id"],
+        "repository_owner_id": value["repository_owner_id"],
+        "routes": validated_routes,
+        "workload_identity_provider": value["workload_identity_provider"],
+    }
+
+
 def main() -> int:
     args = parse_args()
     bootstrap = args.bootstrap.resolve()
@@ -252,7 +329,7 @@ def main() -> int:
             capture_output=True,
         )
         contract = json.loads(output.stdout)
-        if contract.get("contract_version") != "1.4.0":
+        if contract.get("contract_version") != "1.5.0":
             raise ValueError(
                 f"unsupported bootstrap platform_contract version: {contract.get('contract_version', 'missing')}"
             )
@@ -278,6 +355,9 @@ def main() -> int:
             pool,
             github_org,
         )
+        bazel_cache_identity = validated_bazel_cache_identity(
+            need(github, "bazel_cache_identity", "github"), pool, github_org
+        )
         values = {
             "GCP_ORG_ID": need(contract, "organization_id", "platform_contract"),
             "BILLING_ACCOUNT": need(contract, "billing_account", "platform_contract"),
@@ -296,6 +376,9 @@ def main() -> int:
             ),
             "DR_EVIDENCE_IDENTITY_JSON": json.dumps(
                 dr_evidence_identity, sort_keys=True, separators=(",", ":")
+            ),
+            "BAZEL_CACHE_IDENTITY_JSON": json.dumps(
+                bazel_cache_identity, sort_keys=True, separators=(",", ":")
             ),
             "PRODUCTION_QUALIFICATION_IDENTITY_JSON": json.dumps(
                 production_qualification_identity,

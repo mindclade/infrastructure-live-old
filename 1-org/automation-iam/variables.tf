@@ -84,7 +84,71 @@ variable "dr_evidence_identity" {
         "infrastructure-live:scratch", "infrastructure-live:staging", "gitops:scratch", "gitops:staging",
       ])
     )
-    error_message = "dr_evidence_identity must match bootstrap contract 1.4.0 and contain exactly eight protected caller principals."
+    error_message = "dr_evidence_identity must match the bootstrap DR evidence contract and contain exactly eight protected caller principals."
+  }
+}
+
+variable "bazel_cache_identity" {
+  description = "Bootstrap-exported dedicated provider and exact Bazel cache access routes."
+  type = object({
+    workload_identity_provider = string
+    repository                 = string
+    repository_owner_id        = string
+    repository_id              = string
+    routes = map(object({
+      access        = string
+      event_name    = string
+      principal     = string
+      ref_policy    = string
+      workflow_path = string
+    }))
+  })
+
+  validation {
+    condition = try(
+      var.bazel_cache_identity.workload_identity_provider == "${var.github_wif_pool_name}/providers/gh-bazel-cache" &&
+      var.bazel_cache_identity.repository == "${var.github_org}/mindclade-internal-monorepo" &&
+      can(regex("^[0-9]+$", var.bazel_cache_identity.repository_owner_id)) &&
+      can(regex("^[0-9]+$", var.bazel_cache_identity.repository_id)) &&
+      toset(keys(var.bazel_cache_identity.routes)) == toset([
+        "pull-request-read", "trusted-main-write", "merge-group-write", "nightly-write",
+      ]) &&
+      alltrue([
+        for route, expected in {
+          pull-request-read = {
+            access        = "read"
+            event_name    = "pull_request"
+            ref_policy    = "pull-request-merge"
+            workflow_path = "${var.github_org}/mindclade-internal-monorepo/.github/workflows/presubmit.yml"
+          }
+          trusted-main-write = {
+            access        = "write"
+            event_name    = "push"
+            ref_policy    = "protected-main"
+            workflow_path = "${var.github_org}/mindclade-internal-monorepo/.github/workflows/presubmit.yml"
+          }
+          merge-group-write = {
+            access        = "write"
+            event_name    = "merge_group"
+            ref_policy    = "protected-merge-queue"
+            workflow_path = "${var.github_org}/mindclade-internal-monorepo/.github/workflows/presubmit.yml"
+          }
+          nightly-write = {
+            access        = "write"
+            event_name    = "schedule"
+            ref_policy    = "protected-main"
+            workflow_path = "${var.github_org}/mindclade-internal-monorepo/.github/workflows/nightly.yml"
+          }
+        } :
+        var.bazel_cache_identity.routes[route].access == expected.access &&
+        var.bazel_cache_identity.routes[route].event_name == expected.event_name &&
+        var.bazel_cache_identity.routes[route].ref_policy == expected.ref_policy &&
+        var.bazel_cache_identity.routes[route].workflow_path == expected.workflow_path &&
+        var.bazel_cache_identity.routes[route].principal == "principal://iam.googleapis.com/${var.github_wif_pool_name}/subject/bazel-cache:${route}"
+      ]),
+      false,
+    )
+    error_message = "bazel_cache_identity must match the exact blocking bootstrap contract 1.5.0 provider, repository, and read/write routes."
   }
 }
 

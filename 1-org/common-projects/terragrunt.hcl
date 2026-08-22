@@ -84,6 +84,7 @@ inputs = {
         "monitoring.googleapis.com",
         "secretmanager.googleapis.com",
         "serviceusage.googleapis.com",
+        "storage.googleapis.com",
       ]
       lien = true
     }

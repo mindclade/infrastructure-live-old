@@ -67,3 +67,21 @@ output "dr_evidence_identity_contract" {
     job_workflow_ref         = var.dr_evidence_identity.job_workflow_ref
   }
 }
+
+output "bazel_cache_service_accounts" {
+  description = "Separate normal-plane reader and writer service-account emails for bucket IAM."
+  value       = { for access, account in google_service_account.bazel_cache : access => account.email }
+}
+
+output "bazel_cache_identity_contract" {
+  description = "Applied provider, exact route principals, and normal-plane service accounts for github-config handoff."
+  value = {
+    WIF_PROVIDER_BAZEL_CACHE = var.bazel_cache_identity.workload_identity_provider
+    SA_BAZEL_CACHE_READER    = google_service_account.bazel_cache["reader"].email
+    SA_BAZEL_CACHE_WRITER    = google_service_account.bazel_cache["writer"].email
+    repository               = var.bazel_cache_identity.repository
+    repository_owner_id      = var.bazel_cache_identity.repository_owner_id
+    repository_id            = var.bazel_cache_identity.repository_id
+    routes                   = var.bazel_cache_identity.routes
+  }
+}

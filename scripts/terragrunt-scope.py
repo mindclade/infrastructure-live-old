@@ -25,6 +25,7 @@ SCOPES = {
         "1-org",
         "3-networks/shared",
         "5-workloads/shared",
+        "5-workloads/ci",
         "5-workloads/development/vpc-sc-perimeter",
         "5-workloads/staging/vpc-sc-perimeter",
         "5-workloads/production/vpc-sc-perimeter",

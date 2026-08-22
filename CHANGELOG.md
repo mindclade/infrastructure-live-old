@@ -10,6 +10,11 @@ not reconstructed or relabeled here.
 
 ### Added
 
+- Added the source-only common-CI Bazel-cache foundation: separate reader/writer identities,
+  exact bootstrap `1.5.0` route bindings, CMEK and access-logged storage, and protected foundation
+  scope selection. The applied-output exporter now emits the combined exact `1.4.0` handoff only
+  after its Terraform output matches the bootstrap identity JSON. Activation remains blocked on
+  the unpublished `v0.4.0` module and qualified create-only client semantics.
 - Added the exact estate-wide `LEGAL.md` reliance policy and made it part of
   the repository contract.
 
