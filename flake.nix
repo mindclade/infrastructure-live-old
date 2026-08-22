@@ -135,6 +135,7 @@
 
           validationPython = pkgs.python3.withPackages (pythonPackages: [
             pythonPackages.jsonschema
+            pythonPackages.pyyaml
           ]);
 
           ciShell = pkgs.mkShell {

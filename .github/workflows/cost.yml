@@ -3,12 +3,13 @@
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
 
-# Cost diff on every PR. The cloud-facing estimator cannot mutate the pull request; a
-# separate job publishes the already-produced diff.
+# Cost diff on every pull request and merge-queue candidate. The cloud-facing estimator
+# cannot mutate the pull request; a separate PR-only job publishes the already-produced diff.
 name: cost
 
 on:
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
@@ -57,7 +58,9 @@ env:
 
 jobs:
   infracost:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      ${{ github.event_name == 'merge_group' ||
+          github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # Match the bootstrap plan identity's exact environment-shaped subject. Fork pull
@@ -104,13 +107,41 @@ jobs:
           # Third-party pricing-only credential, scoped as a repository secret. This job has
           # read-only cloud identity and no GitHub mutation permission.
           api-key: ${{ secrets.INFRACOST_API_KEY }}
-      - name: Baseline from the merge base
+      - id: baseline
+        name: Resolve exact event baseline
         run: |
           set -euo pipefail
-          git checkout "origin/${{ github.base_ref }}" --quiet
-          nix develop .#ci --command infracost breakdown --path=. --format=json --out-file=/tmp/base.json || \
-            echo '{"projects":[]}' > /tmp/base.json
-          git checkout - --quiet
+          baseline_sha="$(python3 scripts/resolve_infracost_base.py)"
+          git cat-file -e "${baseline_sha}^{commit}"
+          if ! git merge-base --is-ancestor "$baseline_sha" HEAD; then
+            echo "::error::The event baseline is not an ancestor of the checked-out candidate."
+            exit 1
+          fi
+          printf 'sha=%s\n' "$baseline_sha" >> "$GITHUB_OUTPUT"
+      - name: Calculate exact baseline
+        env:
+          BASE_SHA: ${{ steps.baseline.outputs.sha }}
+        run: |
+          set -euo pipefail
+          baseline_root="$(mktemp -d)"
+          baseline_directory="${baseline_root}/checkout"
+          cleanup() {
+            set +e
+            git worktree remove --force "$baseline_directory" >/dev/null 2>&1
+            rm -rf "$baseline_root"
+          }
+          trap cleanup EXIT
+
+          git worktree add --detach "$baseline_directory" "$BASE_SHA"
+          (
+            cd "$baseline_directory"
+            nix develop .#ci --command infracost breakdown \
+              --path=. \
+              --format=json \
+              --out-file=/tmp/base.json
+          )
+          test -s /tmp/base.json
+          jq . /tmp/base.json >/dev/null
       - name: Calculate cost diff
         run: |
           set -euo pipefail
@@ -137,7 +168,7 @@ jobs:
 
   comment:
     needs: [infracost]
-    if: always()
+    if: ${{ always() && github.event_name == 'pull_request' && needs.infracost.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -153,11 +184,33 @@ jobs:
         with:
           api-key: ${{ secrets.INFRACOST_API_KEY }}
       - name: Publish cost comment
+        env:
+          INFRACOST_GITHUB_TOKEN: ${{ github.token }}
+          INFRACOST_PULL_REQUEST: ${{ github.event.pull_request.number }}
+          INFRACOST_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           infracost comment github \
             --path=artifacts/diff.json \
-            --repo="${{ github.repository }}" \
-            --pull-request="${{ github.event.pull_request.number }}" \
-            --github-token="${{ github.token }}" \
+            --repo="${INFRACOST_REPOSITORY}" \
+            --pull-request="${INFRACOST_PULL_REQUEST}" \
+            --github-token="${INFRACOST_GITHUB_TOKEN}" \
             --behavior=update
+
+  verdict:
+    name: infracost / verdict
+    needs: [infracost]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require a successful cost estimate
+        env:
+          INFRACOST_RESULT: ${{ needs.infracost.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$INFRACOST_RESULT" != "success" ]]; then
+            echo "::error::Infracost did not complete successfully (${INFRACOST_RESULT})."
+            exit 1
+          fi
