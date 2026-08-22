@@ -22,8 +22,21 @@ locals {
     "${pair[0]}:${pair[1]}" => { project = pair[0], role = pair[1] }
   }
 
+  # Production only. `staging` was here, and its presence defeated the control this key exists
+  # to provide: roles/cloudkms.signer on `production-eligibility-decisions` let the staging
+  # control-plane-admin mint decisions for production.
+  #
+  # Nothing downstream can tell the difference. The decision schema carries digests, an epoch, a
+  # result and timestamps -- no issuer and no environment -- and verify_response checks only the
+  # key id and key version. A staging-signed decision over a production bundle digest is
+  # therefore cryptographically indistinguishable from a production-issued one, which is the
+  # whole premise of the protected-eligibility flow.
+  #
+  # If staging must rehearse the flow, it needs its OWN key ring entry, not shared use of this
+  # one; the alternative -- an issuer field with a per-environment allowlist in verify_response --
+  # is a schema change across gitops and .github rather than a binding change here.
   eligibility_admin_principals = {
-    for environment in ["staging", "production"] : environment =>
+    for environment in ["production"] : environment =>
     "principal://iam.googleapis.com/projects/${var.platform_project_numbers[environment]}/locations/global/workloadIdentityPools/${var.platform_project_ids[environment]}.svc.id.goog/subject/ns/mindclade-system/sa/control-plane-admin"
   }
 }
