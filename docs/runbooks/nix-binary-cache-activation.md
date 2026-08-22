@@ -2,7 +2,7 @@
 
 # Nix binary-cache qualification and activation
 
-> **Platform Foundation · Protected cache publication**  
+> **Platform Foundation · Protected cache publication**
 > Qualify a private Attic service without granting pull requests write authority or exposing
 > server signing material to any client.
 
