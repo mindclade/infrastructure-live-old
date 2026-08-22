@@ -4,9 +4,9 @@
 
 # Cloud KMS key ring reserved for Binary Authorization attestor signing keys.
 #
-# The ring only. The KEYS in it are created by the `binauthz` module, not here, because each
-# attestor key is bound to the attestor it signs for — declaring them here would split one
-# object across two units and two state files.
+# This unit owns the ring only. The keys in it are created by the dependent `binauthz`
+# units, not here, because each attestor key is bound to the attestor it signs for.
+# Declaring those keys here would split their authority across two state files.
 #
 # Org-scoped rather than per-environment: an attestation travels with an image digest across
 # environments, so the key that signed it cannot belong to one of them. This is the same
@@ -32,7 +32,11 @@ inputs = {
 
   key_ring_name = "${include.root.locals.prefix}-binauthz"
 
-  # Deliberately empty. The binauthz module creates the attestor keys in this ring.
+  # This state owns only the protected ring. The dependent Binary Authorization states
+  # create their attestor keys in it and must remain the sole CryptoKey owners.
+  ring_only = true
+
+  # The module rejects ring_only when either map is nonempty.
   keys         = {}
   signing_keys = {}
 
