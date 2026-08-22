@@ -41,4 +41,3 @@ next dependency or protected apply environment is unavailable.
       artifact and preserved its source, license, provenance, and notices.
 - [ ] I updated `LICENSE`, `NOTICE`, the SBOM, or other license evidence when
       the included or distributed material changed.
-

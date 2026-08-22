@@ -42,4 +42,3 @@ Drift is checked automatically. Production access, destructive-change policy,
 backup and recovery, DNS ownership, and exception records are reviewed at
 least quarterly. Organization-wide defaults are defined in
 [`mindclade/.github/GOVERNANCE.md`](https://github.com/mindclade/.github/blob/main/GOVERNANCE.md).
-
