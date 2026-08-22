@@ -14,6 +14,11 @@ import re
 import sys
 from pathlib import Path
 
+try:
+    from account_handoff import account_handoff_errors
+except ModuleNotFoundError:
+    from scripts.account_handoff import account_handoff_errors
+
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "account.hcl"
 REQUIRED = {
@@ -28,6 +33,7 @@ REQUIRED = {
     "DR_EVIDENCE_IDENTITY_JSON": r"^\{.+\}$",
     "BAZEL_CACHE_IDENTITY_JSON": r"^\{.+\}$",
     "PRODUCTION_QUALIFICATION_IDENTITY_JSON": r"^\{.+\}$",
+    "BOOTSTRAP_ACCOUNT_HANDOFF_JSON": r"^\{.+\}$",
     "TFSTATE_BUCKET_DEVELOPMENT": r"^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$",
     "TFSTATE_BUCKET_STAGING": r"^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$",
     "TFSTATE_BUCKET_PRODUCTION": r"^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$",
@@ -338,6 +344,7 @@ def runtime_values() -> tuple[dict[str, str], list[str]]:
             values["MONOREPO_ORG"],
         )
     )
+    errors.extend(account_handoff_errors(values["BOOTSTRAP_ACCOUNT_HANDOFF_JSON"], values))
     return dict(sorted(values.items())), errors
 
 

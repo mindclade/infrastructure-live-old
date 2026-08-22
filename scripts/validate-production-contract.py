@@ -592,10 +592,20 @@ elif REPOSITORY == "infrastructure-live":
             "BAZEL_CACHE_IDENTITY_JSON",
             "Bazel cache identity",
         ),
+        (
+            "production_qualification_identity",
+            "PRODUCTION_QUALIFICATION_IDENTITY_JSON",
+            "production qualification identity",
+        ),
+        (
+            "bootstrap_account_handoff",
+            "BOOTSTRAP_ACCOUNT_HANDOFF_JSON",
+            "applied bootstrap account handoff",
+        ),
     ):
         guarded_decode = (
-            rf'{local_name}\s*=\s*jsondecode\(coalesce\('
-            rf'get_env\("{variable}",\s*""\),\s*"\{{\}}"\)\)'
+            rf'{local_name}\s*=\s*jsondecode\(\s*coalesce\(\s*'
+            rf'get_env\("{variable}",\s*""\),\s*"\{{\}}"\)\s*,?\s*\)'
         )
         if not re.search(guarded_decode, account_text):
             error(
@@ -617,9 +627,12 @@ elif REPOSITORY == "infrastructure-live":
         or '"ARTIFACT_RELEASE_IDENTITIES_JSON"' not in bootstrap_account
         or '"DR_EVIDENCE_IDENTITY_JSON"' not in bootstrap_account
         or '"BAZEL_CACHE_IDENTITY_JSON"' not in bootstrap_account
+        or '"BOOTSTRAP_ACCOUNT_HANDOFF_JSON"' not in bootstrap_account
         or "validated_release_identities" not in bootstrap_account
         or "validated_dr_evidence_identity" not in bootstrap_account
         or "validated_bazel_cache_identity" not in bootstrap_account
+        or "bootstrap_source_commit" not in bootstrap_account
+        or "build_account_handoff" not in bootstrap_account
     ):
         error("bootstrap account exporter omits an exact identity contract")
     initial_import = (ROOT / "docs/initial-import.md").read_text(

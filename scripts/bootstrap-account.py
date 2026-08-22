@@ -18,6 +18,11 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+try:
+    from account_handoff import bootstrap_source_commit, build_account_handoff
+except ModuleNotFoundError:
+    from scripts.account_handoff import bootstrap_source_commit, build_account_handoff
+
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -316,6 +321,7 @@ def main() -> int:
         cloud_identity_customer_id = validated_customer_id(
             os.environ.get("CLOUD_IDENTITY_CUSTOMER_ID", "")
         )
+        source_commit = bootstrap_source_commit(bootstrap)
         output = subprocess.run(
             [
                 "terraform",
@@ -429,6 +435,11 @@ def main() -> int:
             "STATE_LOCATION": need(contract["state"], "primary_location", "state"),
             "MONOREPO_ORG": github_org,
         }
+        values["BOOTSTRAP_ACCOUNT_HANDOFF_JSON"] = json.dumps(
+            build_account_handoff(contract, values, source_commit),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         content = "# Generated from verified bootstrap outputs. Contains identifiers only; never commit.\n"
         content += "".join(
             f"export {name}={shlex.quote(str(value))}\n"

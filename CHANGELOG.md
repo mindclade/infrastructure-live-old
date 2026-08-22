@@ -34,6 +34,10 @@ not reconstructed or relabeled here.
 
 ### Security
 
+- Bound every runtime state-bucket and Terraform service-account value to one versioned,
+  schema-validated record generated from the applied bootstrap contract and its clean source
+  commit. Mismatches now fail closed with redacted diagnostics before connected automation can
+  authenticate.
 - Clarified that security response times are non-contractual operational
   targets and that safe harbor cannot authorize third-party systems or
   unlawful conduct.
