@@ -29,6 +29,23 @@ class CiActivationReadinessTest(unittest.TestCase):
         errors = MODULE.validate(document, dt.date(2026, 8, 23))
         self.assertTrue(any("incomplete" in error for error in errors), errors)
 
+    def test_spot_source_is_complete_but_activation_remains_fail_closed(self) -> None:
+        document = MODULE.load_contract()
+        spot = next(
+            item
+            for item in document["capabilities"]
+            if item["id"] == "arc-presubmit-spot"
+        )
+        self.assertEqual(spot["sourceState"], "complete")
+        self.assertEqual(spot["activationState"], "blocked")
+        self.assertEqual(tuple(spot["blockers"]), MODULE.EXPECTED_SPOT_BLOCKERS)
+
+    def test_generated_readiness_document_is_current(self) -> None:
+        document = MODULE.load_contract()
+        self.assertEqual(
+            MODULE.DOC.read_text(encoding="utf-8"), MODULE.render(document)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

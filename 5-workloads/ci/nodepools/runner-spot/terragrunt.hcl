@@ -4,12 +4,11 @@
 
 # Dormant interruptible capacity for the non-release presubmit lane.
 #
-# This pool is deliberately unschedulable by every current ARC scale set: it uses a distinct
-# workload-class label and carries both the module-managed Spot taint and the presubmit taint below.
-# Do not apply it until GitOps defines a separate scale set with both exact tolerations, retry
-# semantics distinguish eviction from test failure, quota/cost is approved, and connected eviction
-# evidence is retained. Release, signing, canary, build, and qualification lanes stay on the
-# on-demand `../runner` pool.
+# The paired GitOps presubmit fixture selects this pool's distinct workload class and tolerates both
+# the module-managed Spot taint and the presubmit taint below, but remains blocked at zero capacity.
+# Do not apply or activate it until retry semantics distinguish eviction from test failure,
+# quota/cost is approved, and connected eviction evidence is retained. Release, signing, canary,
+# build, and qualification lanes stay on the on-demand `../runner` pool.
 
 include "root" {
   path   = find_in_parent_folders("root.hcl")

@@ -16,11 +16,11 @@ in [production activation gates](../../docs/production-activation-gates.md).
 
 ## Dedicated runner-pool handoff
 
-`5-workloads/ci/nodepools/runner` owns the on-demand node pool for untrusted runner pods. It exposes
-the label `mindclade.dev/workload-class=arc-runner` and the taint
-`scheduling.mindclade.dev/arc-runner=true:NoSchedule`. GitOps runner values must select that label
-and carry only the matching toleration; the ARC controller must retain neither and stay on the
-system pool.
+`5-workloads/ci/nodepools/runner` owns the on-demand node pool for untrusted canary, build, and
+qualification runner pods. It exposes the label `mindclade.dev/workload-class=arc-runner` and the
+taint `scheduling.mindclade.dev/arc-runner=true:NoSchedule`. Those three GitOps values must select
+that label and carry only the matching toleration; the ARC controller must retain neither and stay
+on the system pool.
 
 Apply the infrastructure runner pool before reconciling the paired GitOps placement change.
 `minRunners: 0` is not a rollout guard: an active scale set can scale from zero when a job queues,
@@ -32,12 +32,18 @@ make validate-gitops-integration GITOPS=../gitops
 ```
 
 The six-node pool ceiling covers the currently declared artifact-authority request concurrency.
-`5-workloads/ci/nodepools/runner-spot` is a separate, zero-floor, eight-node source proposal for the
-24-runner presubmit target. It uses `mindclade.dev/workload-class=arc-presubmit-spot`, the explicit
-presubmit taint, and the module-managed Spot taint, so no current scale set can schedule there.
-Do not apply it until GitOps adds a separately reviewed presubmit scale set with both tolerations,
-job routing distinguishes eviction from test failure, and quota, cost, eviction, drain, and
-on-demand rollback evidence are qualified. Release/signing lanes remain on the on-demand pool.
+`5-workloads/ci/nodepools/runner-spot` is a separate, zero-floor, eight-node source contract for the
+dormant 24-runner presubmit target. It uses
+`mindclade.dev/workload-class=arc-presubmit-spot`, the module-managed
+`scheduling.mindclade.dev/spot=true:NoSchedule` taint, and the explicit
+`scheduling.mindclade.dev/arc-presubmit=true:NoSchedule` taint. The paired GitOps presubmit fixture
+selects that label and tolerates exactly both taints, while retaining `minRunners: 0`,
+`maxRunners: 0`, and blocked activation.
+
+Do not apply the Spot pool or activate presubmit until the module release and protected plan exist,
+job routing distinguishes eviction from test failure, and quota, cost, eviction, drain, scale from
+zero, and on-demand rollback evidence are qualified. Release/signing lanes remain on the on-demand
+pool. Run the cross-repository validation against the exact paired commits before either PR merges.
 
 ## Workstation image source authority
 

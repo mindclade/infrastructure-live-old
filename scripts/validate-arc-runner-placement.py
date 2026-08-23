@@ -19,18 +19,38 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER_UNIT = Path("5-workloads/ci/nodepools/runner/terragrunt.hcl")
 SPOT_UNIT = Path("5-workloads/ci/nodepools/runner-spot/terragrunt.hcl")
-RUNNER_RELEASES = ("canary", "build", "qualify", "presubmit")
-EXPECTED_NODE_SELECTOR = {
+ON_DEMAND_RELEASES = ("canary", "build", "qualify")
+PRESUBMIT_RELEASE = "presubmit"
+RUNNER_RELEASES = (*ON_DEMAND_RELEASES, PRESUBMIT_RELEASE)
+EXPECTED_ON_DEMAND_NODE_SELECTOR = {
     "iam.gke.io/gke-metadata-server-enabled": "true",
     "mindclade.dev/workload-class": "arc-runner",
 }
-EXPECTED_TOLERATIONS = [
+EXPECTED_ON_DEMAND_TOLERATIONS = [
     {
         "key": "scheduling.mindclade.dev/arc-runner",
         "operator": "Equal",
         "value": "true",
         "effect": "NoSchedule",
     }
+]
+EXPECTED_SPOT_NODE_SELECTOR = {
+    "iam.gke.io/gke-metadata-server-enabled": "true",
+    "mindclade.dev/workload-class": "arc-presubmit-spot",
+}
+EXPECTED_SPOT_TOLERATIONS = [
+    {
+        "key": "scheduling.mindclade.dev/spot",
+        "operator": "Equal",
+        "value": "true",
+        "effect": "NoSchedule",
+    },
+    {
+        "key": "scheduling.mindclade.dev/arc-presubmit",
+        "operator": "Equal",
+        "value": "true",
+        "effect": "NoSchedule",
+    },
 ]
 
 
@@ -143,6 +163,10 @@ def validate_infrastructure(root: Path = ROOT) -> list[str]:
             "Apply the infrastructure runner pool before reconciling",
             "5-workloads/ci/nodepools/runner-spot",
             "mindclade.dev/workload-class=arc-presubmit-spot",
+            "scheduling.mindclade.dev/spot=true:NoSchedule",
+            "scheduling.mindclade.dev/arc-presubmit=true:NoSchedule",
+            "zero-floor, eight-node source contract",
+            "Release/signing lanes remain",
         ):
             if required_text not in documentation:
                 errors.append(f"ARC cloud-foundation documentation omits: {required_text}")
@@ -157,6 +181,49 @@ def load_mapping(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"{path} must contain one YAML object")
     return payload
+
+
+def canonical_tolerations(
+    value: Any,
+) -> tuple[tuple[tuple[str, str], ...], ...] | None:
+    """Compare tolerations as an exact order-independent Kubernetes list."""
+
+    if not isinstance(value, list) or any(
+        not isinstance(item, dict) for item in value
+    ):
+        return None
+    return tuple(
+        sorted(
+            tuple(
+                sorted(
+                    (str(key), str(raw_value))
+                    for key, raw_value in toleration.items()
+                )
+            )
+            for toleration in value
+        )
+    )
+
+
+def validate_runner_spec(path: Path, release: str, spec: Any) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(spec, dict):
+        return [f"{path} omits the runner pod spec"]
+    if release == PRESUBMIT_RELEASE:
+        expected_selector = EXPECTED_SPOT_NODE_SELECTOR
+        expected_tolerations = EXPECTED_SPOT_TOLERATIONS
+        placement = "ARC presubmit Spot pool"
+    else:
+        expected_selector = EXPECTED_ON_DEMAND_NODE_SELECTOR
+        expected_tolerations = EXPECTED_ON_DEMAND_TOLERATIONS
+        placement = "ARC on-demand runner pool"
+    if spec.get("nodeSelector") != expected_selector:
+        errors.append(f"{path} disagrees with the {placement} node label")
+    if canonical_tolerations(spec.get("tolerations")) != canonical_tolerations(
+        expected_tolerations
+    ):
+        errors.append(f"{path} disagrees with the {placement} node taints")
+    return errors
 
 
 def validate_gitops(gitops: Path) -> list[str]:
@@ -188,13 +255,7 @@ def validate_gitops(gitops: Path) -> list[str]:
                         else None
                     )
                     spec = template.get("spec") if isinstance(template, dict) else None
-                if not isinstance(spec, dict):
-                    errors.append(f"{path} omits the runner pod spec")
-                    continue
-                if spec.get("nodeSelector") != EXPECTED_NODE_SELECTOR:
-                    errors.append(f"{path} disagrees with the infrastructure node label")
-                if spec.get("tolerations") != EXPECTED_TOLERATIONS:
-                    errors.append(f"{path} disagrees with the infrastructure node taint")
+                errors.extend(validate_runner_spec(path, release, spec))
             except (OSError, ValueError, yaml.YAMLError) as error:
                 errors.append(str(error))
     return errors

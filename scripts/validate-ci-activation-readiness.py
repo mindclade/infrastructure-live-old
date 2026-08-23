@@ -18,11 +18,21 @@ CONTRACT = ROOT / "contracts/ci-activation-readiness.json"
 DOC = ROOT / "docs/generated/ci-activation-readiness.md"
 EXPECTED = {
     "arc-on-demand-runners": ("complete", "blocked"),
-    "arc-presubmit-spot": ("proposed", "blocked"),
+    "arc-presubmit-spot": ("complete", "blocked"),
     "bazel-remote-cache": ("complete", "blocked"),
     "bazel-remote-execution": ("complete", "blocked"),
     "nix-attic-cache": ("proposed", "blocked"),
 }
+EXPECTED_SPOT_BLOCKERS = (
+    "module-v0.4.0-published",
+    "protected-plan-retained",
+    "spot-pool-applied",
+    "connected-placement-and-scale-from-zero-qualified",
+    "quota-and-cost-approved",
+    "eviction-and-retry-qualified",
+    "drain-qualified",
+    "on-demand-rollback-qualified",
+)
 
 
 def load_contract() -> dict:
@@ -57,6 +67,13 @@ def validate(document: dict, as_of: dt.date) -> list[str]:
             errors.append(f"{capability_id}: lifecycle differs from reviewed source state")
         if not isinstance(item["blockers"], list) or not item["blockers"]:
             errors.append(f"{capability_id}: blocked lifecycle must retain blockers")
+        if (
+            capability_id == "arc-presubmit-spot"
+            and tuple(item["blockers"]) != EXPECTED_SPOT_BLOCKERS
+        ):
+            errors.append(
+                "arc-presubmit-spot: activation blockers do not cover the reviewed rollout"
+            )
         for relative in item.get("sourcePaths", []):
             if not ROOT.joinpath(relative).exists():
                 errors.append(f"{capability_id}: source path is missing: {relative}")
