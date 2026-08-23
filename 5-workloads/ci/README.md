@@ -32,8 +32,12 @@ make validate-gitops-integration GITOPS=../gitops
 ```
 
 The six-node pool ceiling covers the currently declared artifact-authority request concurrency.
-The dormant presubmit target adds up to 24 runners and must not activate until a reviewed
-infrastructure change, quota/cost analysis, and connected scheduling test qualify a larger bound.
+`5-workloads/ci/nodepools/runner-spot` is a separate, zero-floor, eight-node source proposal for the
+24-runner presubmit target. It uses `mindclade.dev/workload-class=arc-presubmit-spot`, the explicit
+presubmit taint, and the module-managed Spot taint, so no current scale set can schedule there.
+Do not apply it until GitOps adds a separately reviewed presubmit scale set with both tolerations,
+job routing distinguishes eviction from test failure, and quota, cost, eviction, drain, and
+on-demand rollback evidence are qualified. Release/signing lanes remain on the on-demand pool.
 
 ## Workstation image source authority
 

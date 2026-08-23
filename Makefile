@@ -5,8 +5,8 @@ GITOPS ?= ../gitops
 CANDIDATE_MODULE_VERSION ?= v0.4.0
 CANDIDATE_MODULE_REF ?=
 
-.PHONY: validate validate-integration validate-source-integration validate-release-candidate validate-module-interfaces validate-module-candidate validate-module-worktree-candidate validate-capacity-contract validate-capacity-candidate validate-workload-identity-contract validate-workload-identity-candidate validate-gitops-integration validate-argocd-image-exceptions validate-arc-runner-placement validate-arc-runner-placement-integration validate-infracost-workflow validate-nix-cache validate-nix-cache-integration validate-workstation-egress validate-workstation-image-integration validate-dns validate-dns-source validate-dns-portfolio validate-dns-governance test-dns validate-security-txt validate-repository-home test format plan-development plan-staging plan-production
-validate: validate-production-contract validate-repository-home validate-argocd-image-exceptions validate-arc-runner-placement validate-infracost-workflow validate-nix-cache validate-workstation-egress validate-dns-source validate-security-txt test
+.PHONY: validate validate-integration validate-source-integration validate-release-candidate validate-module-interfaces validate-module-candidate validate-module-worktree-candidate validate-capacity-contract validate-capacity-candidate validate-workload-identity-contract validate-workload-identity-candidate validate-gitops-integration validate-argocd-image-exceptions validate-arc-runner-placement validate-arc-runner-placement-integration validate-ci-readiness validate-infracost-workflow validate-nix-cache validate-nix-cache-integration validate-workstation-egress validate-workstation-image-integration validate-dns validate-dns-source validate-dns-portfolio validate-dns-governance test-dns validate-security-txt validate-repository-home test format plan-development plan-staging plan-production
+validate: validate-production-contract validate-repository-home validate-argocd-image-exceptions validate-arc-runner-placement validate-ci-readiness validate-infracost-workflow validate-nix-cache validate-workstation-egress validate-dns-source validate-security-txt test
 	python3 scripts/verify-provider-locks.py
 	./scripts/validate-live-tree.py
 	./scripts/validate-dependency-order.py
@@ -56,6 +56,9 @@ validate-arc-runner-placement:
 
 validate-arc-runner-placement-integration:
 	python3 scripts/validate-arc-runner-placement.py --gitops "$(GITOPS)"
+
+validate-ci-readiness:
+	python3 scripts/validate-ci-activation-readiness.py --check
 
 validate-nix-cache:
 	python3 scripts/validate_nix_binary_cache.py

@@ -236,6 +236,23 @@ class PlanSafetyTest(unittest.TestCase):
         CHANGED.dependent_closure(selected, dependencies)
         self.assertEqual(selected, {Path("a"), Path("b"), Path("c")})
 
+    def test_pr_impact_separates_direct_and_transitive_units(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "impact.json"
+            CHANGED.write_impact(
+                output,
+                "origin/main",
+                {Path("3-networks/staging/vpc")},
+                {
+                    Path("3-networks/staging/vpc"),
+                    Path("5-workloads/staging/gke"),
+                },
+            )
+            impact = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(impact["summary"]["dependentUnitCount"], 1)
+        self.assertTrue(impact["reviewFlags"]["network"])
+        self.assertFalse(impact["reviewFlags"]["production"])
+
     def test_unit_traversal_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             SCOPE.validate_unit(

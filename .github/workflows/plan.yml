@@ -357,7 +357,9 @@ jobs:
         id: plan
         run: |
           set -euo pipefail
-          nix develop .#ci --command python3 scripts/plan-changed.py origin/${{ github.base_ref || 'main' }} 2>&1 | tee plan-output.txt
+          nix develop .#ci --command python3 scripts/plan-changed.py \
+            origin/${{ github.base_ref || 'main' }} \
+            --impact-output pr-impact.json 2>&1 | tee plan-output.txt
 
       - name: Flag destructive changes
         run: |
@@ -375,6 +377,14 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5
+        if: always()
+        with:
+          name: pr-impact-${{ github.run_id }}
+          path: pr-impact.json
+          retention-days: 30
+          if-no-files-found: warn
+
   plan-comment:
     name: publish plan comment
     needs: [plan]
@@ -383,8 +393,15 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read
       pull-requests: write
     steps:
+      - name: Download sanitized impact report
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5
+        with:
+          name: pr-impact-${{ github.run_id }}
+          path: impact
       - name: Comment on PR
         env:
           GH_TOKEN: ${{ github.token }}
@@ -412,6 +429,10 @@ jobs:
           comment+='\n### Terragrunt plan — changed units'
           comment+='\n'
           comment+="\nResult: **${PLAN_RESULT}**"
+          if [[ -f impact/pr-impact.json ]]; then
+            comment+='\n'
+            comment+="$(jq -r '"\nAffected units: **\(.summary.plannedUnitCount)** (\(.summary.directUnitCount) direct, \(.summary.dependentUnitCount) transitive)\n\nScopes: `\(.scopes | join(", "))`\n\nReview flags: production=`\(.reviewFlags.production)`, foundation=`\(.reviewFlags.foundation)`, network=`\(.reviewFlags.network)`, identity/policy=`\(.reviewFlags.identityOrPolicy)`"' impact/pr-impact.json)"
+          fi
           comment+='\n'
           comment+="\nThe full plan can contain sensitive resource metadata and is retained for one day as an access-controlled workflow artifact: ${run_url}"
 
@@ -447,3 +468,16 @@ jobs:
           else
             echo "Plan output artifact missing."
           fi
+
+      - name: Download sanitized impact report for audit
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5
+        with:
+          name: pr-impact-${{ github.run_id }}
+          path: impact
+      - name: Verify sanitized impact report
+        run: |
+          jq -e '
+            .schemaVersion == 1 and
+            (.summary.plannedUnitCount == (.plannedUnits | length)) and
+            (.reviewFlags.requiresConnectedPlanReview | type == "boolean")
+          ' impact/pr-impact.json

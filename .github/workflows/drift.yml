@@ -130,11 +130,14 @@ jobs:
         run: |
           set -euo pipefail
           : > drift.txt
+          mkdir -p "${RUNNER_TEMP}/drift-plans" "${RUNNER_TEMP}/drift-json"
           set +e
           nix develop .#ci --command terragrunt run --all \
             --provider-cache \
             --non-interactive \
             --queue-exclude-external \
+            --out-dir "${RUNNER_TEMP}/drift-plans" \
+            --json-out-dir "${RUNNER_TEMP}/drift-json" \
             -- plan -input=false -no-color -lock-timeout=20m -detailed-exitcode 2>&1 | tee drift.txt
           code=${PIPESTATUS[0]}
           set -e
@@ -144,15 +147,26 @@ jobs:
             echo "drift=false" >> "$GITHUB_OUTPUT"
           fi
           if [[ "$code" -ne 0 && "$code" -ne 2 ]]; then
+            jq -n --arg commit "$GITHUB_SHA" '{schemaVersion: 1, commit: $commit, status: "error", error: "terragrunt plan failed; inspect protected one-day artifact"}' > drift-summary.json
             echo "::error::drift plan failed with exit code $code"
             exit "$code"
           fi
+          python3 scripts/classify-plans.py "${RUNNER_TEMP}/drift-json" --output "${RUNNER_TEMP}/PLAN_CLASSIFICATION.json"
+          python3 scripts/sanitize-plan-classification.py "${RUNNER_TEMP}/PLAN_CLASSIFICATION.json" --commit "$GITHUB_SHA" --output drift-summary.json
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5
         if: always()
         with:
           name: drift-output-${{ github.run_id }}
           path: drift.txt
           retention-days: 1
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5
+        if: always()
+        with:
+          name: drift-summary-${{ github.run_id }}
+          path: drift-summary.json
+          retention-days: 30
           if-no-files-found: error
 
   report:
@@ -207,3 +221,11 @@ jobs:
           path: artifacts
       - name: Verify artifact integrity
         run: test -f artifacts/drift.txt
+
+      - name: Download sanitized drift summary
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5
+        with:
+          name: drift-summary-${{ github.run_id }}
+          path: summary
+      - name: Verify sanitized summary
+        run: jq -e '.schemaVersion == 1 and (.status == "complete" or .status == "error")' summary/drift-summary.json

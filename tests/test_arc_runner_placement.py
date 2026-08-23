@@ -40,6 +40,12 @@ class ArcRunnerPlacementTest(unittest.TestCase):
         errors = VALIDATE.validate_runner_unit_text(source)
         self.assertTrue(any("ceiling" in error for error in errors), errors)
 
+    def test_spot_pool_cannot_overlap_active_runner_class(self) -> None:
+        source = (ROOT / VALIDATE.SPOT_UNIT).read_text(encoding="utf-8")
+        source = source.replace('"arc-presubmit-spot"', '"arc-runner"')
+        errors = VALIDATE.validate_spot_unit_text(source)
+        self.assertTrue(any("isolated" in error for error in errors), errors)
+
 
 if __name__ == "__main__":
     unittest.main()

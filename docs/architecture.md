@@ -89,6 +89,11 @@ On a merge, `scripts/select-apply-scopes.py` maps changed paths to the minimum o
 configuration can select multiple scopes. `scripts/terragrunt-scope.py` creates an exact plan
 bundle with account context, run context, classification, and checksums.
 
+Pull-request planning writes a 30-day, address-free `pr-impact.json` containing direct and
+transitive units, affected apply scopes, and review flags. Scheduled drift writes a separate
+30-day sanitized action/risk summary. Raw plan and drift output remain access-controlled for one
+day; only the sanitized JSON may outlive it.
+
 The protected apply downloads that one-day artifact, requires explicit authorization for
 deletes or replacements, selects the matching scope identity, revalidates account and commit
 context, verifies all checksums, and applies the saved plans. A scope cannot apply a unit
