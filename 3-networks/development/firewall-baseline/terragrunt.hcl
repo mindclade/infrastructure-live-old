@@ -94,6 +94,34 @@ locals {
       description   = "GKE control plane to admission and conversion webhooks."
     }
 
+    # IAP TCP forwarding to the developer workstation, and only to it.
+    #
+    # This implements the `required_firewall_rule` contract published by
+    # 5-workloads/development/workstation, which sets `create_iap_ssh_firewall_rule = false`.
+    # The module creates its firewall rule in the project that owns the INSTANCE, and the
+    # workstation lives in the `platform` service project while this network lives in the host
+    # project — so the rule has to be owned here. The tag is the join between the two files and
+    # renaming it in one place produces an instance that passes every IAM check and then times
+    # out at connect.
+    #
+    # 35.235.240.0/20 is Google's single published range for IAP TCP forwarding. It is written
+    # literally rather than taken from a variable: a configurable source range is how a rule that
+    # exists to admit only IAP eventually admits 0.0.0.0/0.
+    #
+    # Development-only, because the workstation is development-only. This is the one place a
+    # per-environment firewall difference is not a rehearsal gap — production growing this rule
+    # without a production workstation would be an open SSH path to nothing.
+    allow-iap-ssh-workstation = {
+      direction     = "INGRESS"
+      priority      = 1000
+      action        = "allow"
+      source_ranges = ["35.235.240.0/20"]
+      target_tags   = ["development-workstation-iap-ssh"]
+      allow         = [{ protocol = "tcp", ports = ["22"] }]
+      log_config    = { metadata = "INCLUDE_ALL_METADATA" }
+      description   = "IAP TCP forwarding to the developer workstation. Human SSH is the only path in."
+    }
+
     # ------------------------------------------------------------------------------------
     # Egress — allowed, in priority order
     # ------------------------------------------------------------------------------------

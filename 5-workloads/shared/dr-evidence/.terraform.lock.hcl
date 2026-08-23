@@ -1,4 +1,7 @@
-# This file is maintained by the repository provider-lock workflow.
+# Every provider lock in this repository is byte-identical, at the root and in every unit;
+# scripts/verify-provider-locks.py fails on any drift. Give a new unit its lock by COPYING an
+# existing one. Do not run `terraform providers lock`: it rewrites the h1 checksums for the one
+# platform it runs on, which breaks that parity and the required darwin_arm64 + linux_amd64 pair.
 # Provider versions are exact; checksums originate from signed HashiCorp release metadata.
 
 provider "registry.terraform.io/hashicorp/google" {
