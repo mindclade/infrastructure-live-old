@@ -18,6 +18,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER_UNIT = Path("5-workloads/ci/nodepools/runner/terragrunt.hcl")
+SPOT_UNIT = Path("5-workloads/ci/nodepools/runner-spot/terragrunt.hcl")
 RUNNER_RELEASES = ("canary", "build", "qualify", "presubmit")
 EXPECTED_NODE_SELECTOR = {
     "iam.gke.io/gke-metadata-server-enabled": "true",
@@ -90,11 +91,36 @@ def validate_runner_unit_text(text: str) -> list[str]:
     return errors
 
 
+def validate_spot_unit_text(text: str) -> list[str]:
+    errors: list[str] = []
+    for pattern, message in (
+        (r'^\s*module_version\s*=\s*"v0\.4\.0"\s*$', "ARC Spot pool must select v0.4.0"),
+        (r'^\s*service_account_id\s*=\s*"sa-arc-presubmit-spot-nodes"\s*$', "ARC Spot pool must use its dedicated identity"),
+        (r'^\s*capacity_type\s*=\s*"SPOT"\s*$', "ARC presubmit pool must remain Spot"),
+        (r'^\s*spot_approval\s*=\s*"I ACCEPT EVICTION AND CAPACITY-LOSS RISK"\s*$', "ARC Spot risk acknowledgement differs"),
+        (r"^\s*total_min_nodes\s*=\s*0\s*$", "ARC Spot pool must retain a zero floor"),
+        (r"^\s*total_max_nodes\s*=\s*8\s*$", "ARC Spot pool ceiling must remain eight nodes"),
+        (r'^\s*key\s*=\s*"scheduling\.mindclade\.dev/arc-presubmit"\s*$', "ARC Spot pool omits the presubmit taint"),
+        (r'^\s*"mindclade\.dev/workload-class"\s*=\s*"arc-presubmit-spot"\s*$', "ARC Spot pool is not isolated from active runner scale sets"),
+    ):
+        require_literal(text, pattern, message, errors)
+    for dependency in (
+        'config_path = "../../arc-gke"',
+        'config_path = "../../../../1-org/common-projects"',
+        'config_path = "../../../../3-networks/ci/arc-vpc"',
+    ):
+        if dependency not in text:
+            errors.append(f"ARC Spot pool omits dependency: {dependency}")
+    return errors
+
+
 def validate_infrastructure(root: Path = ROOT) -> list[str]:
     errors: list[str] = []
     required = (
         RUNNER_UNIT,
         Path("5-workloads/ci/nodepools/runner/.terraform.lock.hcl"),
+        SPOT_UNIT,
+        Path("5-workloads/ci/nodepools/runner-spot/.terraform.lock.hcl"),
         Path("5-workloads/ci/README.md"),
     )
     for relative in required:
@@ -103,6 +129,9 @@ def validate_infrastructure(root: Path = ROOT) -> list[str]:
     unit = root / RUNNER_UNIT
     if unit.is_file():
         errors.extend(validate_runner_unit_text(unit.read_text(encoding="utf-8")))
+    spot_unit = root / SPOT_UNIT
+    if spot_unit.is_file():
+        errors.extend(validate_spot_unit_text(spot_unit.read_text(encoding="utf-8")))
     readme = root / "5-workloads/ci/README.md"
     if readme.is_file():
         documentation = readme.read_text(encoding="utf-8")
@@ -112,6 +141,8 @@ def validate_infrastructure(root: Path = ROOT) -> list[str]:
             "mindclade.dev/workload-class=arc-runner",
             "scheduling.mindclade.dev/arc-runner=true:NoSchedule",
             "Apply the infrastructure runner pool before reconciling",
+            "5-workloads/ci/nodepools/runner-spot",
+            "mindclade.dev/workload-class=arc-presubmit-spot",
         ):
             if required_text not in documentation:
                 errors.append(f"ARC cloud-foundation documentation omits: {required_text}")

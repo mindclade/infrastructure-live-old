@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "evidenceMaxAgeDays": 90,
+  "capabilities": [
+    {
+      "id": "arc-on-demand-runners",
+      "owner": "platform",
+      "sourceState": "complete",
+      "activationState": "blocked",
+      "sourcePaths": ["5-workloads/ci/nodepools/runner", "scripts/validate-arc-runner-placement.py"],
+      "blockers": ["module-v0.4.0-published", "protected-plan-retained", "pool-applied", "placement-and-drain-evidence-retained"],
+      "qualifiedAt": null,
+      "evidenceExpiresAt": null,
+      "evidenceSha256": null,
+      "evidenceUri": null
+    },
+    {
+      "id": "arc-presubmit-spot",
+      "owner": "platform",
+      "sourceState": "proposed",
+      "activationState": "blocked",
+      "sourcePaths": ["5-workloads/ci/nodepools/runner-spot", "scripts/validate-arc-runner-placement.py"],
+      "blockers": ["gitops-presubmit-scale-set-reviewed", "quota-and-cost-approved", "eviction-and-retry-qualified", "on-demand-rollback-qualified"],
+      "qualifiedAt": null,
+      "evidenceExpiresAt": null,
+      "evidenceSha256": null,
+      "evidenceUri": null
+    },
+    {
+      "id": "bazel-remote-cache",
+      "owner": "developer-platform",
+      "sourceState": "complete",
+      "activationState": "blocked",
+      "sourcePaths": ["5-workloads/ci/bazel-remote-cache"],
+      "blockers": ["immutable-http-gateway-qualified", "duplicate-write-safety-qualified", "protected-plan-retained", "cold-rebuild-and-cache-loss-qualified"],
+      "qualifiedAt": null,
+      "evidenceExpiresAt": null,
+      "evidenceSha256": null,
+      "evidenceUri": null
+    },
+    {
+      "id": "bazel-remote-execution",
+      "owner": "developer-platform",
+      "sourceState": "complete",
+      "activationState": "blocked",
+      "sourcePaths": ["_envcommon/bazel-remote-execution.hcl", "5-workloads/development/bazel-remote-execution", "5-workloads/staging/bazel-remote-execution", "5-workloads/production/bazel-remote-execution"],
+      "blockers": ["buildfarm-images-mirrored-attested", "private-ha-redis-and-tls-qualified", "executed-action-parity-qualified", "failure-drain-failover-slo-qualified", "client-endpoint-reviewed"],
+      "qualifiedAt": null,
+      "evidenceExpiresAt": null,
+      "evidenceSha256": null,
+      "evidenceUri": null
+    },
+    {
+      "id": "nix-attic-cache",
+      "owner": "developer-platform",
+      "sourceState": "proposed",
+      "activationState": "blocked",
+      "sourcePaths": ["contracts/nix-binary-cache.json", "5-workloads/ci/nix-binary-cache", "5-workloads/ci/nix-cache-secrets"],
+      "blockers": ["nix-binary-cache-contract-blockers-cleared", "attic-service-qualified", "hmac-and-signing-recovery-qualified", "client-substituter-reviewed"],
+      "qualifiedAt": null,
+      "evidenceExpiresAt": null,
+      "evidenceSha256": null,
+      "evidenceUri": null
+    }
+  ]
+}

@@ -49,6 +49,8 @@
   activation order, and GitOps handoff.
 - [Nix binary-cache activation](runbooks/nix-binary-cache-activation.md) — proposed, qualified,
   and activated lifecycle with private Attic/GCS and protected publication boundaries.
+- [Generated CI activation readiness](generated/ci-activation-readiness.md) — machine-derived
+  lifecycle, evidence-expiry, and blocker state for ARC, Attic, Bazel cache, and remote execution.
 - [Authoritative DNS project](../3-networks/shared/dns-project/README.md) — shared project
   ownership without duplicate creation.
 - [Partner projects](../4-projects/partners/README.md) — activation and isolation requirements.

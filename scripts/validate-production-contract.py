@@ -1157,11 +1157,27 @@ elif REPOSITORY == "infrastructure-live":
             if activation_hold not in cache_readme:
                 error(f"common CI Bazel cache activation hold omits: {activation_hold}")
 
+    sanitized_artifacts = {
+        "plan.yml": (
+            "          name: pr-impact-${{ github.run_id }}\n"
+            "          path: pr-impact.json\n"
+            "          retention-days: 30\n"
+        ),
+        "drift.yml": (
+            "          name: drift-summary-${{ github.run_id }}\n"
+            "          path: drift-summary.json\n"
+            "          retention-days: 30\n"
+        ),
+    }
     for workflow_name in ("plan.yml", "drift.yml"):
         workflow = (ROOT / f".github/workflows/{workflow_name}").read_text(
             "utf-8", errors="ignore"
         )
-        for days in re.findall(r"retention-days:\s*(\d+)", workflow):
+        safe = sanitized_artifacts[workflow_name]
+        if workflow.count(safe) != 1:
+            error(f"{workflow_name} omits its exact sanitized 30-day JSON artifact")
+        sensitive_workflow = workflow.replace(safe, "")
+        for days in re.findall(r"retention-days:\s*(\d+)", sensitive_workflow):
             if int(days) > 1:
                 error(
                     f"{workflow_name} retains sensitive Terraform evidence longer than one day"

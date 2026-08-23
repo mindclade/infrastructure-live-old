@@ -128,7 +128,10 @@ flowchart LR
 
 ## Change path
 
-Pull requests run validation and affected speculative plans. After merge, protected workflows
+Pull requests run validation and affected speculative plans. The plan comment includes a sanitized
+JSON-derived blast radius: direct and transitive unit counts, scopes, and production, foundation,
+network, and identity/policy review flags. It never includes resource addresses or raw plan data.
+After merge, protected workflows
 create saved plans for the exact commit, select the minimum privilege scope, require the
 matching environment approval, and apply the verified plan. Destructive changes require an
 explicit reviewed dispatch and change reference. See the

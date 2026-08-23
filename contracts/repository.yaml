@@ -54,6 +54,12 @@ required_paths:
     - 5-workloads/development/workstation-image
     - 5-workloads/shared/workstation-image-access-logs
     - contracts/workstation-egress.json
+    - contracts/ci-activation-readiness.json
+    - docs/generated/ci-activation-readiness.md
+    - scripts/validate-ci-activation-readiness.py
+    - scripts/sanitize-plan-classification.py
+    - tests/test_ci_activation_readiness.py
+    - tests/test_sanitize_plan_classification.py
     - scripts/validate-workstation-image-integration.py
     - scripts/validate_workstation_egress.py
     - tests/test_workstation_image_integration.py
@@ -62,6 +68,7 @@ required_paths:
     - 5-workloads/production
     - scripts/validate-arc-runner-placement.py
     - tests/test_arc_runner_placement.py
+    - 5-workloads/ci/nodepools/runner-spot
     - root.hcl
 forbidden_paths:
     - .terraform
