@@ -84,10 +84,11 @@ inputs = {
   # managed Prometheus, the Secret Manager CSI driver and the rest of the GKE daemonsets have
   # taken their share. The controller is not what makes the downsize unsafe.
   #
-  # WHAT MAKES IT UNSAFE TODAY IS WHAT ELSE LANDS HERE. Every runner scale set in
-  # `gitops/arc/values/` declares a nodeSelector and no toleration, so until ../nodepools/runner
-  # is applied AND those values gain the matching toleration, runner pods schedule onto this
-  # pool. Two things then break on a 4-vCPU node that do not break on an 8-vCPU one:
+  # WHAT MAKES IT UNSAFE TODAY IS THE UNQUALIFIED HANDOFF. The paired GitOps source selects
+  # ../nodepools/runner and tolerates its taint, but that does not prove the planned module has
+  # been released or the pool is applied and schedulable. Until connected placement evidence
+  # exists, a runner can still land here from the currently reconciled source. Two things then
+  # break on a 4-vCPU node that do not break on an 8-vCPU one:
   #
   #   - Requests. Eleven concurrent runners (build 6 + qualify 4 + canary 1) at 2 vCPU each fit
   #     roughly one to a node here against three on n2-standard-8, so the pool would need ~22
@@ -98,9 +99,8 @@ inputs = {
   #     controller that is the reason this pool is redundant in the first place.
   #
   # So the change is deferred, not rejected. It becomes a one-line edit once ../nodepools/runner
-  # is applied, the gitops runner values tolerate its taint, and a real presubmit load shows no
-  # runner pods on this pool. Downsizing before that separation is observed converts a cost
-  # saving into a CI outage.
+  # is applied and a connected scheduling test shows runner pods only on that pool. Downsizing
+  # before that separation is observed converts a cost saving into a CI outage.
   system_node_pool_machine_type      = "n2-standard-8"
   system_node_pool_total_min_nodes   = 3
   system_node_pool_total_max_nodes   = 9

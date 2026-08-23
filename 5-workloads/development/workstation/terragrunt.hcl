@@ -33,16 +33,47 @@
 # (a ci unit reading this unit's service-account email) would close a cycle with the bucket-name
 # dependencies below. Applying those grants is a separate reviewed change in the ci units.
 #
-# WHAT IS NOT PROVEN YET. Two connected paths this unit depends on and cannot assert:
-#   - `3-networks/development/firewall-baseline` denies egress by default at priority 65000 and
-#     allows only intra-VPC, `restricted.googleapis.com`, and the metadata server. The module's
-#     startup script runs `apt-get` and fetches the Nix installer over the open internet, so it
-#     cannot complete until a reviewed named-destination egress rule or an internal package
-#     mirror exists. Widening `deny-egress-default` is not that change.
-#   - `5-workloads/development/vpc-sc-perimeter` restricts `storage.googleapis.com` and the two
-#     caches live in `mc-common-ci`, outside it. See that unit's egress section: the perimeter is
-#     in explicit dry-run, so the reads are logged rather than denied today and will start failing
-#     the moment it enforces.
+# WHAT IS NOT PROVEN YET, AND WHY THIS BOX DOES NOT FINISH BOOTING.
+#
+# PROVISIONING IS BLOCKED, and not in a corner case — this is the state of the instance the
+# moment it is applied. `3-networks/development/firewall-baseline` denies egress by default at
+# priority 65000 and allows only intra-VPC, `restricted.googleapis.com`, and the metadata server.
+# The module's startup script runs `apt-get update` against Debian's public mirrors and fetches
+# the Nix installer from `nixos.org`; neither destination is reachable. Under `set -euo pipefail`
+# the script stops at `apt-get update` — which is AFTER the data disk is formatted, mounted, and
+# bind-mounted at `/nix`, so the instance comes up, IAP SSH works, and the disk is intact, but
+# there is no Nix, no tmux, and no idle timer. The missing idle timer is the expensive half: the
+# machine never powers itself off and bills until the 03:00 stop schedule.
+#
+# This cannot be fixed from this caller. `var.metadata` refuses the module-owned startup-script
+# key, so the two fetches cannot be redirected from here, and no input on this module changes
+# where they point. The reviewed disposition, the refused alternatives, and the evidence that
+# would clear it are recorded in `contracts/workstation-egress.json` and enforced by
+# `scripts/validate_workstation_egress.py`. In short:
+#
+#   - The target is that everything first boot needs comes from inside the perimeter, over the
+#     restricted Google API VIP the firewall ALREADY allows, so that closing this adds no egress
+#     destination at all: apt from an Artifact Registry APT remote repository, which the dns-hub
+#     unit already resolves to `restricted.googleapis.com` through its `pkg.dev` zone — so that
+#     path needs no new firewall rule — and Nix from the boot image rather than from the network,
+#     because `5-workloads/ci/nix-binary-cache` exports a null substituter and no Google-hosted
+#     mirror of the installer exists. Neither half is expressible today: the artifact-registry
+#     factory module hard-codes `mode = STANDARD_REPOSITORY` and admits no APT format, and there
+#     is no VM image build pipeline in either repository.
+#   - Secure Web Proxy is the right shape and the wrong reach. The module requires a TLS
+#     inspection policy and a gateway certificate; no CA Service hierarchy exists in either
+#     repository, the gateway is explicit-routing so the guest must still be pointed at it, and
+#     intercepting a developer's whole session to install two packages is a posture decision.
+#   - A named-destination egress rule is the trap, not the answer. VPC firewall rules take CIDRs,
+#     and every one of these hosts sits behind a shared CDN — the "narrow" rule is a large block
+#     of addresses that also front the rest of the internet and that change without notice.
+#   - Widening `deny-egress-default` is not that change.
+#
+# The second unproven path is unchanged: `5-workloads/development/vpc-sc-perimeter` restricts
+# `storage.googleapis.com` and `artifactregistry.googleapis.com`, and the two caches — like any
+# mirror placed in `mc-common-ci` — live outside it. See that unit's egress section: the perimeter
+# is in explicit dry-run, so the reads are logged rather than denied today and will start failing
+# the moment it enforces.
 
 include "root" {
   path   = find_in_parent_folders("root.hcl")

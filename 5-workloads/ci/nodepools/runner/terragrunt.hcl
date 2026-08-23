@@ -12,11 +12,11 @@
 # other runner with it, and the blast radius is the whole artifact-authority cluster rather
 # than one job.
 #
-# The taint below is half of the fix and the half this repository owns. Runner pods carry no
-# toleration today, so adding this pool moves nothing by itself: `gitops/arc/values/*.yaml` must
-# add the matching `tolerations` entry and select this pool before any runner lands here.
-# Ordering matters — the toleration is safe to add before the pool exists (it tolerates a taint
-# nothing carries), so gitops moves second, after this applies.
+# The label and taint below are the half of the contract this repository owns. The paired GitOps
+# source selects that label and carries the exact toleration; `validate-arc-runner-placement.py`
+# checks both halves. Ordering still matters: apply and qualify this pool before reconciling the
+# GitOps placement change. A zero runner minimum is not a safety gate because a queued job can
+# scale an active set from zero.
 #
 # NOT SPOT, deliberately. Spot is the obvious saving on a pool that idles at zero, and it is
 # wrong here: a preempted runner does not reschedule its job, it fails it, and a failed

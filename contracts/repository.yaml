@@ -48,9 +48,12 @@ required_paths:
     - 2-environments/production
     - 3-networks
     - 4-projects
+    - 5-workloads/ci
     - 5-workloads/development
     - 5-workloads/staging
     - 5-workloads/production
+    - scripts/validate-arc-runner-placement.py
+    - tests/test_arc_runner_placement.py
     - root.hcl
 forbidden_paths:
     - .terraform
