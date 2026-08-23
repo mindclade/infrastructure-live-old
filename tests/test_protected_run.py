@@ -178,10 +178,9 @@ class ProtectedRunTest(unittest.TestCase):
 
     def test_migration_documentation_rejects_pre_guard_runs(self) -> None:
         documentation = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn(
-            "cancel or reject every waiting or pending apply run", documentation
-        )
-        self.assertIn("cannot retrofit its freshness or artifact-binding checks", documentation)
+        self.assertIn("does not retrofit a workflow run", documentation)
+        self.assertIn("cancel every pre-guard protected run", documentation)
+        self.assertIn("Never approve an older", documentation)
 
 
 if __name__ == "__main__":
