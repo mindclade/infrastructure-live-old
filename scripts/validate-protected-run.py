@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -25,6 +26,7 @@ SCHEMA_VERSION = 1
 MAXIMUM_PLAN_AGE_SECONDS = 6 * 60 * 60
 FUTURE_CLOCK_SKEW_SECONDS = 60
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 CHANGE_REFERENCE_PATTERN = re.compile(
     r"^(?:CHG|INC|SEC|DR)-[A-Za-z0-9][A-Za-z0-9._-]{2,127}$"
 )
@@ -39,6 +41,10 @@ METADATA_KEYS = {
     "created_at_epoch",
     "maximum_age_seconds",
 }
+PLAN_MANIFEST = "PLAN_SHA256SUMS"
+PROTECTED_RUN_METADATA = "protected-run.json"
+PROTECTED_RUN_CHECKSUM = "protected-run.sha256"
+PROTECTED_RUN_FILES = {PROTECTED_RUN_METADATA, PROTECTED_RUN_CHECKSUM}
 
 
 class GuardError(ValueError):
@@ -190,6 +196,80 @@ def validate_metadata(
         raise GuardError("protected plan is older than the six-hour maximum")
 
 
+def bundle_checksum_entries(
+    bundle: Path, *, omit: set[str] | None = None
+) -> list[tuple[str, str]]:
+    omitted = omit or set()
+    entries: list[tuple[str, str]] = []
+    if not bundle.is_dir():
+        raise GuardError(f"protected plan bundle does not exist: {bundle}")
+    for path in sorted(
+        candidate for candidate in bundle.rglob("*") if candidate.is_file()
+    ):
+        relative = path.relative_to(bundle).as_posix()
+        if relative == PLAN_MANIFEST or relative in omitted:
+            continue
+        if path.is_symlink() or "\n" in relative:
+            raise GuardError(f"unsafe protected plan bundle path: {relative!r}")
+        entries.append((hashlib.sha256(path.read_bytes()).hexdigest(), relative))
+    return entries
+
+
+def read_checksum_manifest(path: Path) -> list[tuple[str, str]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        raise GuardError(
+            f"cannot read protected plan checksum manifest: {error}"
+        ) from error
+    entries: list[tuple[str, str]] = []
+    for line in lines:
+        if (
+            len(line) < 67
+            or line[64:66] != "  "
+            or SHA256_PATTERN.fullmatch(line[:64]) is None
+        ):
+            raise GuardError("protected plan checksum manifest is malformed")
+        entries.append((line[:64], line[66:]))
+    if not entries or entries != sorted(entries, key=lambda item: item[1]):
+        raise GuardError("protected plan checksum manifest is empty or unsorted")
+    if len({name for _, name in entries}) != len(entries):
+        raise GuardError("protected plan checksum manifest contains duplicate paths")
+    return entries
+
+
+def verify_bundle_checksums(bundle: Path, *, omit: set[str] | None = None) -> None:
+    expected = read_checksum_manifest(bundle / PLAN_MANIFEST)
+    actual = bundle_checksum_entries(bundle, omit=omit)
+    if expected != actual:
+        raise GuardError(
+            "protected plan checksum manifest does not match its exact contents"
+        )
+
+
+def verify_protected_run_checksum(bundle: Path) -> None:
+    checksum_path = bundle / PROTECTED_RUN_CHECKSUM
+    metadata_path = bundle / PROTECTED_RUN_METADATA
+    try:
+        checksum = checksum_path.read_text(encoding="utf-8")
+        metadata = metadata_path.read_bytes()
+    except OSError as error:
+        raise GuardError(f"protected-run binding input is missing: {error}") from error
+    expected = f"{hashlib.sha256(metadata).hexdigest()}  {PROTECTED_RUN_METADATA}\n"
+    if checksum != expected:
+        raise GuardError("protected-run metadata checksum is invalid")
+
+
+def bind_plan(bundle: Path) -> None:
+    bundle = bundle.resolve()
+    verify_bundle_checksums(bundle, omit=PROTECTED_RUN_FILES)
+    verify_protected_run_checksum(bundle)
+    entries = bundle_checksum_entries(bundle)
+    manifest = "".join(f"{digest}  {name}\n" for digest, name in entries)
+    (bundle / PLAN_MANIFEST).write_text(manifest, encoding="utf-8")
+    verify_bundle_checksums(bundle)
+
+
 def write_outputs(path: Path, values: dict[str, str]) -> None:
     with path.open("a", encoding="utf-8") as output:
         for key, value in values.items():
@@ -249,6 +329,10 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--expected-target-sha", required=True)
     validate.add_argument("--expected-default-head-sha", required=True)
     validate.add_argument("--expected-mode", choices=("current", "rollback"), required=True)
+    bind = commands.add_parser("bind-plan")
+    bind.add_argument("--bundle", type=Path, required=True)
+    verify = commands.add_parser("verify-plan")
+    verify.add_argument("--bundle", type=Path, required=True)
     return parser
 
 
@@ -287,7 +371,7 @@ def main() -> int:
                     expected_mode=mode,
                     now=int(time.time()),
                 )
-        else:
+        elif args.command == "record-plan":
             event_sha = require_sha(args.event_sha, "event SHA")
             target_sha = require_sha(args.target_sha, "target SHA")
             default_head_sha = require_sha(args.default_head_sha, "default-head SHA")
@@ -305,6 +389,12 @@ def main() -> int:
             args.output.write_text(
                 json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
             )
+        elif args.command == "bind-plan":
+            bind_plan(args.bundle)
+        else:
+            bundle = args.bundle.resolve()
+            verify_bundle_checksums(bundle)
+            verify_protected_run_checksum(bundle)
         print(f"protected-run {args.command} guard passed")
         return 0
     except (GuardError, OSError, json.JSONDecodeError) as error:

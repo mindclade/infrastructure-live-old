@@ -256,6 +256,8 @@ jobs:
             --default-head-sha "$DEFAULT_HEAD_SHA" --mode "$MODE" \
             --output "$PLAN_DIR/protected-run.json"
           (cd "$PLAN_DIR" && sha256sum protected-run.json > protected-run.sha256)
+          python3 "$RUNNER_TEMP/protected-run-control/scripts/validate-protected-run.py" bind-plan \
+            --bundle "$PLAN_DIR"
       - name: Summarize classified changes
         env:
           PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
@@ -313,6 +315,8 @@ jobs:
           CHANGE_REFERENCE: ${{ inputs.change_reference || '' }}
         run: |
           (cd "$PLAN_DIR" && sha256sum --check protected-run.sha256)
+          python3 "$RUNNER_TEMP/protected-run-control/scripts/validate-protected-run.py" verify-plan \
+            --bundle "$PLAN_DIR"
           python3 "$RUNNER_TEMP/protected-run-control/scripts/validate-protected-run.py" validate-plan \
             --metadata "$PLAN_DIR/protected-run.json" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" \
             --event-name "$GITHUB_EVENT_NAME" --event-ref "$GITHUB_REF" --event-sha "$GITHUB_SHA" \

@@ -1226,6 +1226,8 @@ elif REPOSITORY == "infrastructure-live":
         "ACTUAL_REF: ${{ github.ref }}",
         '"refs/heads/main"',
         "ref: ${{ github.sha }}",
+        "bind-plan",
+        "verify-plan",
     ):
         if apply_gate not in apply_workflow:
             error(f"apply workflow lacks exact-main/plan-identity gate: {apply_gate}")

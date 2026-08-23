@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -16,6 +18,12 @@ SPEC = importlib.util.spec_from_file_location(
 assert SPEC is not None and SPEC.loader is not None
 GUARD = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GUARD)
+SCOPE_SPEC = importlib.util.spec_from_file_location(
+    "terragrunt_scope_for_protected_run", ROOT / "scripts/terragrunt-scope.py"
+)
+assert SCOPE_SPEC is not None and SCOPE_SPEC.loader is not None
+SCOPE = importlib.util.module_from_spec(SCOPE_SPEC)
+SCOPE_SPEC.loader.exec_module(SCOPE)
 
 CURRENT = "a" * 40
 OLDER = "b" * 40
@@ -109,6 +117,41 @@ class ProtectedRunTest(unittest.TestCase):
                 now=now,
             )
 
+    def test_protected_metadata_is_bound_into_plan_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory)
+            (bundle / "plan.tfplan").write_text("immutable plan", encoding="utf-8")
+            SCOPE.write_checksums(bundle)
+            metadata = b'{"schema_version": 1}\n'
+            (bundle / GUARD.PROTECTED_RUN_METADATA).write_bytes(metadata)
+            digest = hashlib.sha256(metadata).hexdigest()
+            (bundle / GUARD.PROTECTED_RUN_CHECKSUM).write_text(
+                f"{digest}  {GUARD.PROTECTED_RUN_METADATA}\n", encoding="utf-8"
+            )
+
+            with self.assertRaisesRegex(ValueError, "exact contents"):
+                SCOPE.verify_checksums(bundle)
+            GUARD.bind_plan(bundle)
+            SCOPE.verify_checksums(bundle)
+
+            (bundle / GUARD.PROTECTED_RUN_METADATA).write_bytes(b"tampered\n")
+            with self.assertRaisesRegex(ValueError, "exact contents"):
+                SCOPE.verify_checksums(bundle)
+
+    def test_plan_binding_rejects_invalid_protected_metadata_checksum(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory)
+            (bundle / "plan.tfplan").write_text("immutable plan", encoding="utf-8")
+            SCOPE.write_checksums(bundle)
+            (bundle / GUARD.PROTECTED_RUN_METADATA).write_text(
+                "{}\n", encoding="utf-8"
+            )
+            (bundle / GUARD.PROTECTED_RUN_CHECKSUM).write_text(
+                f"{'0' * 64}  {GUARD.PROTECTED_RUN_METADATA}\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(GUARD.GuardError, "checksum is invalid"):
+                GUARD.bind_plan(bundle)
+
     def test_apply_workflow_enforces_guard_order_and_active_apply_safety(self) -> None:
         workflow = (ROOT / ".github/workflows/apply.yml").read_text(encoding="utf-8")
         self.assertIn("cancel-in-progress: false", workflow)
@@ -116,7 +159,12 @@ class ProtectedRunTest(unittest.TestCase):
         self.assertIn("protected-run.json", workflow)
         plan, apply = workflow.split("\n  apply:\n", 1)
         self.assertLess(plan.index("check-source"), plan.index("google-github-actions/auth@"))
+        self.assertLess(plan.index("record-plan"), plan.index("bind-plan"))
+        self.assertLess(plan.index("bind-plan"), plan.index("actions/upload-artifact@"))
         self.assertGreaterEqual(apply.count("validate-plan"), 2)
+        self.assertLess(
+            apply.index("verify-plan"), apply.index("google-github-actions/auth@")
+        )
         self.assertLess(apply.index("validate-plan"), apply.index("google-github-actions/auth@"))
         mutation = next(
             marker
@@ -127,6 +175,13 @@ class ProtectedRunTest(unittest.TestCase):
             if marker in apply
         )
         self.assertLess(apply.rindex("validate-plan"), apply.index(mutation))
+
+    def test_migration_documentation_rejects_pre_guard_runs(self) -> None:
+        documentation = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "cancel or reject every waiting or pending apply run", documentation
+        )
+        self.assertIn("cannot retrofit its freshness or artifact-binding checks", documentation)
 
 
 if __name__ == "__main__":

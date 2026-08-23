@@ -80,6 +80,10 @@ new `main` commit requires a new plan. Active applies are non-cancellable. An ol
 selected only by a current-`main` dispatch with `source_rollback=true`, a full strict-ancestor
 `source_rollback_sha`, a valid change/incident reference, and the normal scope approval.
 
+When this guard is first adopted, cancel or reject every waiting or pending apply run created from
+an older workflow SHA. A queued run retains the workflow implementation from its triggering commit;
+merging this source cannot retrofit its freshness or artifact-binding checks into that run.
+
 Merging the guard does not retrofit a workflow run that is already queued, pending, or waiting
 for environment approval. Before treating this as an operational invariant, explicitly reject or
 cancel every pre-guard protected run, record those run IDs in the change evidence, and observe a
