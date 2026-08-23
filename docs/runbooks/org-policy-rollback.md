@@ -33,6 +33,13 @@ Never use `gcloud org-policies set-policy` as a shortcut. Stop if plan/apply dri
 target ID differs. Verify effective policy inheritance, repeat the previously denied read-only or
 scratch operation, inspect audit logs, and run a clean Terraform plan.
 
+Prefer a reviewed revert merged to current `main`. If current source cannot safely produce the
+rollback plan, dispatch `apply.yml` from current `main` with `source_rollback=true`, the full
+strict-ancestor `source_rollback_sha`, the bounded scope/unit, and the incident or change
+reference. The workflow must still prove that its own source is the current default head, and the
+saved plan expires after six hours or immediately when `main` advances. Do not use this exception
+for forward changes, divergent commits, or to reuse a previously generated plan.
+
 Success requires the expected constraint to be restored, no unrelated policy delta, the affected
 service healthy, and a clean follow-up plan. Record measured RPO/RTO, operators, source revisions,
 commands, evidence hashes, failures, corrective actions, and next drill date in report v2.

@@ -73,6 +73,13 @@ units.
 **Safety boundary:** do not run an apply, import, destroy, state operation, or production plan
 from an agent or ordinary development session.
 
+Protected plans bind the workflow's current default-head SHA, selected source SHA, run ID, and a
+six-hour lifetime into each checksummed scope artifact. The workflow rechecks current head and
+freshness before plan credentials, before apply credentials, and immediately before mutation; a
+new `main` commit requires a new plan. Active applies are non-cancellable. An older source may be
+selected only by a current-`main` dispatch with `source_rollback=true`, a full strict-ancestor
+`source_rollback_sha`, a valid change/incident reference, and the normal scope approval.
+
 ## Cross-repository preflight
 
 Before any plan, validate the paired repositories explicitly:

@@ -26,7 +26,16 @@ on:
         required: true
         default: false
       change_reference:
-        description: Required for destructive changes (CHG-, INC-, SEC-, or DR- identifier).
+        description: Required for destructive work or source rollback (CHG-, INC-, SEC-, or DR-).
+        type: string
+        required: false
+      source_rollback:
+        description: Explicitly plan an older reviewed source commit for emergency rollback.
+        type: boolean
+        required: true
+        default: false
+      source_rollback_sha:
+        description: Full strict-ancestor commit SHA; valid only when source_rollback is true.
         type: string
         required: false
 
@@ -83,7 +92,36 @@ env:
   SA_TF_LIVE_APPLY_PRODUCTION: ${{ vars.SA_TF_LIVE_APPLY_PRODUCTION }}
 
 jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      target_sha: ${{ steps.guard.outputs.target_sha }}
+      default_head_sha: ${{ steps.guard.outputs.default_head_sha }}
+      mode: ${{ steps.guard.outputs.mode }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: guard
+        name: Resolve current protected source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_ROLLBACK: ${{ inputs.source_rollback || false }}
+          SOURCE_ROLLBACK_SHA: ${{ inputs.source_rollback_sha || '' }}
+          CHANGE_REFERENCE: ${{ inputs.change_reference || '' }}
+        run: |
+          python3 scripts/validate-protected-run.py source \
+            --event-name "$GITHUB_EVENT_NAME" --event-ref "$GITHUB_REF" --event-sha "$GITHUB_SHA" \
+            --source-rollback "$SOURCE_ROLLBACK" --source-rollback-sha "$SOURCE_ROLLBACK_SHA" \
+            --change-reference "$CHANGE_REFERENCE" --git-root . --github-output "$GITHUB_OUTPUT"
+
   scope:
+    needs: source
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -100,7 +138,7 @@ jobs:
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.source.outputs.target_sha }}
           fetch-depth: 2
           persist-credentials: false
       - id: select
@@ -122,7 +160,7 @@ jobs:
           jq . <<<"$matrix"
 
   plan-exact-main:
-    needs: scope
+    needs: [source, scope]
     if: needs.scope.outputs.count != '0'
     strategy:
       fail-fast: false
@@ -136,11 +174,35 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.source.outputs.target_sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Validate bootstrap-derived account contract
         run: python3 scripts/validate-account.py --runtime
+      - name: Check out current guard implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: .protected-run-control
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Revalidate protected source before plan authentication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ needs.source.outputs.target_sha }}
+          DEFAULT_HEAD_SHA: ${{ needs.source.outputs.default_head_sha }}
+          MODE: ${{ needs.source.outputs.mode }}
+          SOURCE_ROLLBACK: ${{ inputs.source_rollback || false }}
+          SOURCE_ROLLBACK_SHA: ${{ inputs.source_rollback_sha || '' }}
+          CHANGE_REFERENCE: ${{ inputs.change_reference || '' }}
+        run: |
+          python3 .protected-run-control/scripts/validate-protected-run.py check-source \
+            --event-name "$GITHUB_EVENT_NAME" --event-ref "$GITHUB_REF" --event-sha "$GITHUB_SHA" \
+            --source-rollback "$SOURCE_ROLLBACK" --source-rollback-sha "$SOURCE_ROLLBACK_SHA" \
+            --change-reference "$CHANGE_REFERENCE" --git-root .protected-run-control \
+            --expected-target-sha "$TARGET_SHA" --expected-default-head-sha "$DEFAULT_HEAD_SHA" \
+            --expected-mode "$MODE"
+          mv .protected-run-control "$RUNNER_TEMP/protected-run-control"
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER_PLAN }}
@@ -183,20 +245,30 @@ jobs:
           SCOPE: ${{ matrix.scope }}
           UNIT: ${{ matrix.unit }}
           PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
-        run: python3 scripts/terragrunt-scope.py plan "$SCOPE" "$PLAN_DIR" "$UNIT"
+          TARGET_SHA: ${{ needs.source.outputs.target_sha }}
+          DEFAULT_HEAD_SHA: ${{ needs.source.outputs.default_head_sha }}
+          MODE: ${{ needs.source.outputs.mode }}
+        run: |
+          python3 scripts/terragrunt-scope.py plan "$SCOPE" "$PLAN_DIR" "$UNIT"
+          python3 "$RUNNER_TEMP/protected-run-control/scripts/validate-protected-run.py" record-plan \
+            --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" \
+            --event-sha "$GITHUB_SHA" --target-sha "$TARGET_SHA" \
+            --default-head-sha "$DEFAULT_HEAD_SHA" --mode "$MODE" \
+            --output "$PLAN_DIR/protected-run.json"
+          (cd "$PLAN_DIR" && sha256sum protected-run.json > protected-run.sha256)
       - name: Summarize classified changes
         env:
           PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
         run: jq . "$PLAN_DIR/PLAN_CLASSIFICATION.json" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5
         with:
-          name: tfplan-${{ github.sha }}-${{ matrix.scope }}
+          name: tfplan-${{ needs.source.outputs.target_sha }}-${{ matrix.scope }}
           path: ${{ runner.temp }}/plans/${{ matrix.scope }}
           retention-days: 1
           if-no-files-found: error
 
   apply:
-    needs: [scope, plan-exact-main]
+    needs: [source, scope, plan-exact-main]
     if: needs.scope.outputs.count != '0'
     strategy:
       fail-fast: false
@@ -211,15 +283,43 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.source.outputs.target_sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Validate bootstrap-derived account contract
         run: python3 scripts/validate-account.py --runtime
+      - name: Check out current guard implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: .protected-run-control
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Stage current guard outside the target tree
+        run: mv .protected-run-control "$RUNNER_TEMP/protected-run-control"
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5
         with:
-          name: tfplan-${{ github.sha }}-${{ matrix.scope }}
+          name: tfplan-${{ needs.source.outputs.target_sha }}-${{ matrix.scope }}
           path: ${{ runner.temp }}/plans/${{ matrix.scope }}
+      - name: Verify plan integrity, freshness, and provenance before authentication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
+          TARGET_SHA: ${{ needs.source.outputs.target_sha }}
+          DEFAULT_HEAD_SHA: ${{ needs.source.outputs.default_head_sha }}
+          MODE: ${{ needs.source.outputs.mode }}
+          SOURCE_ROLLBACK: ${{ inputs.source_rollback || false }}
+          SOURCE_ROLLBACK_SHA: ${{ inputs.source_rollback_sha || '' }}
+          CHANGE_REFERENCE: ${{ inputs.change_reference || '' }}
+        run: |
+          (cd "$PLAN_DIR" && sha256sum --check protected-run.sha256)
+          python3 "$RUNNER_TEMP/protected-run-control/scripts/validate-protected-run.py" validate-plan \
+            --metadata "$PLAN_DIR/protected-run.json" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" \
+            --event-name "$GITHUB_EVENT_NAME" --event-ref "$GITHUB_REF" --event-sha "$GITHUB_SHA" \
+            --source-rollback "$SOURCE_ROLLBACK" --source-rollback-sha "$SOURCE_ROLLBACK_SHA" \
+            --change-reference "$CHANGE_REFERENCE" --git-root "$RUNNER_TEMP/protected-run-control" \
+            --expected-target-sha "$TARGET_SHA" --expected-default-head-sha "$DEFAULT_HEAD_SHA" \
+            --expected-mode "$MODE"
       - name: Enforce destructive-change authorization
         env:
           PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
@@ -276,12 +376,27 @@ jobs:
       - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342  # v31.11.0
         with:
           extra_nix_config: experimental-features = nix-command flakes
-      - name: Verify and apply exact plans
+      - name: Revalidate protected plan and apply exact plans
         env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
+          TARGET_SHA: ${{ needs.source.outputs.target_sha }}
+          DEFAULT_HEAD_SHA: ${{ needs.source.outputs.default_head_sha }}
+          MODE: ${{ needs.source.outputs.mode }}
+          SOURCE_ROLLBACK: ${{ inputs.source_rollback || false }}
+          SOURCE_ROLLBACK_SHA: ${{ inputs.source_rollback_sha || '' }}
+          CHANGE_REFERENCE: ${{ inputs.change_reference || '' }}
           SCOPE: ${{ matrix.scope }}
           UNIT: ${{ matrix.unit }}
-          PLAN_DIR: ${{ runner.temp }}/plans/${{ matrix.scope }}
-        run: python3 scripts/terragrunt-scope.py apply "$SCOPE" "$PLAN_DIR" "$UNIT"
+        run: |
+          python3 "$RUNNER_TEMP/protected-run-control/scripts/validate-protected-run.py" validate-plan \
+            --metadata "$PLAN_DIR/protected-run.json" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" \
+            --event-name "$GITHUB_EVENT_NAME" --event-ref "$GITHUB_REF" --event-sha "$GITHUB_SHA" \
+            --source-rollback "$SOURCE_ROLLBACK" --source-rollback-sha "$SOURCE_ROLLBACK_SHA" \
+            --change-reference "$CHANGE_REFERENCE" --git-root "$RUNNER_TEMP/protected-run-control" \
+            --expected-target-sha "$TARGET_SHA" --expected-default-head-sha "$DEFAULT_HEAD_SHA" \
+            --expected-mode "$MODE"
+          python3 scripts/terragrunt-scope.py apply "$SCOPE" "$PLAN_DIR" "$UNIT"
 
   report-failure:
     needs: [scope, plan-exact-main, apply]
