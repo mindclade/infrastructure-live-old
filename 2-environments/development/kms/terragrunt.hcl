@@ -84,6 +84,18 @@ inputs = {
       rotation_period_seconds = 7776000
       protection_level        = "HSM"
     }
+
+    # Boot and persistent data disks for 5-workloads/development/workstation.
+    #
+    # Its own key rather than a reuse of `storage`. A Compute Engine CMEK disk requires the
+    # COMPUTE service agent to hold cryptoKeyEncrypterDecrypter on the key, and `storage` is the
+    # GCS key that _envcommon/gcs-bucket.hcl interpolates by name for every bucket in the
+    # environment — granting the compute agent there would extend that agent's reach over
+    # checkpoints, the lakehouse, and the holdout set to encrypt one disk.
+    workstation = {
+      rotation_period_seconds = 7776000
+      protection_level        = "HSM"
+    }
   }
 
   # ------------------------------------------------------------------------------------
@@ -112,6 +124,11 @@ inputs = {
     gke     = ["serviceAccount:service-${dependency.shared.outputs.project_numbers["platform"]}@container-engine-robot.iam.gserviceaccount.com"]
     secrets = ["serviceAccount:service-${dependency.shared.outputs.project_numbers["platform"]}@gcp-sa-secretmanager.iam.gserviceaccount.com"]
     sql     = ["serviceAccount:service-${dependency.shared.outputs.project_numbers["platform"]}@gcp-sa-cloud-sql.iam.gserviceaccount.com"]
+
+    # The Compute Engine service agent, named in the workstation module's `required_grants` as a
+    # prerequisite it cannot create itself. Without it the disk create fails with a KMS
+    # permission error that names the key and not the missing agent binding.
+    workstation = ["serviceAccount:service-${dependency.shared.outputs.project_numbers["platform"]}@compute-system.iam.gserviceaccount.com"]
   }
 
   labels = include.root.locals.common_labels

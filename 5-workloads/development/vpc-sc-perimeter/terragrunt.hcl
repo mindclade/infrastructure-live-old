@@ -251,6 +251,40 @@ inputs = {
   # matters for exfiltration, and the list is deliberately almost empty.
   # Environment registries are inside their own perimeter. Promotion is performed by the
   # external, IAM-scoped promoter through ingress, so no broad perimeter egress is required.
+  #
+  # ONE APPROVED PATH IS WAITING ON A MODULE CONTRACT, and it is recorded here rather than
+  # discovered during an incident.
+  #
+  # 5-workloads/development/workstation runs in the `platform` project, which is inside this
+  # perimeter. The Nix and Bazel caches it reads live in `mc-common-ci`, which is not — and
+  # `storage.googleapis.com` is restricted above. Every cache read from that instance is
+  # therefore a cross-perimeter call. It is not failing today only because
+  # `use_explicit_dry_run_spec` is true: the calls are logged, not denied, and they will start
+  # failing the moment this perimeter enforces. That is exactly the failure the dry-run period
+  # exists to surface, so the violation log is the evidence, not a surprise.
+  #
+  # The rule that path needs is narrow and already known — the workstation service account only,
+  # `storage.googleapis.com` only, and the same four read-only storage methods that the
+  # `terraform-plan-readonly` ingress rule above already uses:
+  #
+  #   from = { identities = ["serviceAccount:sa-development-workstation@<platform>.iam..."] }
+  #   to   = { resources  = ["projects/<mc-common-ci project number>"]
+  #            operations = { "storage.googleapis.com" = { methods = [
+  #              "google.storage.buckets.get", "google.storage.buckets.list",
+  #              "google.storage.objects.get", "google.storage.objects.list" ] } } }
+  #
+  # It cannot be written yet. The `service_perimeter` module types `egress_policies` as
+  # `list(object({ title = string }))` and validates `length(var.egress_policies) == 0` with
+  # "Egress policies require a dedicated typed contract and exfiltration review" — so the shape
+  # above is not expressible, and forcing it through would mean relaxing that validation, which
+  # is the gate and not an obstacle. The module needs a typed egress contract first; this list
+  # stays empty until it has one.
+  #
+  # Note that the object write side is deliberately absent even from the sketch. The workstation
+  # holds objectCreator on the Bazel cache, but a perimeter egress rule that permits writes OUT
+  # of the perimeter to a bucket outside it is an exfiltration channel with a cache's name on it.
+  # If the workstation must populate the shared Bazel cache, that is a separate reviewed decision
+  # and not a fifth method in this rule.
   egress_policies = []
 
   # No access levels based on IP range. An IP-based access level is a perimeter that a VPN
