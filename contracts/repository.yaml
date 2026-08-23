@@ -54,7 +54,9 @@ required_paths:
     - 5-workloads/development/workstation-image
     - 5-workloads/shared/workstation-image-access-logs
     - contracts/workstation-egress.json
+    - scripts/validate-workstation-image-integration.py
     - scripts/validate_workstation_egress.py
+    - tests/test_workstation_image_integration.py
     - tests/test_workstation_egress.py
     - 5-workloads/staging
     - 5-workloads/production

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.mindclade.internal/workstation-egress.schema.json",
   "type": "object",
-  "required": ["$schema", "blockers", "egress_baseline", "evidence", "rejected_designs", "schema_version", "selected_design", "status", "workstation"],
+  "required": ["$schema", "blockers", "egress_baseline", "evidence", "rejected_designs", "releases", "schema_version", "selected_design", "status", "workstation"],
   "properties": {
     "$schema": {"const": "./workstation-egress.schema.json"},
     "schema_version": {"const": 2},
@@ -62,6 +62,16 @@
         },
         "additionalProperties": false
       }
+    },
+    "releases": {
+      "type": "object",
+      "required": ["bootstrapContract", "terraformModules", "workflowContract"],
+      "properties": {
+        "bootstrapContract": {"const": "1.6.0"},
+        "terraformModules": {"const": "v0.4.0"},
+        "workflowContract": {"const": "v5.0.0"}
+      },
+      "additionalProperties": false
     },
     "selected_design": {
       "type": "object",

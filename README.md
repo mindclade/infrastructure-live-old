@@ -87,6 +87,8 @@ nix develop .#ci --command make validate-gitops-integration \
 The exact module gate is expected to fail while selected tag `v0.4.0` remains unpublished. Use the
 candidate commands in the [module interface contract](docs/module-interface-contract.md) only for
 source review; a candidate pass is not release provenance and cannot authorize a plan or apply.
+The GitOps integration gate compares ARC placement and the workstation image release, authority,
+source-evidence, and fail-closed activation contracts across both checkouts.
 
 ## Estate position
 

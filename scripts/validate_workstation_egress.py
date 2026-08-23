@@ -151,6 +151,11 @@ def policy_errors(document: dict[str, Any]) -> list[str]:
     if selected.get("implemented") is not True:
         errors.append(coded("POLICY", "the reviewed immutable-image source design is incomplete"))
     evidence = document.get("evidence", {})
+    releases = document.get("releases", {})
+    if releases.get("terraformModules") != workstation.get("module_release"):
+        errors.append(
+            coded("POLICY", "workstation module and cross-repository release differ")
+        )
     if evidence.get("image_contract_source_validated") is not True:
         errors.append(coded("POLICY", "source image contract validation may not regress"))
     if evidence.get("runtime_fetches_absent") is not True:
