@@ -49,6 +49,11 @@
       "reason": "Adding a whole-internet allow above the priority-65000 default deny removes the control this contract exists to preserve."
     }
   ],
+  "releases": {
+    "bootstrapContract": "1.6.0",
+    "terraformModules": "v0.4.0",
+    "workflowContract": "v5.0.0"
+  },
   "schema_version": 2,
   "selected_design": {
     "adds_egress_destination": false,

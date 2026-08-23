@@ -5,7 +5,7 @@ GITOPS ?= ../gitops
 CANDIDATE_MODULE_VERSION ?= v0.4.0
 CANDIDATE_MODULE_REF ?=
 
-.PHONY: validate validate-integration validate-source-integration validate-release-candidate validate-module-interfaces validate-module-candidate validate-module-worktree-candidate validate-capacity-contract validate-capacity-candidate validate-workload-identity-contract validate-workload-identity-candidate validate-gitops-integration validate-argocd-image-exceptions validate-arc-runner-placement validate-arc-runner-placement-integration validate-infracost-workflow validate-nix-cache validate-nix-cache-integration validate-workstation-egress validate-dns validate-dns-source validate-dns-portfolio validate-dns-governance test-dns validate-security-txt validate-repository-home test format plan-development plan-staging plan-production
+.PHONY: validate validate-integration validate-source-integration validate-release-candidate validate-module-interfaces validate-module-candidate validate-module-worktree-candidate validate-capacity-contract validate-capacity-candidate validate-workload-identity-contract validate-workload-identity-candidate validate-gitops-integration validate-argocd-image-exceptions validate-arc-runner-placement validate-arc-runner-placement-integration validate-infracost-workflow validate-nix-cache validate-nix-cache-integration validate-workstation-egress validate-workstation-image-integration validate-dns validate-dns-source validate-dns-portfolio validate-dns-governance test-dns validate-security-txt validate-repository-home test format plan-development plan-staging plan-production
 validate: validate-production-contract validate-repository-home validate-argocd-image-exceptions validate-arc-runner-placement validate-infracost-workflow validate-nix-cache validate-workstation-egress validate-dns-source validate-security-txt test
 	python3 scripts/verify-provider-locks.py
 	./scripts/validate-live-tree.py
@@ -49,6 +49,7 @@ validate-infracost-workflow:
 validate-gitops-integration:
 	python3 scripts/validate-argocd-image-exceptions.py --gitops "$(GITOPS)"
 	python3 scripts/validate-arc-runner-placement.py --gitops "$(GITOPS)"
+	python3 scripts/validate-workstation-image-integration.py --gitops "$(GITOPS)"
 
 validate-arc-runner-placement:
 	python3 scripts/validate-arc-runner-placement.py
@@ -64,6 +65,9 @@ validate-nix-cache-integration:
 
 validate-workstation-egress:
 	python3 scripts/validate_workstation_egress.py
+
+validate-workstation-image-integration:
+	python3 scripts/validate-workstation-image-integration.py --gitops "$(GITOPS)"
 
 test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py'

@@ -77,6 +77,7 @@ for required in (
     "5-workloads/shared/workstation-image-access-logs/.terraform.lock.hcl",
     "contracts/workstation-egress.json",
     "contracts/workstation-egress.schema.json",
+    "scripts/validate-workstation-image-integration.py",
     "scripts/validate_workstation_egress.py",
     "1-org/kms-dr-evidence/terragrunt.hcl",
 ):
