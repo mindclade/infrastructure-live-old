@@ -22,7 +22,7 @@ module.
 
 The source path is implemented but activation remains fail-closed. Before any workstation apply:
 
-1. apply bootstrap contract `1.6.0` and its exact workstation-image WIF provider;
+1. apply bootstrap contract `2.0.0` and its exact workstation-image WIF provider;
 2. publish reviewed workflow contract `v5.0.0` and Terraform module release `v0.4.0`;
 3. apply the access-log and create-only source buckets, then the publisher identity;
 4. run the exact-main image workflow and retain the object generation and both digests;

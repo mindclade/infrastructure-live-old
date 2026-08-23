@@ -58,19 +58,6 @@ def need(mapping: dict[str, Any], key: str, label: str) -> Any:
     return value
 
 
-def validated_retired_buildkite(value: Any) -> None:
-    if not isinstance(value, dict):
-        raise ValueError("platform_contract buildkite must be an object")
-    if value != {
-        "enabled": False,
-        "workload_identity_pool": None,
-        "workload_identity_provider": None,
-    }:
-        raise ValueError(
-            "Buildkite is retired and must publish disabled with null pool and provider"
-        )
-
-
 def validated_release_identities(
     value: Any, github_pool: str, github_org: str
 ) -> dict[str, dict[str, str]]:
@@ -378,7 +365,7 @@ def main() -> int:
             capture_output=True,
         )
         contract = json.loads(output.stdout)
-        if contract.get("contract_version") != "1.6.0":
+        if contract.get("contract_version") != "2.0.0":
             raise ValueError(
                 f"unsupported bootstrap platform_contract version: {contract.get('contract_version', 'missing')}"
             )
@@ -391,7 +378,6 @@ def main() -> int:
         match = re.fullmatch(r"projects/([0-9]+)/.*", pool)
         if match is None:
             raise ValueError("invalid GitHub workload identity pool resource name")
-        validated_retired_buildkite(need(contract, "buildkite", "platform_contract"))
         github_org = str(need(github, "organization", "github"))
         release_identities = validated_release_identities(
             need(github, "artifact_release_identities", "github"), pool, github_org

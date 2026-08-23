@@ -9,7 +9,7 @@
 # publish only a content-addressed raw-disk object. Terraform creates the CMEK-protected Compute
 # Image and passes its exact self-link plus embedded-contract digest to this module.
 #
-# ACTIVATION IS BLOCKED until bootstrap contract 1.6.0, workflow contract v5.0.0, and Terraform
+# ACTIVATION IS BLOCKED until bootstrap contract 2.0.0, workflow contract v5.0.0, and Terraform
 # modules v0.4.0 are published and applied through their protected paths; the raw-disk object and
 # Compute Image then need connected first-boot, idle-shutdown, rollback, and VPC-SC cache tests.
 # `contracts/workstation-egress.json` is the machine-readable authority for those gates.

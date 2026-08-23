@@ -16,7 +16,7 @@
   ],
   "properties": {
     "schema_version": {"const": 1},
-    "bootstrap_contract_version": {"const": "1.6.0"},
+    "bootstrap_contract_version": {"const": "2.0.0"},
     "bootstrap_source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "platform_contract_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "state_location": {"const": "US"},

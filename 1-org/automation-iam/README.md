@@ -24,13 +24,13 @@ uses a separate read-only identity. No human credential or service-account key i
 
 The unit also publishes `environment_apply_authority`, normal-plane supply-chain service accounts,
 and the non-secret signer identity contract consumed by `github-config`. It owns separate common-CI
-`bazel-cache-reader` and `bazel-cache-writer` accounts and binds the exact bootstrap `1.5.0` route
+`bazel-cache-reader` and `bazel-cache-writer` accounts and binds the exact bootstrap `2.0.0` route
 principals without granting bucket IAM here. The stable cache handoff exposes
 `WIF_PROVIDER_BAZEL_CACHE`, `SA_BAZEL_CACHE_READER`, and `SA_BAZEL_CACHE_WRITER`; the cache module
 owns object access and KMS owns the storage-service-agent key grant. Treat output names as an
 interface: coordinate consumers before renaming them.
 
-Bootstrap contract `1.6.0` also hands off one exact workstation-image publication principal.
+Bootstrap contract `2.0.0` also hands off one exact workstation-image publication principal.
 This unit creates `workstation-image-pub`, binds only that principal, and grants no project role.
 `5-workloads/ci/workstation-image-source` owns its create-only object permission. The applied
 `workstation_image_identity_contract` is authoritative for

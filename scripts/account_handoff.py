@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 HANDOFF_CONTRACT_VERSION = 1
-BOOTSTRAP_PLATFORM_CONTRACT_VERSION = "1.6.0"
+BOOTSTRAP_PLATFORM_CONTRACT_VERSION = "2.0.0"
 SCHEMA_PATH = (
     Path(__file__).resolve().parents[1]
     / "contracts/bootstrap-account-handoff.schema.json"

@@ -148,7 +148,7 @@ variable "bazel_cache_identity" {
       ]),
       false,
     )
-    error_message = "bazel_cache_identity must match the exact blocking bootstrap contract 1.5.0 provider, repository, and read/write routes."
+    error_message = "bazel_cache_identity must match the exact bootstrap contract 2.0.0 provider, repository, and read/write routes."
   }
 }
 
@@ -175,7 +175,7 @@ variable "workstation_image_identity" {
       var.workstation_image_identity.job_workflow_ref == "${var.github_org}/.github/.github/workflows/reusable-nixos-gce-image-publish.yml@refs/tags/v5.0.0",
       false,
     )
-    error_message = "workstation_image_identity must match bootstrap contract 1.6.0 and the exact protected caller/reusable workflow pair."
+    error_message = "workstation_image_identity must match bootstrap contract 2.0.0 and the exact protected caller/reusable workflow pair."
   }
 }
 

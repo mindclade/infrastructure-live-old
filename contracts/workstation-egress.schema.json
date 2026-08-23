@@ -67,7 +67,7 @@
       "type": "object",
       "required": ["bootstrapContract", "terraformModules", "workflowContract"],
       "properties": {
-        "bootstrapContract": {"const": "1.6.0"},
+        "bootstrapContract": {"const": "2.0.0"},
         "terraformModules": {"const": "v0.4.0"},
         "workflowContract": {"const": "v5.0.0"}
       },

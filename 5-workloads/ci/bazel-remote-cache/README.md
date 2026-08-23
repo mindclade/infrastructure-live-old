@@ -18,7 +18,7 @@ and access logging have connected evidence.
 
 ## Applied handoff
 
-After the bootstrap `1.5.0` contract and this foundation scope are applied through protected
+After the bootstrap `2.0.0` contract and this foundation scope are applied through protected
 automation, export only the applied outputs rather than constructing names:
 
 - `WIF_PROVIDER_BAZEL_CACHE`;

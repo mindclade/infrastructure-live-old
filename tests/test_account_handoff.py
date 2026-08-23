@@ -58,7 +58,7 @@ def account_values() -> dict[str, str]:
 
 def platform_contract() -> dict[str, object]:
     return {
-        "contract_version": "1.6.0",
+        "contract_version": "2.0.0",
         "organization_id": "123456789",
         "state": {"primary_location": "US"},
     }

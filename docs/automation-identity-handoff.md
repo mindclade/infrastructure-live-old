@@ -17,7 +17,7 @@ Bootstrap creates:
 
 Bootstrap does not grant the environment identities broad organization authority.
 
-Bootstrap contract `1.6.0` additionally creates `gh-workstation-image`, constrained to the exact
+Bootstrap contract `2.0.0` additionally creates `gh-workstation-image`, constrained to the exact
 internal-monorepo caller on protected `main`, the `workstation-image-publication` environment,
 immutable repository IDs, `workflow_dispatch`, and the exact `v5.0.0` reusable publication
 workflow. Its subject prefix cannot impersonate any artifact-release or cache identity.
@@ -55,7 +55,7 @@ SA_BAZEL_CACHE_WRITER
 ```
 
 Do not construct these values from naming conventions. `github-config` may publish them only
-after protected automation applies bootstrap contract `1.6.0` and the foundation IAM unit, then
+after protected automation applies bootstrap contract `2.0.0` and the foundation IAM unit, then
 connected qualification proves each positive route and the corresponding cross-route negative
 cases. The cache bucket remains independently owned by
 [`5-workloads/ci/bazel-remote-cache`](../5-workloads/ci/bazel-remote-cache/README.md); its module

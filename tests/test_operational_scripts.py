@@ -264,25 +264,6 @@ class PlanSafetyTest(unittest.TestCase):
             ACCOUNT.validated_customer_id("")
         self.assertEqual(ACCOUNT.validated_customer_id("C01234567"), "C01234567")
 
-    def test_retired_buildkite_contract_requires_null_resources(self) -> None:
-        self.assertIsNone(
-            ACCOUNT.validated_retired_buildkite(
-                {
-                    "enabled": False,
-                    "workload_identity_pool": None,
-                    "workload_identity_provider": None,
-                }
-            )
-        )
-        with self.assertRaises(ValueError):
-            ACCOUNT.validated_retired_buildkite(
-                {
-                    "enabled": True,
-                    "workload_identity_pool": "projects/123456789/locations/global/workloadIdentityPools/buildkite",
-                    "workload_identity_provider": "projects/123456789/locations/global/workloadIdentityPools/buildkite/providers/buildkite",
-                }
-            )
-
     def test_release_identity_contract_is_capability_exact(self) -> None:
         pool = "projects/123456789/locations/global/workloadIdentityPools/github"
         identities = release_identities(pool)

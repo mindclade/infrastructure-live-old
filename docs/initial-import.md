@@ -11,7 +11,7 @@
 ## Prerequisites
 
 - the existing `mindclade/infrastructure-live` repository and `.git` history;
-- `.github` workflow release `v5.0.0`, a protected apply of Ring-0 bootstrap contract `1.6.0`,
+- `.github` workflow release `v5.0.0`, a protected apply of Ring-0 bootstrap contract `2.0.0`,
   and applied `github-config` environments and variables;
 - distinct plan and scope-specific apply identities with qualified negative tests;
 - the exact immutable internal-monorepo module releases referenced by live units; and
@@ -27,7 +27,7 @@ bootstrap outputs and the target estate has been reconciled with Terraform state
    Terraform or Terragrunt caches, plans, state, credentials, and local overrides.
 3. Generate the ignored account contract from the verified, clean bootstrap checkout. The
    exporter records the checkout's full commit, hashes the complete applied Ring-0
-   `platform_contract`, and fails closed unless contract version `1.5.0` is exactly supported.
+   `platform_contract`, and fails closed unless contract version `2.0.0` is exactly supported.
    Supply the immutable Cloud Identity customer ID that is already present in the
    organization-level `iam.allowedPolicyMemberDomains` policy; do not guess it from the domain
    name:

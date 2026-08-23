@@ -339,7 +339,7 @@ elif REPOSITORY == "infrastructure-live":
         'variable "bazel_cache_identity"',
         'try(',
         'subject/bazel-cache:${route}',
-        'error_message = "bazel_cache_identity must match the exact blocking bootstrap contract 1.5.0',
+        'error_message = "bazel_cache_identity must match the exact bootstrap contract 2.0.0',
     ):
         if blocking_trust_value not in automation_variables:
             error(f"blocking Bazel cache input contract omits: {blocking_trust_value}")
@@ -358,7 +358,7 @@ elif REPOSITORY == "infrastructure-live":
         'resource "google_service_account_iam_member" "workstation_image_github_wif"',
         'check "workstation_image_trust_contract"',
         'variable "workstation_image_identity"',
-        "bootstrap contract 1.6.0",
+        "bootstrap contract 2.0.0",
     ):
         if workstation_trust_value not in automation_text:
             error(f"workstation image trust contract omits: {workstation_trust_value}")
@@ -658,8 +658,7 @@ elif REPOSITORY == "infrastructure-live":
         "utf-8", errors="ignore"
     )
     if (
-        "validated_retired_buildkite" not in bootstrap_account
-        or '"ARTIFACT_RELEASE_IDENTITIES_JSON"' not in bootstrap_account
+        '"ARTIFACT_RELEASE_IDENTITIES_JSON"' not in bootstrap_account
         or '"DR_EVIDENCE_IDENTITY_JSON"' not in bootstrap_account
         or '"BAZEL_CACHE_IDENTITY_JSON"' not in bootstrap_account
         or '"BOOTSTRAP_ACCOUNT_HANDOFF_JSON"' not in bootstrap_account
@@ -695,11 +694,13 @@ elif REPOSITORY == "infrastructure-live":
     if (
         '"platform_contract"' not in bootstrap_account
         or '"output"' not in bootstrap_account
-        or 'contract.get("contract_version") != "1.6.0"' not in bootstrap_account
+        or 'contract.get("contract_version") != "2.0.0"' not in bootstrap_account
     ):
         error(
             "bootstrap account exporter bypasses the versioned Ring-0 platform contract"
         )
+    if "buildkite" in bootstrap_account.lower():
+        error("bootstrap account exporter retains retired Buildkite compatibility")
     if '"CLOUD_IDENTITY_CUSTOMER_ID"' not in bootstrap_account:
         error(
             "bootstrap account exporter omits the operator-verified Cloud Identity customer ID"

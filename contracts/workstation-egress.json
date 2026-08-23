@@ -1,7 +1,7 @@
 {
   "$schema": "./workstation-egress.schema.json",
   "blockers": [
-    "bootstrap-1-6-0-not-applied",
+    "bootstrap-2-0-0-not-applied",
     "workflow-v5-0-0-unpublished",
     "terraform-v0-4-0-unpublished",
     "source-object-not-published",
@@ -50,7 +50,7 @@
     }
   ],
   "releases": {
-    "bootstrapContract": "1.6.0",
+    "bootstrapContract": "2.0.0",
     "terraformModules": "v0.4.0",
     "workflowContract": "v5.0.0"
   },

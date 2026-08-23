@@ -265,7 +265,7 @@ check "workstation_image_trust_contract" {
       var.workstation_image_identity.workflow_ref == "${var.github_org}/mindclade-internal-monorepo/.github/workflows/nixos-image.yml@refs/heads/main" &&
       var.workstation_image_identity.job_workflow_ref == "${var.github_org}/.github/.github/workflows/reusable-nixos-gce-image-publish.yml@refs/tags/v5.0.0"
     )
-    error_message = "Workstation image trust must remain isolated to bootstrap contract 1.6.0."
+    error_message = "Workstation image trust must remain isolated to bootstrap contract 2.0.0."
   }
 }
 
@@ -293,7 +293,7 @@ check "bazel_cache_trust_contract" {
         var.bazel_cache_identity.routes[route].principal == "principal://iam.googleapis.com/${var.github_wif_pool_name}/subject/bazel-cache:${route}"
       ])
     )
-    error_message = "Bazel cache trust must match bootstrap contract 1.5.0 with pull-request read and exact trusted write routes."
+    error_message = "Bazel cache trust must match bootstrap contract 2.0.0 with pull-request read and exact trusted write routes."
   }
 }
 

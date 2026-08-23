@@ -28,7 +28,7 @@ CONTRACT = ROOT / "contracts/workstation-egress.json"
 SCHEMA = ROOT / "contracts/workstation-egress.schema.json"
 
 EXPECTED_BLOCKERS = [
-    "bootstrap-1-6-0-not-applied",
+    "bootstrap-2-0-0-not-applied",
     "workflow-v5-0-0-unpublished",
     "terraform-v0-4-0-unpublished",
     "source-object-not-published",

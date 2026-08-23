@@ -25,6 +25,8 @@ not reconstructed or relabeled here.
 
 ### Changed
 
+- Migrated the Bootstrap consumer atomically to platform contract `2.0.0` and removed the retired
+  Buildkite compatibility reader; applied infrastructure handoff `1.5.0` remains unchanged.
 - Updated the proprietary license with the protected-disclosure notice and
   recorded the Contributor Covenant 2.1 attribution and modifications.
 - Moved the reusable SPDX source-header template under `.github/` so `LICENSE`
