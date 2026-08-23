@@ -13,7 +13,7 @@
     "credential_material_included"
   ],
   "properties": {
-    "contract_version": { "const": "1.4.0" },
+    "contract_version": { "const": "1.5.0" },
     "producer": { "const": "mindclade/infrastructure-live" },
     "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "environment": { "const": "production" },
@@ -24,13 +24,15 @@
         "automation_iam",
         "gitops_identities",
         "binary_authorization",
-        "qualification_evidence"
+        "qualification_evidence",
+        "workstation_image_source"
       ],
       "properties": {
         "automation_iam": { "const": "1-org/automation-iam" },
         "gitops_identities": { "const": "5-workloads/shared/control-plane-identities" },
         "binary_authorization": { "const": "5-workloads/production/binary-authorization" },
-        "qualification_evidence": { "const": "5-workloads/shared/production-qualification-evidence" }
+        "qualification_evidence": { "const": "5-workloads/shared/production-qualification-evidence" },
+        "workstation_image_source": { "const": "5-workloads/ci/workstation-image-source" }
       }
     },
     "variables": {
@@ -41,6 +43,9 @@
         "WIF_PROVIDER_BAZEL_CACHE",
         "SA_BAZEL_CACHE_READER",
         "SA_BAZEL_CACHE_WRITER",
+        "WIF_PROVIDER_WORKSTATION_IMAGE",
+        "SA_WORKSTATION_IMAGE_BUILDER",
+        "WORKSTATION_IMAGE_BUCKET",
         "SA_ARC_CANARY",
         "SA_ARTIFACT_BUILDER",
         "SA_ARTIFACT_QUALIFICATION_READER",
@@ -82,6 +87,17 @@
         "SA_BAZEL_CACHE_WRITER": {
           "type": "string",
           "pattern": "^bazel-cache-writer@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
+        "WIF_PROVIDER_WORKSTATION_IMAGE": {
+          "type": "string",
+          "pattern": "^projects/[0-9]+/locations/global/workloadIdentityPools/github/providers/gh-workstation-image$"
+        },
+        "SA_WORKSTATION_IMAGE_BUILDER": {
+          "type": "string",
+          "pattern": "^workstation-image-pub@[a-z][a-z0-9-]*-common-ci\\.iam\\.gserviceaccount\\.com$"
+        },
+        "WORKSTATION_IMAGE_BUCKET": {
+          "const": "mc-common-ci-workstation-images"
         },
         "SA_ARC_CANARY": {
           "type": "string",

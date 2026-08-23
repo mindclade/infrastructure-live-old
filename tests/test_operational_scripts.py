@@ -128,6 +128,32 @@ def production_qualification_identity(
     }
 
 
+def workstation_image_identity(
+    pool: str = "projects/123456789/locations/global/workloadIdentityPools/github",
+) -> dict[str, str]:
+    subject = (
+        "repo:mindclade@316676129/mindclade-internal-monorepo@1333792222:"
+        "environment:workstation-image-publication"
+    )
+    return {
+        "workload_identity_provider": f"{pool}/providers/gh-workstation-image",
+        "principal": (
+            f"principal://iam.googleapis.com/{pool}/subject/workstation-image:{subject}"
+        ),
+        "repository": "mindclade/mindclade-internal-monorepo",
+        "repository_id": "1333792222",
+        "subject": subject,
+        "workflow_ref": (
+            "mindclade/mindclade-internal-monorepo/.github/workflows/"
+            "nixos-image.yml@refs/heads/main"
+        ),
+        "job_workflow_ref": (
+            "mindclade/.github/.github/workflows/"
+            "reusable-nixos-gce-image-publish.yml@refs/tags/v5.0.0"
+        ),
+    }
+
+
 def bazel_cache_identity(
     pool: str = "projects/123456789/locations/global/workloadIdentityPools/github",
 ) -> dict[str, Any]:
@@ -511,6 +537,9 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
             "PRODUCTION_QUALIFICATION_IDENTITY_JSON"
         )
         self.previous_bazel_cache = os.environ.get("BAZEL_CACHE_IDENTITY_JSON")
+        self.previous_workstation_image = os.environ.get(
+            "WORKSTATION_IMAGE_IDENTITY_JSON"
+        )
         os.environ["ARTIFACT_RELEASE_IDENTITIES_JSON"] = json.dumps(
             release_identities(), sort_keys=True, separators=(",", ":")
         )
@@ -521,6 +550,9 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
         )
         os.environ["BAZEL_CACHE_IDENTITY_JSON"] = json.dumps(
             bazel_cache_identity(), sort_keys=True, separators=(",", ":")
+        )
+        os.environ["WORKSTATION_IMAGE_IDENTITY_JSON"] = json.dumps(
+            workstation_image_identity(), sort_keys=True, separators=(",", ":")
         )
 
     def tearDown(self) -> None:
@@ -538,6 +570,12 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
             os.environ.pop("BAZEL_CACHE_IDENTITY_JSON", None)
         else:
             os.environ["BAZEL_CACHE_IDENTITY_JSON"] = self.previous_bazel_cache
+        if self.previous_workstation_image is None:
+            os.environ.pop("WORKSTATION_IMAGE_IDENTITY_JSON", None)
+        else:
+            os.environ["WORKSTATION_IMAGE_IDENTITY_JSON"] = (
+                self.previous_workstation_image
+            )
 
     @staticmethod
     def output(value, sensitive: bool = False):
@@ -583,6 +621,22 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
                     ],
                     "repository_id": bazel_cache_identity()["repository_id"],
                     "routes": bazel_cache_identity()["routes"],
+                }
+            ),
+            "workstation_image_identity_contract": self.output(
+                {
+                    "WIF_PROVIDER_WORKSTATION_IMAGE": workstation_image_identity()[
+                        "workload_identity_provider"
+                    ],
+                    "SA_WORKSTATION_IMAGE_BUILDER": (
+                        "workstation-image-pub@mc-common-ci.iam.gserviceaccount.com"
+                    ),
+                    "principal": workstation_image_identity()["principal"],
+                    "repository": workstation_image_identity()["repository"],
+                    "repository_id": workstation_image_identity()["repository_id"],
+                    "subject": workstation_image_identity()["subject"],
+                    "workflow_ref": workstation_image_identity()["workflow_ref"],
+                    "job_workflow_ref": workstation_image_identity()["job_workflow_ref"],
                 }
             ),
         }
@@ -653,149 +707,183 @@ class AppliedControlPlaneHandoffTest(unittest.TestCase):
                 }
             )
         }
-        return automation, gitops, binauthz, qualification
+        workstation_source = {
+            "bucket": self.output(
+                {
+                    "id": "mc-common-ci-workstation-images",
+                    "name": "mc-common-ci-workstation-images",
+                    "self_link": "https://storage.invalid/workstation-images",
+                    "url": "gs://mc-common-ci-workstation-images",
+                }
+            )
+        }
+        return automation, gitops, binauthz, qualification, workstation_source
 
     def test_compiles_only_exact_applied_values(self) -> None:
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         contract = HANDOFF.compile_contract(
-            automation, gitops, binauthz, qualification, "a" * 40
+            automation, gitops, binauthz, qualification, workstation_source, "a" * 40
         )
         self.assertEqual(contract["environment"], "production")
         self.assertEqual(
             contract["variables"]["BINAUTHZ_DEPLOYMENT_ATTESTOR"],
             "deployment-attestor",
         )
-        self.assertEqual(len(contract["variables"]), 28)
-        self.assertEqual(contract["contract_version"], "1.4.0")
+        self.assertEqual(len(contract["variables"]), 31)
+        self.assertEqual(contract["contract_version"], "1.5.0")
         self.assertEqual(
             contract["variables"]["SA_BAZEL_CACHE_READER"],
             "bazel-cache-reader@mc-common-ci.iam.gserviceaccount.com",
         )
         self.assertFalse(contract["credential_material_included"])
 
+    def test_workstation_image_handoff_is_applied_and_exact(self) -> None:
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
+        contract = HANDOFF.compile_contract(
+            automation, gitops, binauthz, qualification, workstation_source, "a" * 40
+        )
+        self.assertEqual(
+            contract["variables"]["WIF_PROVIDER_WORKSTATION_IMAGE"],
+            workstation_image_identity()["workload_identity_provider"],
+        )
+        self.assertEqual(
+            contract["variables"]["WORKSTATION_IMAGE_BUCKET"],
+            "mc-common-ci-workstation-images",
+        )
+        workstation_source["bucket"]["value"]["name"] = "unexpected-images"
+        with self.assertRaisesRegex(ValueError, "bucket name is not exact"):
+            HANDOFF.compile_contract(
+                automation,
+                gitops,
+                binauthz,
+                qualification,
+                workstation_source,
+                "a" * 40,
+            )
+
     def test_bazel_cache_applied_output_must_match_bootstrap_and_role_split(self) -> None:
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         automation["bazel_cache_identity_contract"]["value"]["routes"][
             "pull-request-read"
         ]["access"] = "write"
         with self.assertRaisesRegex(ValueError, "differs from bootstrap"):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
 
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         automation["bazel_cache_identity_contract"]["value"][
             "SA_BAZEL_CACHE_WRITER"
         ] = "bazel-cache-reader@mc-common-ci.iam.gserviceaccount.com"
         with self.assertRaisesRegex(ValueError, "wrong service account"):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
 
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         os.environ["BAZEL_CACHE_IDENTITY_JSON"] = "{}"
         with self.assertRaisesRegex(ValueError, "field inventory"):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
 
     def test_sensitive_output_is_rejected(self) -> None:
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         binauthz["project_id"]["sensitive"] = True
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
 
     def test_mock_and_wrong_environment_outputs_are_rejected(self) -> None:
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         binauthz["project_id"]["value"] = "mock-production-platform"
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         binauthz["enforcement_mode"]["value"] = "DRYRUN_AUDIT_LOG_ONLY"
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         binauthz["project_id"]["value"] = "mc-staging-platform"
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
 
     def test_identity_names_and_project_trust_domains_are_exact(self) -> None:
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         automation["artifact_release_identity_contract"]["value"]["signer"][
             "service_account"
         ] = "sa-artifact-builder@mc-common-ci.iam.gserviceaccount.com"
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         gitops["github_config_identity_handoff"]["value"]["SA_GITOPS_RENDER"] = (
             "sa-gitops-render@mc-production-platform.iam.gserviceaccount.com"
         )
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
 
     def test_mutable_key_and_bootstrap_identity_drift_are_rejected(self) -> None:
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         binauthz["attestor_key_versions"]["value"]["deployment-attestor"] = (
             "projects/mc-common-security/locations/us/keyRings/r/cryptoKeys/k"
         )
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         binauthz["attestor_key_versions"]["value"]["deployment-attestor"] = (
             "projects/mc-common-security/locations/us/keyRings/r/cryptoKeys/"
             "attestor-build-attestor/cryptoKeyVersions/1"
         )
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         automation["artifact_release_identity_contract"]["value"]["signer"][
             "job_workflow_ref"
         ] = "mindclade/.github/.github/workflows/reusable-binauthz-sign.yml@main"
         with self.assertRaises(ValueError):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
 
     def test_qualification_identity_bucket_and_role_split_are_exact(self) -> None:
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         gitops["production_qualification_identity_contract"]["value"][
             "subject"
         ] = "repo:mindclade@316676129/gitops@1333792222:environment:staging"
         with self.assertRaisesRegex(ValueError, "differs from bootstrap"):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
 
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         qualification["bucket"]["value"]["name"] = "unexpected-evidence"
         with self.assertRaisesRegex(ValueError, "bucket name is not exact"):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
 
-        automation, gitops, binauthz, qualification = self.fixtures()
+        automation, gitops, binauthz, qualification, workstation_source = self.fixtures()
         gitops["production_qualification_identity_handoff"]["value"][
             "SA_PRODUCTION_QUALIFICATION_WRITER"
         ] = "sa-prod-qual-reader@mc-common-security.iam.gserviceaccount.com"
         with self.assertRaisesRegex(ValueError, "wrong service account"):
             HANDOFF.compile_contract(
-                automation, gitops, binauthz, qualification, "a" * 40
+                automation, gitops, binauthz, qualification, workstation_source, "a" * 40
             )
 
     def test_write_is_private_outside_repo_and_never_overwrites(self) -> None:

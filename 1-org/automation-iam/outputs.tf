@@ -90,3 +90,22 @@ output "nix_cache_storage_service_account" {
   description = "Dedicated non-federated Attic GCS backend identity; no HMAC secret is created or exported"
   value       = google_service_account.nix_cache_storage.email
 }
+
+output "workstation_image_publisher_service_account" {
+  description = "Dedicated create-only workstation-image source-object publisher."
+  value       = google_service_account.workstation_image_publisher.email
+}
+
+output "workstation_image_identity_contract" {
+  description = "Applied workstation-image WIF provider, principal, caller, and service-account handoff."
+  value = {
+    WIF_PROVIDER_WORKSTATION_IMAGE = var.workstation_image_identity.workload_identity_provider
+    SA_WORKSTATION_IMAGE_BUILDER   = google_service_account.workstation_image_publisher.email
+    principal                      = var.workstation_image_identity.principal
+    repository                     = var.workstation_image_identity.repository
+    repository_id                  = var.workstation_image_identity.repository_id
+    subject                        = var.workstation_image_identity.subject
+    workflow_ref                   = var.workstation_image_identity.workflow_ref
+    job_workflow_ref               = var.workstation_image_identity.job_workflow_ref
+  }
+}

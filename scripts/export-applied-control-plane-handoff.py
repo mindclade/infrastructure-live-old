@@ -25,6 +25,7 @@ UNITS = {
     "binary_authorization": ROOT / "5-workloads/production/binary-authorization",
     "qualification_evidence": ROOT
     / "5-workloads/shared/production-qualification-evidence",
+    "workstation_image_source": ROOT / "5-workloads/ci/workstation-image-source",
 }
 ATTESTORS = ("build-attestor", "qualification-attestor", "deployment-attestor")
 CAPABILITY_SERVICE_ACCOUNTS = {
@@ -294,11 +295,104 @@ def bazel_cache_handoff(
     }
 
 
+def workstation_image_handoff(
+    automation_outputs: dict[str, Any],
+    source_outputs: dict[str, Any],
+    ci_project_id: str,
+) -> dict[str, str]:
+    applied = require_mapping(
+        output_value(
+            automation_outputs,
+            "workstation_image_identity_contract",
+            "automation_iam",
+        ),
+        "workstation_image_identity_contract",
+    )
+    applied_fields = {
+        "WIF_PROVIDER_WORKSTATION_IMAGE",
+        "SA_WORKSTATION_IMAGE_BUILDER",
+        "principal",
+        "repository",
+        "repository_id",
+        "subject",
+        "workflow_ref",
+        "job_workflow_ref",
+    }
+    if set(applied) != applied_fields:
+        raise ValueError("applied workstation image identity inventory is not exact")
+    try:
+        bootstrap = json.loads(
+            require_string(
+                os.environ.get("WORKSTATION_IMAGE_IDENTITY_JSON"),
+                "environment WORKSTATION_IMAGE_IDENTITY_JSON",
+            )
+        )
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            "environment WORKSTATION_IMAGE_IDENTITY_JSON is not valid JSON"
+        ) from error
+    bootstrap_fields = {
+        "workload_identity_provider",
+        "principal",
+        "repository",
+        "repository_id",
+        "subject",
+        "workflow_ref",
+        "job_workflow_ref",
+    }
+    applied_source = {
+        "workload_identity_provider": applied["WIF_PROVIDER_WORKSTATION_IMAGE"],
+        "principal": applied["principal"],
+        "repository": applied["repository"],
+        "repository_id": applied["repository_id"],
+        "subject": applied["subject"],
+        "workflow_ref": applied["workflow_ref"],
+        "job_workflow_ref": applied["job_workflow_ref"],
+    }
+    if not isinstance(bootstrap, dict) or set(bootstrap) != bootstrap_fields:
+        raise ValueError("bootstrap workstation image identity inventory is not exact")
+    if applied_source != bootstrap:
+        raise ValueError("applied workstation image identity differs from bootstrap")
+    provider = require_string(
+        applied["WIF_PROVIDER_WORKSTATION_IMAGE"],
+        "WIF_PROVIDER_WORKSTATION_IMAGE",
+    )
+    if re.fullmatch(
+        r"projects/[0-9]+/locations/global/workloadIdentityPools/github/"
+        r"providers/gh-workstation-image",
+        provider,
+    ) is None:
+        raise ValueError("workstation image provider is not dedicated")
+    publisher = require_service_account(
+        applied["SA_WORKSTATION_IMAGE_BUILDER"],
+        "SA_WORKSTATION_IMAGE_BUILDER",
+        expected_account="workstation-image-pub",
+        project_suffix="-common-ci",
+    )
+    if not publisher.endswith(f"@{ci_project_id}.iam.gserviceaccount.com"):
+        raise ValueError("workstation image publisher disagrees with ci_project_id")
+    bucket = require_mapping(
+        output_value(source_outputs, "bucket", "workstation_image_source"),
+        "workstation_image_source.bucket",
+    )
+    bucket_name = require_string(
+        bucket.get("name"), "workstation image source bucket name"
+    )
+    if bucket_name != "mc-common-ci-workstation-images":
+        raise ValueError("workstation image source bucket name is not exact")
+    return {
+        "WIF_PROVIDER_WORKSTATION_IMAGE": provider,
+        "SA_WORKSTATION_IMAGE_BUILDER": publisher,
+        "WORKSTATION_IMAGE_BUCKET": bucket_name,
+    }
+
+
 def compile_contract(
     automation_outputs: dict[str, Any],
     gitops_outputs: dict[str, Any],
     binauthz_outputs: dict[str, Any],
     qualification_outputs: dict[str, Any],
+    workstation_source_outputs: dict[str, Any],
     source_commit: str,
 ) -> dict[str, Any]:
     if re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
@@ -371,6 +465,9 @@ def compile_contract(
     ):
         raise ValueError("ARC service accounts disagree with automation_iam.ci_project_id")
     cache_variables = bazel_cache_handoff(automation_outputs, ci_project_id)
+    workstation_variables = workstation_image_handoff(
+        automation_outputs, workstation_source_outputs, ci_project_id
+    )
 
     identities = require_mapping(
         output_value(
@@ -515,6 +612,7 @@ def compile_contract(
         "CI_PROJECT_ID": ci_project_id,
         **release_service_accounts,
         **cache_variables,
+        **workstation_variables,
         "SA_GITOPS_RENDER": require_service_account(
             identities.get("SA_GITOPS_RENDER"),
             "SA_GITOPS_RENDER",
@@ -560,7 +658,7 @@ def compile_contract(
         "BINAUTHZ_DEPLOYMENT_ATTESTOR_KEY_VERSION": deployment_key,
     }
     return {
-        "contract_version": "1.4.0",
+        "contract_version": "1.5.0",
         "producer": "mindclade/infrastructure-live",
         "source_commit": source_commit,
         "environment": "production",
@@ -610,6 +708,7 @@ def main() -> int:
             payloads["gitops_identities"],
             payloads["binary_authorization"],
             payloads["qualification_evidence"],
+            payloads["workstation_image_source"],
             commit,
         )
         write_contract(args.output, contract)

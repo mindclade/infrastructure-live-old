@@ -33,9 +33,18 @@ locals {
   # This does not relax the contract. 1-org/automation-iam types and validates both values, so an
   # empty decode is rejected there: plan and apply still fail closed until the applied bootstrap
   # outputs are exported.
-  artifact_release_identities = jsondecode(coalesce(get_env("ARTIFACT_RELEASE_IDENTITIES_JSON", ""), "{}"))
-  dr_evidence_identity        = jsondecode(coalesce(get_env("DR_EVIDENCE_IDENTITY_JSON", ""), "{}"))
-  bazel_cache_identity        = jsondecode(coalesce(get_env("BAZEL_CACHE_IDENTITY_JSON", ""), "{}"))
+  artifact_release_identities    = jsondecode(coalesce(get_env("ARTIFACT_RELEASE_IDENTITIES_JSON", ""), "{}"))
+  dr_evidence_identity           = jsondecode(coalesce(get_env("DR_EVIDENCE_IDENTITY_JSON", ""), "{}"))
+  bazel_cache_identity           = jsondecode(coalesce(get_env("BAZEL_CACHE_IDENTITY_JSON", ""), "{}"))
+  workstation_image_identity     = jsondecode(coalesce(get_env("WORKSTATION_IMAGE_IDENTITY_JSON", ""), "{}"))
+  workstation_image_source_uri   = get_env("WORKSTATION_IMAGE_SOURCE_URI", "")
+  workstation_image_source_state = get_env("WORKSTATION_IMAGE_SOURCE_STATE", "blocked")
+  workstation_image_source_object_generation = get_env(
+    "WORKSTATION_IMAGE_SOURCE_OBJECT_GENERATION",
+    "",
+  )
+  workstation_image_source_sha256   = get_env("WORKSTATION_IMAGE_SOURCE_SHA256", "")
+  workstation_image_contract_sha256 = get_env("WORKSTATION_IMAGE_CONTRACT_SHA256", "")
   production_qualification_identity = jsondecode(
     coalesce(get_env("PRODUCTION_QUALIFICATION_IDENTITY_JSON", ""), "{}"),
   )

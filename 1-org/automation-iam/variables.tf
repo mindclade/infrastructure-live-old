@@ -152,6 +152,33 @@ variable "bazel_cache_identity" {
   }
 }
 
+variable "workstation_image_identity" {
+  description = "Bootstrap-exported dedicated provider and exact immutable workstation-image publisher identity."
+  type = object({
+    workload_identity_provider = string
+    principal                  = string
+    repository                 = string
+    repository_id              = string
+    subject                    = string
+    workflow_ref               = string
+    job_workflow_ref           = string
+  })
+
+  validation {
+    condition = try(
+      var.workstation_image_identity.workload_identity_provider == "${var.github_wif_pool_name}/providers/gh-workstation-image" &&
+      var.workstation_image_identity.repository == "${var.github_org}/mindclade-internal-monorepo" &&
+      can(regex("^[0-9]+$", var.workstation_image_identity.repository_id)) &&
+      can(regex("^repo:${var.github_org}@[0-9]+/mindclade-internal-monorepo@[0-9]+:environment:workstation-image-publication$", var.workstation_image_identity.subject)) &&
+      var.workstation_image_identity.principal == "principal://iam.googleapis.com/${var.github_wif_pool_name}/subject/workstation-image:${var.workstation_image_identity.subject}" &&
+      var.workstation_image_identity.workflow_ref == "${var.github_org}/mindclade-internal-monorepo/.github/workflows/nixos-image.yml@refs/heads/main" &&
+      var.workstation_image_identity.job_workflow_ref == "${var.github_org}/.github/.github/workflows/reusable-nixos-gce-image-publish.yml@refs/tags/v5.0.0",
+      false,
+    )
+    error_message = "workstation_image_identity must match bootstrap contract 1.6.0 and the exact protected caller/reusable workflow pair."
+  }
+}
+
 variable "github_org" {
   type        = string
   description = "GitHub organization whose protected monorepo release workflow may sign."

@@ -1,22 +1,19 @@
 {
   "$schema": "./workstation-egress.schema.json",
   "blockers": [
-    "artifact-registry-apt-remote-not-expressible",
-    "artifact-registry-remote-upstream-unqualified",
-    "nix-installer-has-no-internal-source",
-    "no-vm-image-build-pipeline",
-    "perimeter-egress-contract-untyped",
-    "workstation-startup-script-is-not-caller-overridable"
+    "bootstrap-1-6-0-not-applied",
+    "workflow-v5-0-0-unpublished",
+    "terraform-v0-4-0-unpublished",
+    "source-object-not-published",
+    "compute-image-not-applied",
+    "connected-first-boot-not-qualified",
+    "vpc-sc-cache-path-unqualified"
   ],
   "egress_baseline": {
     "deny_destination": "0.0.0.0/0",
     "deny_priority": 65000,
     "deny_rule": "deny-egress-default",
-    "environments": [
-      "development",
-      "production",
-      "staging"
-    ],
+    "environments": ["development", "production", "staging"],
     "reviewed_destinations": [
       "10.0.0.0/8",
       "169.254.169.254/32",
@@ -26,80 +23,68 @@
     "unit": "3-networks/development/firewall-baseline"
   },
   "evidence": {
-    "apt_install_from_internal_source": false,
-    "idle_timer_installed": false,
-    "nix_present_without_public_fetch": false,
-    "provisioning_completes": false,
-    "remote_upstream_serves_debian": false,
-    "vpc_sc_enforced_path_qualified": false
+    "compute_image_applied": false,
+    "first_boot_qualified": false,
+    "idle_shutdown_observed": false,
+    "image_contract_source_validated": true,
+    "rollback_image_booted": false,
+    "runtime_fetches_absent": true,
+    "source_publication_create_only": false,
+    "vpc_sc_cache_path_qualified": false
   },
   "rejected_designs": [
     {
       "blocking_gap": "no-tls-inspection-or-ca-hierarchy-in-source",
       "id": "secure-web-proxy",
-      "reason": "The secure_web_proxy module requires tls_inspection_policy_url and gateway_certificate_url. Neither a CA Service hierarchy nor a TLS inspection policy exists in any module or unit, the gateway is EXPLICIT_ROUTING_MODE so the guest must still be pointed at it and must still trust an interception CA, and intercepting a developer's whole session to install two packages is a posture decision, not a Terraform change."
+      "reason": "The proxy requires certificate authority and explicit guest proxy configuration that are outside the workstation authority and would intercept the full developer session."
     },
     {
       "blocking_gap": "cdn-ranges-are-not-a-bounded-allowlist",
       "id": "named-destination-egress-rule",
-      "reason": "google_compute_firewall accepts CIDRs only; the firewall module creates nothing else. deb.debian.org, security.debian.org, nixos.org, releases.nixos.org and cache.nixos.org are all shared-CDN fronted, so the rule would admit ranges that also front an arbitrary slice of the public internet and that change without notice. That is not bounded and not reviewable."
+      "reason": "Public package and installer hosts use shared CDN ranges, so a CIDR firewall allow would grant materially broader and mutable internet access."
     },
     {
       "blocking_gap": "widening-the-deny-is-the-violation",
       "id": "widen-deny-egress-default",
-      "reason": "Turning the priority-65000 deny into an allow, or adding any 0.0.0.0/0 egress allow above it, removes the control the unit exists for. It is refused here and by validate-workstation-egress."
+      "reason": "Adding a whole-internet allow above the priority-65000 default deny removes the control this contract exists to preserve."
     }
   ],
-  "schema_version": 1,
+  "schema_version": 2,
   "selected_design": {
     "adds_egress_destination": false,
     "components": [
       {
-        "id": "apt-from-artifact-registry-remote",
-        "requires_module_change": "infra/terraform/modules/artifact_registry_factory",
-        "summary": "An Artifact Registry APT remote repository proxying Debian, reached at <region>-apt.pkg.dev. 3-networks/shared/dns-hub already resolves *.pkg.dev to restricted.googleapis.com and 199.36.153.4/30:443 is already allowed, so this path needs no new firewall rule. The module hard-codes mode = STANDARD_REPOSITORY and its format enum is DOCKER/GO/MAVEN/NPM/PYTHON, so an APT remote repository cannot be declared today."
+        "id": "immutable-nixos-source",
+        "source_path": "infra/nixos/workstation",
+        "summary": "Build Nix, Git, tmux, guest support, contract verification, and idle shutdown into an immutable x86_64-linux NixOS GCE image."
       },
       {
-        "id": "nix-from-the-boot-image",
-        "requires_module_change": "infra/terraform/modules/workstation",
-        "summary": "Nix arrives with the image rather than over the network. 5-workloads/ci/nix-binary-cache exports substituter_uri = null with reason raw-private-gcs-is-not-a-nix-substituter, and there is no Google-hosted mirror of the Nix installer, so no reachable substituter or installer source exists. var.image already accepts a full image self-link, but no VM image build pipeline exists in either repository and the startup script would still run its unconditional public fetch."
+        "id": "create-only-source-publication",
+        "source_path": ".github/workflows/reusable-nixos-gce-image-publish.yml",
+        "summary": "Publish only a content-addressed raw-disk archive and retain its generation, source digest, contract digest, and clean source commit."
+      },
+      {
+        "id": "terraform-compute-image-authority",
+        "source_path": "infra/terraform/modules/compute_image",
+        "summary": "Create the CMEK-protected Compute Image from an exact HTTPS object and generation; GitHub cannot create or select the image."
+      },
+      {
+        "id": "immutable-workstation-consumer",
+        "source_path": "infra/terraform/modules/workstation",
+        "summary": "Consume only an exact image self-link and embedded contract digest, with no public runtime package or installer fetch."
       }
     ],
-    "id": "internal-sources-over-restricted-vip",
-    "implemented": false,
-    "summary": "Everything the workstation needs at first boot comes from inside the perimeter over the restricted Google API VIP that the firewall already allows. No egress destination is added."
+    "id": "immutable-nixos-image-without-new-egress",
+    "implemented": true,
+    "summary": "Everything required for first boot is baked into an immutable image, so the existing restricted API and metadata destinations are sufficient and no public egress destination is added."
   },
-  "status": "blocked",
+  "status": "qualifying",
   "workstation": {
-    "blocked_steps": [
-      {
-        "hosts": [
-          "deb.debian.org",
-          "security.debian.org"
-        ],
-        "id": "debian-package-index",
-        "step": "apt-get update -y"
-      },
-      {
-        "hosts": [
-          "deb.debian.org",
-          "security.debian.org"
-        ],
-        "id": "debian-package-install",
-        "step": "apt-get install -y --no-install-recommends tmux git curl ca-certificates xz-utils"
-      },
-      {
-        "hosts": [
-          "nixos.org",
-          "releases.nixos.org"
-        ],
-        "id": "nix-installer",
-        "step": "curl -fsSL https://nixos.org/nix/install"
-      }
-    ],
+    "activated": false,
+    "image_unit": "5-workloads/development/workstation-image",
     "module": "infra/terraform/modules/workstation",
     "module_release": "v0.4.0",
-    "provisioning_completes": false,
+    "source_provisioning_complete": true,
     "startup_script_override_available": false,
     "unit": "5-workloads/development/workstation"
   }

@@ -1,56 +1,46 @@
 # Developer workstation — development
 
-One x86_64-linux instance, reachable only through IAP TCP forwarding, that exists so somebody can
-build `remote-execution-base`. That Nix package is gated `optionalAttrs
-pkgs.stdenv.hostPlatform.isLinux`, so an aarch64-darwin laptop cannot produce it.
+One private x86_64-linux NixOS instance, reachable only through IAP TCP forwarding. It provides
+the Linux build host needed by packages that an aarch64-darwin laptop cannot produce and keeps
+long-running work inside `tmux` when the local tunnel disconnects.
 
-## Provisioning does not complete today
+## Immutable image boundary
 
-Applying this unit produces a running instance that never finishes its startup script.
+The workstation does not install Debian packages, Nix, or operational tooling at runtime. The
+monorepo builds an immutable NixOS GCE raw disk containing Nix, Git, tmux, the Google guest agent,
+and the idle-shutdown service. The protected reusable workflow may publish only a
+content-addressed `.tar.gz` object and its source/contract digests to the create-only source
+bucket. It cannot create or select a Compute Image.
 
-`3-networks/development/firewall-baseline` denies egress by default at priority 65000 and allows
-only intra-VPC, `restricted.googleapis.com`, and the metadata server. The module's startup script
-runs `apt-get update` against Debian's public mirrors and fetches the Nix installer from
-`nixos.org`. Both are blocked, and the script runs under `set -euo pipefail`.
+`5-workloads/development/workstation-image` is the sole Compute Image authority. Terraform
+requires the exact HTTPS source object, Cloud Storage generation, raw-disk digest, embedded image
+contract digest, and CMEK key. This unit then consumes only the resulting immutable image
+self-link and contract digest; image families and caller startup scripts are rejected by the
+module.
 
-The script stops at `apt-get update`, which is after the disk work. What you get:
+## Source state and activation
 
-| Works | Does not exist |
-|---|---|
-| The instance boots and IAP SSH connects | Nix |
-| The CMEK data disk is formatted, mounted, and bound at `/nix` | `tmux`, `git`, `curl`, `xz-utils` |
-| OS Login, the dedicated identity, the firewall tag | The idle-shutdown timer |
+The source path is implemented but activation remains fail-closed. Before any workstation apply:
 
-The last row is the expensive one. The idle timer is installed after the blocked fetches, so the
-machine does not power itself off; it bills until the 03:00 stop schedule regardless of use.
+1. apply bootstrap contract `1.6.0` and its exact workstation-image WIF provider;
+2. publish reviewed workflow contract `v5.0.0` and Terraform module release `v0.4.0`;
+3. apply the access-log and create-only source buckets, then the publisher identity;
+4. run the exact-main image workflow and retain the object generation and both digests;
+5. inject those four values into the protected infrastructure plan and apply the Compute Image;
+6. prove first boot, embedded-contract verification, idle shutdown, cache access under enforced
+   VPC Service Controls, and rollback to the previous exact image before selecting the instance.
 
-## Why this is not fixed here
+The authoritative status and evidence gates live in
+[`contracts/workstation-egress.json`](../../../contracts/workstation-egress.json). Source
+validation passing does not assert that the workflow tag, module tag, buckets, object, image, or
+instance exists.
 
-`var.metadata` refuses the module-owned startup-script key, and no other input on the
-`workstation` module changes where those two fetches point. Nothing this caller can write moves
-them, so the fix is not a change to this unit.
+## Network and state boundaries
 
-`contracts/workstation-egress.json` records the reviewed target, the alternatives that were
-evaluated and refused, and the evidence that would clear the gate.
-`scripts/validate_workstation_egress.py` enforces it, and in particular enforces the thing this
-gate is under pressure to break: no egress allow rule in `3-networks` may name a destination the
-contract has not already reviewed, and the default deny may not move.
-
-The target adds no egress destination at all. Everything first boot needs comes from inside the
-perimeter over the restricted Google API VIP the firewall already allows — apt from an Artifact
-Registry APT remote repository, which `3-networks/shared/dns-hub` already resolves through
-`*.pkg.dev`, and Nix from the boot image rather than from the network. Closing it needs an
-`artifact_registry_factory` that can express a remote APT repository, a `workstation` module whose
-startup script reads from internal sources, and an image that carries Nix. All three are monorepo
-changes.
-
-## Related boundaries
-
-- The IAP ingress rule is owned by `3-networks/development/firewall-baseline`, not by this unit,
-  because the instance lives in a Shared VPC service project. The network tag is the join; renaming
-  it on one side produces an instance that passes every IAM check and then times out at connect.
-- Cache grants are applied by the owning `5-workloads/ci` units, which expose member inputs. Two
-  states claiming one bucket binding is how removing one revokes access the other still claims.
-- `5-workloads/development/vpc-sc-perimeter` restricts `storage.googleapis.com` and
-  `artifactregistry.googleapis.com` while the caches live in `mc-common-ci`, outside the perimeter.
-  Those reads are logged rather than denied only because the perimeter is in explicit dry-run.
+- The IAP ingress rule is owned by `3-networks/development/firewall-baseline` because the
+  instance is in a Shared VPC service project. The exact network tag joins the two states.
+- No public egress destination is added. The default deny and reviewed destination inventory are
+  enforced repository-wide by `scripts/validate_workstation_egress.py`.
+- The persistent data disk stores workspace and Bazel data only. The Nix store belongs to the
+  immutable boot image, so image rollback does not mutate developer data.
+- Cache grants remain in the bucket-owning CI states; this unit must not claim their IAM bindings.

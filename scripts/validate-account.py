@@ -32,6 +32,7 @@ REQUIRED = {
     "ARTIFACT_RELEASE_IDENTITIES_JSON": r"^\{.+\}$",
     "DR_EVIDENCE_IDENTITY_JSON": r"^\{.+\}$",
     "BAZEL_CACHE_IDENTITY_JSON": r"^\{.+\}$",
+    "WORKSTATION_IMAGE_IDENTITY_JSON": r"^\{.+\}$",
     "PRODUCTION_QUALIFICATION_IDENTITY_JSON": r"^\{.+\}$",
     "BOOTSTRAP_ACCOUNT_HANDOFF_JSON": r"^\{.+\}$",
     "TFSTATE_BUCKET_DEVELOPMENT": r"^[a-z0-9][a-z0-9._-]{1,221}[a-z0-9]$",
@@ -272,6 +273,54 @@ def bazel_cache_identity_errors(
     return errors
 
 
+def workstation_image_identity_errors(
+    payload: str, pool: str, organization: str
+) -> list[str]:
+    try:
+        identity = json.loads(payload)
+    except json.JSONDecodeError:
+        return ["WORKSTATION_IMAGE_IDENTITY_JSON is not valid JSON"]
+    required = {
+        "workload_identity_provider",
+        "principal",
+        "repository",
+        "repository_id",
+        "subject",
+        "workflow_ref",
+        "job_workflow_ref",
+    }
+    if not isinstance(identity, dict) or set(identity) != required:
+        return ["workstation image identity contract is not exact"]
+    repository = f"{organization}/mindclade-internal-monorepo"
+    subject = identity.get("subject")
+    if not isinstance(subject, str) or re.fullmatch(
+        rf"repo:{re.escape(organization)}@[0-9]+/mindclade-internal-monorepo@[0-9]+:"
+        r"environment:workstation-image-publication",
+        subject,
+    ) is None:
+        return ["workstation image identity subject differs"]
+    expected = {
+        "workload_identity_provider": f"{pool}/providers/gh-workstation-image",
+        "principal": f"principal://iam.googleapis.com/{pool}/subject/workstation-image:{subject}",
+        "repository": repository,
+        "workflow_ref": f"{repository}/.github/workflows/nixos-image.yml@refs/heads/main",
+        "job_workflow_ref": (
+            f"{organization}/.github/.github/workflows/"
+            "reusable-nixos-gce-image-publish.yml@refs/tags/v5.0.0"
+        ),
+    }
+    errors = [
+        f"workstation image identity {field} differs"
+        for field, value in expected.items()
+        if identity.get(field) != value
+    ]
+    if not isinstance(identity.get("repository_id"), str) or re.fullmatch(
+        r"[0-9]+", identity["repository_id"]
+    ) is None:
+        errors.append("workstation image identity repository_id differs")
+    return errors
+
+
 def source_errors() -> list[str]:
     text = SOURCE.read_text(encoding="utf-8")
     errors = []
@@ -340,6 +389,13 @@ def runtime_values() -> tuple[dict[str, str], list[str]]:
     errors.extend(
         bazel_cache_identity_errors(
             values["BAZEL_CACHE_IDENTITY_JSON"],
+            values["GITHUB_WIF_POOL_NAME"],
+            values["MONOREPO_ORG"],
+        )
+    )
+    errors.extend(
+        workstation_image_identity_errors(
+            values["WORKSTATION_IMAGE_IDENTITY_JSON"],
             values["GITHUB_WIF_POOL_NAME"],
             values["MONOREPO_ORG"],
         )

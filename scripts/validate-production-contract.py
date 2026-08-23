@@ -353,6 +353,22 @@ elif REPOSITORY == "infrastructure-live":
     ):
         if output_name not in automation_outputs:
             error(f"Bazel cache identity output omits: {output_name}")
+    for workstation_trust_value in (
+        'resource "google_service_account" "workstation_image_publisher"',
+        'resource "google_service_account_iam_member" "workstation_image_github_wif"',
+        'check "workstation_image_trust_contract"',
+        'variable "workstation_image_identity"',
+        "bootstrap contract 1.6.0",
+    ):
+        if workstation_trust_value not in automation_text:
+            error(f"workstation image trust contract omits: {workstation_trust_value}")
+    for output_name in (
+        "WIF_PROVIDER_WORKSTATION_IMAGE",
+        "SA_WORKSTATION_IMAGE_BUILDER",
+        "workstation_image_identity_contract",
+    ):
+        if output_name not in automation_outputs:
+            error(f"workstation image identity output omits: {output_name}")
 
     control_plane_outputs = (
         ROOT / "5-workloads/shared/control-plane-identities/outputs.tf"
@@ -393,8 +409,8 @@ elif REPOSITORY == "infrastructure-live":
         handoff_schema = json.loads(handoff_schema_path.read_text("utf-8"))
         handoff_properties = handoff_schema.get("properties", {})
         handoff_variables = handoff_properties.get("variables", {})
-        if handoff_properties.get("contract_version", {}).get("const") != "1.4.0":
-            error("applied control-plane handoff schema must declare version 1.4.0")
+        if handoff_properties.get("contract_version", {}).get("const") != "1.5.0":
+            error("applied control-plane handoff schema must declare version 1.5.0")
         for cache_variable in (
             "WIF_PROVIDER_BAZEL_CACHE",
             "SA_BAZEL_CACHE_READER",
@@ -407,6 +423,19 @@ elif REPOSITORY == "infrastructure-live":
                 error(
                     "applied control-plane handoff schema omits exact Bazel cache variable: "
                     f"{cache_variable}"
+                )
+        for workstation_variable in (
+            "WIF_PROVIDER_WORKSTATION_IMAGE",
+            "SA_WORKSTATION_IMAGE_BUILDER",
+            "WORKSTATION_IMAGE_BUCKET",
+        ):
+            if (
+                workstation_variable not in handoff_variables.get("required", [])
+                or workstation_variable not in handoff_variables.get("properties", {})
+            ):
+                error(
+                    "applied control-plane handoff schema omits workstation image variable: "
+                    f"{workstation_variable}"
                 )
     if handoff_exporter_path.is_file():
         handoff_exporter = handoff_exporter_path.read_text(
@@ -421,6 +450,12 @@ elif REPOSITORY == "infrastructure-live":
             "WIF_PROVIDER_BAZEL_CACHE",
             "SA_BAZEL_CACHE_READER",
             "SA_BAZEL_CACHE_WRITER",
+            "WORKSTATION_IMAGE_IDENTITY_JSON",
+            "workstation_image_identity_contract",
+            "WIF_PROVIDER_WORKSTATION_IMAGE",
+            "SA_WORKSTATION_IMAGE_BUILDER",
+            "WORKSTATION_IMAGE_BUCKET",
+            "workstation_image_source",
             "SA_ARC_CANARY",
             "SA_ARTIFACT_QUALIFICATION_READER",
             "SA_ARTIFACT_PROMOTER",
@@ -436,7 +471,7 @@ elif REPOSITORY == "infrastructure-live":
             '"attestor_key_versions"',
             '"ENFORCED_BLOCK_AND_AUDIT_LOG"',
             '"deployment-attestor"',
-            '"contract_version": "1.4.0"',
+            '"contract_version": "1.5.0"',
             "infrastructure-live source tree must be clean before export",
             "source commit differs from --expected-source-commit",
             "applied handoff evidence must be written outside the repository",
@@ -660,7 +695,7 @@ elif REPOSITORY == "infrastructure-live":
     if (
         '"platform_contract"' not in bootstrap_account
         or '"output"' not in bootstrap_account
-        or 'contract.get("contract_version") != "1.5.0"' not in bootstrap_account
+        or 'contract.get("contract_version") != "1.6.0"' not in bootstrap_account
     ):
         error(
             "bootstrap account exporter bypasses the versioned Ring-0 platform contract"
