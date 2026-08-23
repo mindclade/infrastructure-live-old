@@ -38,6 +38,10 @@ organization/common resources under `1-org`.
 | `3-networks/<env>/shared-vpc-host` | environment shared projects | Host-project identity |
 | `4-projects/<env>/<domain>` | environment folders and Shared VPC | Project placement and attachment |
 | `5-workloads/<env>/gke` | environment project, VPC, and KMS | Private cluster foundation |
+| `3-networks/ci/arc-vpc` | common CI project | Private ARC cluster network and secondary ranges |
+| `5-workloads/ci/arc-gke` | ARC VPC, common CI project, and automation IAM | Private ARC system/control-plane pool |
+| `5-workloads/ci/nodepools/runner` | ARC GKE, ARC VPC pod range, and common CI project | Tainted, labeled, on-demand capacity for runner pods only |
+| `5-workloads/ci/binary-authorization` | ARC GKE and organization attestor/KMS | ARC cluster admission trust |
 | `5-workloads/ci/bazel-remote-cache` | common CI project, global KMS, shared cache access logs, and automation IAM | GitHub-hosted Bazel read/cache foundation |
 | `5-workloads/ci/nix-binary-cache` | common CI project, `ci_artifacts` KMS, shared cache access logs, and the dedicated storage identity | Private, create-only GCS backend for a separately qualified Attic service |
 | `5-workloads/ci/nix-cache-secrets` | common CI project, `ci_secrets` KMS, and exact `mindclade-cache/attic-secret-sync` identity | Secret containers only; no values, HMAC resource, or GitHub accessor |
@@ -70,8 +74,9 @@ plans after environment approval. External dependencies are read from remote sta
 not implicitly applied with another privilege scope.
 
 `5-workloads/ci` is a shared control-plane path selected only by the protected **foundation**
-scope. Development, staging, and production environment identities cannot plan or apply the
-common GitHub cache unit.
+scope. Development, staging, and production environment identities cannot plan or apply its ARC
+or cache units. Apply the runner node pool before reconciling GitOps values that select its label;
+the cross-repository contract is checked with `make validate-gitops-integration`.
 
 ## Recovery
 

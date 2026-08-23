@@ -62,8 +62,9 @@ nix develop .#ci --command make validate
 nix flake check --no-update-lock-file
 ```
 
-**Success means:** repository contracts, account and module interfaces, layer dependencies,
-Terraform/Terragrunt syntax, DNS portfolio, and tests all pass.
+**Success means:** local repository contracts, account inputs, layer dependencies,
+Terraform/Terragrunt syntax, DNS portfolio, and tests all pass. This credential-free command does
+not prove that external module refs exist or that any cloud resource is deployed.
 
 **If it fails:** begin with the earliest failing numbered layer and use the
 [dependency graph](docs/dependency-graph.md) to resolve upstream contracts before downstream
@@ -71,6 +72,21 @@ units.
 
 **Safety boundary:** do not run an apply, import, destroy, state operation, or production plan
 from an agent or ordinary development session.
+
+## Cross-repository preflight
+
+Before any plan, validate the paired repositories explicitly:
+
+```sh
+nix develop .#ci --command make validate-integration \
+  MONOREPO=../mindclade-internal-monorepo
+nix develop .#ci --command make validate-gitops-integration \
+  GITOPS=../gitops
+```
+
+The exact module gate is expected to fail while selected tag `v0.4.0` remains unpublished. Use the
+candidate commands in the [module interface contract](docs/module-interface-contract.md) only for
+source review; a candidate pass is not release provenance and cannot authorize a plan or apply.
 
 ## Estate position
 

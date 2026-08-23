@@ -168,6 +168,16 @@ locals {
     # Logged, and that is not optional: a denied egress is indistinguishable from a hung
     # connection from inside the pod, and without the log the first hour of the incident is
     # spent proving the firewall is involved at all.
+    #
+    # THIS RULE IS UNDER STANDING PRESSURE. `5-workloads/development/workstation` cannot finish
+    # provisioning because its startup script fetches Debian packages and the Nix installer from
+    # the open internet, and the obvious way to make that boot is a rule above this one that
+    # admits a CDN range — or this one turned into an allow. Both are refused;
+    # `contracts/workstation-egress.json` records why, and
+    # `scripts/validate_workstation_egress.py` fails any egress allow in this tree that names a
+    # destination the contract has not reviewed. The reviewed answer adds no destination: it
+    # serves those packages from inside the perimeter over the restricted VIP already allowed at
+    # priority 1200.
     deny-egress-default = {
       direction          = "EGRESS"
       priority           = 65000
