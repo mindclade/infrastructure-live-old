@@ -311,6 +311,49 @@ def validated_bazel_cache_identity(
     }
 
 
+def validated_workstation_image_identity(
+    value: Any, github_pool: str, github_org: str
+) -> dict[str, str]:
+    required = {
+        "workload_identity_provider",
+        "principal",
+        "repository",
+        "repository_id",
+        "subject",
+        "workflow_ref",
+        "job_workflow_ref",
+    }
+    if not isinstance(value, dict) or set(value) != required:
+        raise ValueError("platform_contract workstation image identity is not exact")
+    repository = f"{github_org}/mindclade-internal-monorepo"
+    subject = value["subject"]
+    if not isinstance(subject, str) or re.fullmatch(
+        rf"repo:{re.escape(github_org)}@[0-9]+/mindclade-internal-monorepo@[0-9]+:"
+        r"environment:workstation-image-publication",
+        subject,
+    ) is None:
+        raise ValueError("platform_contract workstation image subject is wrong")
+    expected = {
+        "workload_identity_provider": f"{github_pool}/providers/gh-workstation-image",
+        "principal": f"principal://iam.googleapis.com/{github_pool}/subject/workstation-image:{subject}",
+        "repository": repository,
+        "repository_id": value["repository_id"],
+        "subject": subject,
+        "workflow_ref": f"{repository}/.github/workflows/nixos-image.yml@refs/heads/main",
+        "job_workflow_ref": (
+            f"{github_org}/.github/.github/workflows/"
+            "reusable-nixos-gce-image-publish.yml@refs/tags/v5.0.0"
+        ),
+    }
+    if not isinstance(value["repository_id"], str) or re.fullmatch(
+        r"[0-9]+", value["repository_id"]
+    ) is None:
+        raise ValueError("platform_contract workstation image repository ID is wrong")
+    if value != expected:
+        raise ValueError("platform_contract workstation image identity differs")
+    return expected
+
+
 def main() -> int:
     args = parse_args()
     bootstrap = args.bootstrap.resolve()
@@ -335,7 +378,7 @@ def main() -> int:
             capture_output=True,
         )
         contract = json.loads(output.stdout)
-        if contract.get("contract_version") != "1.5.0":
+        if contract.get("contract_version") != "1.6.0":
             raise ValueError(
                 f"unsupported bootstrap platform_contract version: {contract.get('contract_version', 'missing')}"
             )
@@ -364,6 +407,9 @@ def main() -> int:
         bazel_cache_identity = validated_bazel_cache_identity(
             need(github, "bazel_cache_identity", "github"), pool, github_org
         )
+        workstation_image_identity = validated_workstation_image_identity(
+            need(github, "workstation_image_identity", "github"), pool, github_org
+        )
         values = {
             "GCP_ORG_ID": need(contract, "organization_id", "platform_contract"),
             "BILLING_ACCOUNT": need(contract, "billing_account", "platform_contract"),
@@ -385,6 +431,9 @@ def main() -> int:
             ),
             "BAZEL_CACHE_IDENTITY_JSON": json.dumps(
                 bazel_cache_identity, sort_keys=True, separators=(",", ":")
+            ),
+            "WORKSTATION_IMAGE_IDENTITY_JSON": json.dumps(
+                workstation_image_identity, sort_keys=True, separators=(",", ":")
             ),
             "PRODUCTION_QUALIFICATION_IDENTITY_JSON": json.dumps(
                 production_qualification_identity,

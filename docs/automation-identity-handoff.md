@@ -17,6 +17,11 @@ Bootstrap creates:
 
 Bootstrap does not grant the environment identities broad organization authority.
 
+Bootstrap contract `1.6.0` additionally creates `gh-workstation-image`, constrained to the exact
+internal-monorepo caller on protected `main`, the `workstation-image-publication` environment,
+immutable repository IDs, `workflow_dispatch`, and the exact `v5.0.0` reusable publication
+workflow. Its subject prefix cannot impersonate any artifact-release or cache identity.
+
 ## Normal foundation (`infrastructure-live`)
 
 `1-org/automation-iam` runs with the foundation apply identity after the top-level folders
@@ -50,7 +55,7 @@ SA_BAZEL_CACHE_WRITER
 ```
 
 Do not construct these values from naming conventions. `github-config` may publish them only
-after protected automation applies bootstrap contract `1.5.0` and the foundation IAM unit, then
+after protected automation applies bootstrap contract `1.6.0` and the foundation IAM unit, then
 connected qualification proves each positive route and the corresponding cross-route negative
 cases. The cache bucket remains independently owned by
 [`5-workloads/ci/bazel-remote-cache`](../5-workloads/ci/bazel-remote-cache/README.md); its module
@@ -58,8 +63,8 @@ owns bucket IAM and exports the authenticated endpoints. KMS owns the Cloud Stor
 grant. This source change does not prove that any provider, account, binding, key grant, or bucket
 exists.
 
-The applied-output exporter emits these three values only in handoff contract `1.4.0`, preserving
-the production-eligibility inventory that already owns `1.3.0`. It requires the authoritative
+The applied-output exporter retains these three values in handoff contract `1.5.0`, preserving
+the production-eligibility and cache inventories from `1.3.0`/`1.4.0`. It requires the authoritative
 `bazel_cache_identity_contract` Terraform output to match `BAZEL_CACHE_IDENTITY_JSON` byte-for-byte,
 then independently verifies the exact provider, routes, immutable repository IDs, and distinct
 common-CI reader/writer accounts. Missing applied state, a stale bootstrap JSON value, or any
@@ -72,6 +77,28 @@ The foundation identity remains the only automation principal for:
 - centralized security and logging;
 - authoritative DNS and shared networking;
 - the environment-identity handoff itself.
+
+### Workstation image publication handoff
+
+`1-org/automation-iam` creates a dedicated normal-plane `workstation-image-pub` service account
+and binds only the bootstrap-exported workstation-image principal. It receives no project role.
+The create-only source bucket grants the account object creation and read-back solely so the
+workflow can publish and verify a content-addressed raw-disk archive. The development Compute
+service agent receives read access for Terraform image creation.
+
+The authoritative normal-plane outputs are:
+
+```text
+WIF_PROVIDER_WORKSTATION_IMAGE
+SA_WORKSTATION_IMAGE_BUILDER
+```
+
+`github-config` may publish these values only from applied output; it must not derive the service
+account email from naming convention. The workflow also consumes `CI_PROJECT_ID` and
+`WORKSTATION_IMAGE_BUCKET` from the applied source-bucket handoff. Publication retains the exact
+object generation, source SHA-256, embedded contract SHA-256, and clean source commit. Those four
+artifact values feed the protected infrastructure plan; Terraform alone creates the Compute
+Image. No source contract claims any provider, account, bucket, object, or image is live.
 
 ### GitOps identity re-export
 
@@ -106,11 +133,11 @@ python3 scripts/export-applied-control-plane-handoff.py \
   --output /protected/evidence/infrastructure-control-plane-handoff.json
 ```
 
-The destination must be outside the repository. The generated `1.4.0` file is mode 0600 and
+The destination must be outside the repository. The generated `1.5.0` file is mode 0600 and
 carries all six ARC service accounts plus the exact GitOps, qualification, Bazel-cache,
-evidence-bucket, attestor, project, and immutable key-version values. It compares the applied
-qualification and Bazel-cache WIF contracts byte-for-byte with their bootstrap JSON inputs before
-exporting.
+workstation-image publisher/source-bucket, evidence-bucket, attestor, project, and immutable
+key-version values. It compares the applied qualification, Bazel-cache, and workstation-image WIF
+contracts byte-for-byte with their bootstrap JSON inputs before exporting.
 Feed that file to
 the `github-config` exporter, review its resulting plan, then reapply `github-config` so the
 GitOps and monorepo repositories receive the authoritative values. Repeat the export and

@@ -3,7 +3,7 @@
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
 
-"""Validate the fail-closed developer-workstation provisioning-egress contract.
+"""Validate the fail-closed immutable-workstation and provisioning-egress contract.
 
 `validate-production-contract.py` already proves that `deny-egress-default` still denies
 0.0.0.0/0 in every environment. That is only half of the pressure this contract is under. The
@@ -28,12 +28,13 @@ CONTRACT = ROOT / "contracts/workstation-egress.json"
 SCHEMA = ROOT / "contracts/workstation-egress.schema.json"
 
 EXPECTED_BLOCKERS = [
-    "artifact-registry-apt-remote-not-expressible",
-    "artifact-registry-remote-upstream-unqualified",
-    "nix-installer-has-no-internal-source",
-    "no-vm-image-build-pipeline",
-    "perimeter-egress-contract-untyped",
-    "workstation-startup-script-is-not-caller-overridable",
+    "bootstrap-1-6-0-not-applied",
+    "workflow-v5-0-0-unpublished",
+    "terraform-v0-4-0-unpublished",
+    "source-object-not-published",
+    "compute-image-not-applied",
+    "connected-first-boot-not-qualified",
+    "vpc-sc-cache-path-unqualified",
 ]
 
 # Every alternative that was evaluated and refused stays named. A design that disappears from
@@ -45,12 +46,23 @@ EXPECTED_REJECTED_DESIGNS = [
 ]
 
 REQUIRED_SOURCE_PATHS = (
+    ".github/workflows/apply.yml",
+    ".github/workflows/cost.yml",
+    ".github/workflows/drift.yml",
+    ".github/workflows/plan.yml",
+    "account.hcl",
     "3-networks/development/firewall-baseline/terragrunt.hcl",
     "3-networks/production/firewall-baseline/terragrunt.hcl",
     "3-networks/shared/dns-hub/terragrunt.hcl",
     "3-networks/staging/firewall-baseline/terragrunt.hcl",
     "5-workloads/development/workstation/README.md",
     "5-workloads/development/workstation/terragrunt.hcl",
+    "5-workloads/development/workstation-image/terragrunt.hcl",
+    "5-workloads/development/workstation-image/.terraform.lock.hcl",
+    "5-workloads/ci/workstation-image-source/terragrunt.hcl",
+    "5-workloads/ci/workstation-image-source/.terraform.lock.hcl",
+    "5-workloads/shared/workstation-image-access-logs/terragrunt.hcl",
+    "5-workloads/shared/workstation-image-access-logs/.terraform.lock.hcl",
     "contracts/workstation-egress.json",
     "contracts/workstation-egress.schema.json",
 )
@@ -58,7 +70,7 @@ REQUIRED_SOURCE_PATHS = (
 # The marker the workstation unit must carry while provisioning cannot complete. Pinning it here
 # is what stops the unit's own comment from drifting back into a readiness claim the estate
 # cannot support.
-BLOCKED_MARKER = "PROVISIONING IS BLOCKED"
+BLOCKED_MARKER = "ACTIVATION IS BLOCKED"
 
 # A rule block opens with `name = {` on its own line and closes with `}` at the same indent.
 # Nested constructs in these units (`log_config = { ... }`, `allow = [{ ... }]`) are single-line,
@@ -117,15 +129,9 @@ def policy_errors(document: dict[str, Any]) -> list[str]:
     selected = document.get("selected_design", {})
     workstation = document.get("workstation", {})
 
-    if status == "blocked" and blockers != EXPECTED_BLOCKERS:
+    if status == "qualifying" and blockers != EXPECTED_BLOCKERS:
         errors.append(
-            coded("POLICY", "blocked lifecycle must retain the exact reviewed blocker set")
-        )
-    if status == "qualifying" and (
-        not blockers or not set(blockers).issubset(EXPECTED_BLOCKERS)
-    ):
-        errors.append(
-            coded("POLICY", "qualifying lifecycle must retain only unresolved reviewed blockers")
+            coded("POLICY", "qualifying lifecycle must retain the exact unresolved blocker set")
         )
     if status in {"qualified", "activated"} and blockers:
         errors.append(coded("POLICY", f"{status} lifecycle cannot retain blockers"))
@@ -142,6 +148,15 @@ def policy_errors(document: dict[str, Any]) -> list[str]:
         errors.append(
             coded("POLICY", "the selected design may not add an egress destination")
         )
+    if selected.get("implemented") is not True:
+        errors.append(coded("POLICY", "the reviewed immutable-image source design is incomplete"))
+    evidence = document.get("evidence", {})
+    if evidence.get("image_contract_source_validated") is not True:
+        errors.append(coded("POLICY", "source image contract validation may not regress"))
+    if evidence.get("runtime_fetches_absent") is not True:
+        errors.append(coded("POLICY", "the workstation source may not restore runtime fetches"))
+    if status in {"qualified", "activated"} and not all(evidence.values()):
+        errors.append(coded("POLICY", f"{status} lifecycle requires every evidence gate"))
     if workstation.get("startup_script_override_available") is not False:
         errors.append(
             coded(
@@ -290,6 +305,28 @@ def source_errors(document: dict[str, Any], root: Path = ROOT) -> list[str]:
         return sorted(set(errors))
     text = unit.read_text(encoding="utf-8")
 
+    artifact_inputs = (
+        "WORKSTATION_IMAGE_SOURCE_STATE",
+        "WORKSTATION_IMAGE_SOURCE_URI",
+        "WORKSTATION_IMAGE_SOURCE_OBJECT_GENERATION",
+        "WORKSTATION_IMAGE_SOURCE_SHA256",
+        "WORKSTATION_IMAGE_CONTRACT_SHA256",
+    )
+    account = root / "account.hcl"
+    if account.is_file():
+        account_text = account.read_text(encoding="utf-8")
+        for name in artifact_inputs:
+            if re.search(rf'get_env\(\s*"{re.escape(name)}"', account_text) is None:
+                errors.append(coded("SOURCE", f"account contract omits artifact input: {name}"))
+    for workflow in ("apply.yml", "cost.yml", "drift.yml", "plan.yml"):
+        path = root / ".github/workflows" / workflow
+        if not path.is_file():
+            continue
+        workflow_text = path.read_text(encoding="utf-8")
+        for name in artifact_inputs:
+            if f"{name}: ${{{{ vars.{name} }}}}" not in workflow_text:
+                errors.append(coded("SOURCE", f"{workflow} omits artifact input: {name}"))
+
     if "contracts/workstation-egress.json" not in text:
         errors.append(
             coded("SOURCE", "workstation unit does not cite the egress contract it depends on")
@@ -298,6 +335,16 @@ def source_errors(document: dict[str, Any], root: Path = ROOT) -> list[str]:
         errors.append(
             coded("SOURCE", "workstation unit no longer hands its IAP rule to the host project")
         )
+    for required in (
+        'config_path = "../workstation-image"',
+        "dependency.image.outputs.image.self_link",
+        "dependency.image.outputs.source_contract.image_contract_sha256",
+        'module_version = "v0.4.0"',
+    ):
+        if required not in text:
+            errors.append(coded("SOURCE", f"workstation immutable-image handoff omits: {required}"))
+    if re.search(r"apt-get|nixos\.org|releases\.nixos\.org", text):
+        errors.append(coded("SOURCE", "workstation unit retains a public runtime fetch"))
     # `var.metadata` refuses module-owned keys, so a caller-side startup script cannot work; it
     # would fail at plan time and read as a module bug rather than the boundary it is.
     if re.search(r'"startup-script"|"shutdown-script"|startup_script\s*=', text):
@@ -310,12 +357,12 @@ def source_errors(document: dict[str, Any], root: Path = ROOT) -> list[str]:
         errors.append(
             coded(
                 "SOURCE",
-                "workstation unit must state that provisioning is blocked while the contract is not activated",
+                "workstation unit must state that activation is blocked while the contract is not activated",
             )
         )
     if status == "activated" and BLOCKED_MARKER in text:
         errors.append(
-            coded("SOURCE", "activated contract contradicts the unit's blocked-provisioning notice")
+            coded("SOURCE", "activated contract contradicts the unit's blocked-activation notice")
         )
     return sorted(set(errors))
 

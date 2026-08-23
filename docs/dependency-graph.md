@@ -45,6 +45,10 @@ organization/common resources under `1-org`.
 | `5-workloads/ci/bazel-remote-cache` | common CI project, global KMS, shared cache access logs, and automation IAM | GitHub-hosted Bazel read/cache foundation |
 | `5-workloads/ci/nix-binary-cache` | common CI project, `ci_artifacts` KMS, shared cache access logs, and the dedicated storage identity | Private, create-only GCS backend for a separately qualified Attic service |
 | `5-workloads/ci/nix-cache-secrets` | common CI project, `ci_secrets` KMS, and exact `mindclade-cache/attic-secret-sync` identity | Secret containers only; no values, HMAC resource, or GitHub accessor |
+| `5-workloads/shared/workstation-image-access-logs` | common logging project and global logs KMS | Locked Cloud Storage access-log evidence for workstation source publication |
+| `5-workloads/ci/workstation-image-source` | common CI project, global CI KMS, access-log bucket, automation IAM, and development Compute service agent | Create-only, content-addressed NixOS raw-disk source objects; no Compute Image authority |
+| `5-workloads/development/workstation-image` | development platform project/KMS and the exact source object evidence | CMEK-protected immutable Compute Image and exact source/contract outputs |
+| `5-workloads/development/workstation` | development Compute Image, Shared VPC, workstation KMS, and CI caches | Private IAP-only NixOS workstation with no public runtime installation |
 | `5-workloads/<env>/bazel-remote-cache` | environment project/KMS and shared cache access-log bucket | Protected rebuildable CAS/action-cache storage |
 | `5-workloads/<env>/bazel-remote-execution` | GKE, VPC pod range, and Bazel cache | Dedicated keyless multi-zone worker foundation |
 | `2-environments/<env>/kms-dr` | environment project inventory | Region-local `us-east4` recovery keys |

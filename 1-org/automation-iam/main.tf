@@ -237,6 +237,38 @@ resource "google_service_account" "nix_cache_storage" {
   }
 }
 
+resource "google_service_account" "workstation_image_publisher" {
+  project         = var.ci_project_id
+  account_id      = "workstation-image-pub"
+  display_name    = "Mindclade workstation image publisher"
+  description     = "Keyless create-only publisher for immutable NixOS raw-disk source objects."
+  disabled        = false
+  deletion_policy = "PREVENT"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_service_account_iam_member" "workstation_image_github_wif" {
+  service_account_id = google_service_account.workstation_image_publisher.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = var.workstation_image_identity.principal
+}
+
+check "workstation_image_trust_contract" {
+  assert {
+    condition = (
+      var.workstation_image_identity.workload_identity_provider == "${var.github_wif_pool_name}/providers/gh-workstation-image" &&
+      var.workstation_image_identity.repository == "${var.github_org}/mindclade-internal-monorepo" &&
+      var.workstation_image_identity.principal == "principal://iam.googleapis.com/${var.github_wif_pool_name}/subject/workstation-image:${var.workstation_image_identity.subject}" &&
+      var.workstation_image_identity.workflow_ref == "${var.github_org}/mindclade-internal-monorepo/.github/workflows/nixos-image.yml@refs/heads/main" &&
+      var.workstation_image_identity.job_workflow_ref == "${var.github_org}/.github/.github/workflows/reusable-nixos-gce-image-publish.yml@refs/tags/v5.0.0"
+    )
+    error_message = "Workstation image trust must remain isolated to bootstrap contract 1.6.0."
+  }
+}
+
 resource "google_service_account_iam_member" "bazel_cache_github_wif" {
   for_each = var.bazel_cache_identity.routes
 

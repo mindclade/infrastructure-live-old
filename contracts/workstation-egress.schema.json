@@ -2,38 +2,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.mindclade.internal/workstation-egress.schema.json",
   "type": "object",
-  "required": [
-    "$schema",
-    "blockers",
-    "egress_baseline",
-    "evidence",
-    "rejected_designs",
-    "schema_version",
-    "selected_design",
-    "status",
-    "workstation"
-  ],
+  "required": ["$schema", "blockers", "egress_baseline", "evidence", "rejected_designs", "schema_version", "selected_design", "status", "workstation"],
   "properties": {
     "$schema": {"const": "./workstation-egress.schema.json"},
-    "schema_version": {"const": 1},
-    "status": {"enum": ["blocked", "qualifying", "qualified", "activated"]},
+    "schema_version": {"const": 2},
+    "status": {"enum": ["qualifying", "qualified", "activated"]},
     "blockers": {
       "type": "array",
-      "minItems": 0,
       "maxItems": 16,
       "uniqueItems": true,
       "items": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
     },
     "egress_baseline": {
       "type": "object",
-      "required": [
-        "deny_destination",
-        "deny_priority",
-        "deny_rule",
-        "environments",
-        "reviewed_destinations",
-        "unit"
-      ],
+      "required": ["deny_destination", "deny_priority", "deny_rule", "environments", "reviewed_destinations", "unit"],
       "properties": {
         "deny_destination": {"const": "0.0.0.0/0"},
         "deny_priority": {"const": 65000},
@@ -53,21 +35,16 @@
     },
     "evidence": {
       "type": "object",
-      "required": [
-        "apt_install_from_internal_source",
-        "idle_timer_installed",
-        "nix_present_without_public_fetch",
-        "provisioning_completes",
-        "remote_upstream_serves_debian",
-        "vpc_sc_enforced_path_qualified"
-      ],
+      "required": ["compute_image_applied", "first_boot_qualified", "idle_shutdown_observed", "image_contract_source_validated", "rollback_image_booted", "runtime_fetches_absent", "source_publication_create_only", "vpc_sc_cache_path_qualified"],
       "properties": {
-        "apt_install_from_internal_source": {"type": "boolean"},
-        "idle_timer_installed": {"type": "boolean"},
-        "nix_present_without_public_fetch": {"type": "boolean"},
-        "provisioning_completes": {"type": "boolean"},
-        "remote_upstream_serves_debian": {"type": "boolean"},
-        "vpc_sc_enforced_path_qualified": {"type": "boolean"}
+        "compute_image_applied": {"type": "boolean"},
+        "first_boot_qualified": {"type": "boolean"},
+        "idle_shutdown_observed": {"type": "boolean"},
+        "image_contract_source_validated": {"type": "boolean"},
+        "rollback_image_booted": {"type": "boolean"},
+        "runtime_fetches_absent": {"type": "boolean"},
+        "source_publication_create_only": {"type": "boolean"},
+        "vpc_sc_cache_path_qualified": {"type": "boolean"}
       },
       "additionalProperties": false
     },
@@ -93,67 +70,34 @@
         "adds_egress_destination": {"const": false},
         "components": {
           "type": "array",
-          "minItems": 1,
+          "minItems": 4,
           "maxItems": 4,
           "items": {
             "type": "object",
-            "required": ["id", "requires_module_change", "summary"],
+            "required": ["id", "source_path", "summary"],
             "properties": {
               "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
-              "requires_module_change": {
-                "type": ["string", "null"],
-                "pattern": "^infra/terraform/modules/[a-z0-9_]+$"
-              },
+              "source_path": {"type": "string", "minLength": 8, "maxLength": 160},
               "summary": {"type": "string", "minLength": 40, "maxLength": 800}
             },
             "additionalProperties": false
           }
         },
-        "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
-        "implemented": {"type": "boolean"},
+        "id": {"const": "immutable-nixos-image-without-new-egress"},
+        "implemented": {"const": true},
         "summary": {"type": "string", "minLength": 40, "maxLength": 800}
       },
       "additionalProperties": false
     },
     "workstation": {
       "type": "object",
-      "required": [
-        "blocked_steps",
-        "module",
-        "module_release",
-        "provisioning_completes",
-        "startup_script_override_available",
-        "unit"
-      ],
+      "required": ["activated", "image_unit", "module", "module_release", "source_provisioning_complete", "startup_script_override_available", "unit"],
       "properties": {
-        "blocked_steps": {
-          "type": "array",
-          "minItems": 0,
-          "maxItems": 8,
-          "items": {
-            "type": "object",
-            "required": ["hosts", "id", "step"],
-            "properties": {
-              "hosts": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 8,
-                "uniqueItems": true,
-                "items": {
-                  "type": "string",
-                  "maxLength": 253,
-                  "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])$"
-                }
-              },
-              "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
-              "step": {"type": "string", "minLength": 4, "maxLength": 200}
-            },
-            "additionalProperties": false
-          }
-        },
+        "activated": {"type": "boolean"},
+        "image_unit": {"const": "5-workloads/development/workstation-image"},
         "module": {"const": "infra/terraform/modules/workstation"},
-        "module_release": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
-        "provisioning_completes": {"type": "boolean"},
+        "module_release": {"const": "v0.4.0"},
+        "source_provisioning_complete": {"const": true},
         "startup_script_override_available": {"const": false},
         "unit": {"const": "5-workloads/development/workstation"}
       },
@@ -162,75 +106,25 @@
   },
   "allOf": [
     {
-      "if": {"properties": {"status": {"const": "blocked"}}},
-      "then": {
-        "properties": {
-          "blockers": {"minItems": 1},
-          "evidence": {
-            "properties": {
-              "apt_install_from_internal_source": {"const": false},
-              "idle_timer_installed": {"const": false},
-              "nix_present_without_public_fetch": {"const": false},
-              "provisioning_completes": {"const": false},
-              "remote_upstream_serves_debian": {"const": false},
-              "vpc_sc_enforced_path_qualified": {"const": false}
-            }
-          },
-          "selected_design": {"properties": {"implemented": {"const": false}}},
-          "workstation": {
-            "properties": {
-              "blocked_steps": {"minItems": 1},
-              "provisioning_completes": {"const": false}
-            }
-          }
-        }
-      }
-    },
-    {
       "if": {"properties": {"status": {"const": "qualifying"}}},
-      "then": {
-        "properties": {
-          "blockers": {"minItems": 1},
-          "selected_design": {"properties": {"implemented": {"const": true}}},
-          "workstation": {"properties": {"provisioning_completes": {"const": false}}}
-        }
-      }
+      "then": {"properties": {"blockers": {"minItems": 1}, "workstation": {"properties": {"activated": {"const": false}}}}}
     },
     {
       "if": {"properties": {"status": {"enum": ["qualified", "activated"]}}},
       "then": {
         "properties": {
           "blockers": {"maxItems": 0},
-          "evidence": {
-            "properties": {
-              "apt_install_from_internal_source": {"const": true},
-              "idle_timer_installed": {"const": true},
-              "nix_present_without_public_fetch": {"const": true},
-              "provisioning_completes": {"const": true},
-              "remote_upstream_serves_debian": {"const": true},
-              "vpc_sc_enforced_path_qualified": {"const": true}
-            }
-          },
-          "selected_design": {"properties": {"implemented": {"const": true}}},
-          "workstation": {"properties": {"blocked_steps": {"maxItems": 0}}}
+          "evidence": {"additionalProperties": {"const": true}}
         }
       }
     },
     {
       "if": {"properties": {"status": {"const": "qualified"}}},
-      "then": {
-        "properties": {
-          "workstation": {"properties": {"provisioning_completes": {"const": false}}}
-        }
-      }
+      "then": {"properties": {"workstation": {"properties": {"activated": {"const": false}}}}}
     },
     {
       "if": {"properties": {"status": {"const": "activated"}}},
-      "then": {
-        "properties": {
-          "workstation": {"properties": {"provisioning_completes": {"const": true}}}
-        }
-      }
+      "then": {"properties": {"workstation": {"properties": {"activated": {"const": true}}}}}
     }
   ],
   "additionalProperties": false

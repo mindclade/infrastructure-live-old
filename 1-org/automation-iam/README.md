@@ -30,6 +30,13 @@ principals without granting bucket IAM here. The stable cache handoff exposes
 owns object access and KMS owns the storage-service-agent key grant. Treat output names as an
 interface: coordinate consumers before renaming them.
 
+Bootstrap contract `1.6.0` also hands off one exact workstation-image publication principal.
+This unit creates `workstation-image-pub`, binds only that principal, and grants no project role.
+`5-workloads/ci/workstation-image-source` owns its create-only object permission. The applied
+`workstation_image_identity_contract` is authoritative for
+`WIF_PROVIDER_WORKSTATION_IMAGE` and `SA_WORKSTATION_IMAGE_BUILDER`; GitHub may publish the raw
+disk but cannot create or select a Compute Image.
+
 The unit also owns `nix-cache-storage`, a separate deletion-protected service account used only
 by the proposed private Attic backend bucket. It has no GitHub WIF binding and no project role.
 The Nix cache module grants bucket-scoped create/read access. Terraform must never create a

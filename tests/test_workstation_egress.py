@@ -2,7 +2,7 @@
 # Mindclade Proprietary and Confidential.
 # SPDX-License-Identifier: LicenseRef-Mindclade-Proprietary
 
-"""Tests for the fail-closed developer-workstation provisioning-egress contract."""
+"""Tests for the fail-closed immutable-workstation qualification contract."""
 
 from __future__ import annotations
 
@@ -60,9 +60,15 @@ FIREWALL_TEMPLATE = """locals {{
 }}
 """
 
-WORKSTATION_UNIT = """# PROVISIONING IS BLOCKED. See contracts/workstation-egress.json.
+WORKSTATION_UNIT = """# ACTIVATION IS BLOCKED. See contracts/workstation-egress.json.
+dependency "image" {
+  config_path = "../workstation-image"
+}
+locals { module_version = "v0.4.0" }
 inputs = {
   create_iap_ssh_firewall_rule = false
+  image = dependency.image.outputs.image.self_link
+  image_contract_sha256 = dependency.image.outputs.source_contract.image_contract_sha256
 }
 """
 
@@ -79,6 +85,24 @@ def materialize(
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("", encoding="utf-8")
+    artifact_inputs = (
+        "WORKSTATION_IMAGE_SOURCE_STATE",
+        "WORKSTATION_IMAGE_SOURCE_URI",
+        "WORKSTATION_IMAGE_SOURCE_OBJECT_GENERATION",
+        "WORKSTATION_IMAGE_SOURCE_SHA256",
+        "WORKSTATION_IMAGE_CONTRACT_SHA256",
+    )
+    root.joinpath("account.hcl").write_text(
+        "\n".join(f'get_env("{name}", "")' for name in artifact_inputs),
+        encoding="utf-8",
+    )
+    workflow_contract = "\n".join(
+        f"{name}: ${{{{ vars.{name} }}}}" for name in artifact_inputs
+    )
+    for workflow in ("apply.yml", "cost.yml", "drift.yml", "plan.yml"):
+        root.joinpath(".github/workflows", workflow).write_text(
+            workflow_contract, encoding="utf-8"
+        )
     for environment in ("development", "production", "staging"):
         root.joinpath(
             f"3-networks/{environment}/firewall-baseline/terragrunt.hcl"
@@ -100,29 +124,31 @@ class WorkstationEgressTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outside scope foundation"):
             SCOPE.validate_unit("foundation", UNIT, SCOPE.SCOPES["foundation"])
 
-    def test_checked_in_contract_is_blocked_and_fail_closed(self) -> None:
+    def test_checked_in_contract_is_qualifying_and_fail_closed(self) -> None:
         self.assertEqual(VALIDATOR.validate(CONTRACT, SCHEMA), [])
-        self.assertEqual(CONTRACT["status"], "blocked")
-        self.assertFalse(CONTRACT["workstation"]["provisioning_completes"])
-        self.assertFalse(CONTRACT["selected_design"]["implemented"])
+        self.assertEqual(CONTRACT["status"], "qualifying")
+        self.assertFalse(CONTRACT["workstation"]["activated"])
+        self.assertTrue(CONTRACT["workstation"]["source_provisioning_complete"])
+        self.assertTrue(CONTRACT["selected_design"]["implemented"])
         self.assertFalse(CONTRACT["selected_design"]["adds_egress_destination"])
-        self.assertFalse(any(CONTRACT["evidence"].values()))
+        self.assertTrue(CONTRACT["evidence"]["runtime_fetches_absent"])
+        self.assertFalse(CONTRACT["evidence"]["first_boot_qualified"])
 
-    def test_blocked_contract_cannot_claim_evidence(self) -> None:
+    def test_source_evidence_cannot_regress(self) -> None:
         candidate = copy.deepcopy(CONTRACT)
-        candidate["evidence"]["provisioning_completes"] = True
-        errors = VALIDATOR.schema_errors(candidate, SCHEMA)
+        candidate["evidence"]["runtime_fetches_absent"] = False
+        errors = VALIDATOR.policy_errors(candidate)
         self.assertTrue(
-            any(error.startswith("[WSEGRESS-SCHEMA]") for error in errors), errors
+            any("restore runtime fetches" in error for error in errors), errors
         )
 
     def test_activated_contract_requires_every_evidence_gate(self) -> None:
         candidate = self._activated_contract()
         self.assertEqual(VALIDATOR.schema_errors(candidate, SCHEMA), [])
         candidate["evidence"]["vpc_sc_enforced_path_qualified"] = False
-        errors = VALIDATOR.schema_errors(candidate, SCHEMA)
+        errors = VALIDATOR.policy_errors(candidate)
         self.assertTrue(
-            any(error.startswith("[WSEGRESS-SCHEMA]") for error in errors), errors
+            any("requires every evidence gate" in error for error in errors), errors
         )
 
     def test_selected_design_may_never_add_an_egress_destination(self) -> None:
@@ -153,7 +179,7 @@ class WorkstationEgressTest(unittest.TestCase):
         candidate["rejected_designs"] = candidate["rejected_designs"][:1]
         errors = VALIDATOR.policy_errors(candidate)
         self.assertIn(
-            "[WSEGRESS-POLICY] blocked lifecycle must retain the exact reviewed blocker set",
+            "[WSEGRESS-POLICY] qualifying lifecycle must retain the exact unresolved blocker set",
             errors,
         )
         self.assertIn(
@@ -244,7 +270,7 @@ class WorkstationEgressTest(unittest.TestCase):
             )
             errors = VALIDATOR.source_errors(CONTRACT, root)
         self.assertTrue(
-            any("provisioning is blocked" in error for error in errors), errors
+            any("activation is blocked" in error for error in errors), errors
         )
 
     def test_unit_may_not_smuggle_a_startup_script(self) -> None:
@@ -277,9 +303,7 @@ class WorkstationEgressTest(unittest.TestCase):
         candidate["blockers"] = []
         for key in candidate["evidence"]:
             candidate["evidence"][key] = True
-        candidate["selected_design"]["implemented"] = True
-        candidate["workstation"]["provisioning_completes"] = True
-        candidate["workstation"]["blocked_steps"] = []
+        candidate["workstation"]["activated"] = True
         return candidate
 
 

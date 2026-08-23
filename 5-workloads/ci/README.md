@@ -34,3 +34,16 @@ make validate-gitops-integration GITOPS=../gitops
 The six-node pool ceiling covers the currently declared artifact-authority request concurrency.
 The dormant presubmit target adds up to 24 runners and must not activate until a reviewed
 infrastructure change, quota/cost analysis, and connected scheduling test qualify a larger bound.
+
+## Workstation image source authority
+
+`5-workloads/ci/workstation-image-source` is the create-only raw-disk publication boundary for
+the immutable development NixOS workstation. It is CMEK protected, versioned, access logged to a
+separate locked bucket, and retains objects for one year. Only the dedicated
+`workstation-image-pub` identity may create objects; the development Compute service agent may
+read the exact object so Terraform can create a Compute Image.
+
+This bucket is not a Compute Image authority. The protected workflow records the HTTPS source
+URI, object generation, raw-disk SHA-256, and embedded image-contract SHA-256. A separately
+reviewed `5-workloads/development/workstation-image` plan consumes those exact values and creates
+the CMEK Compute Image. Missing or mutable evidence blocks that plan.
