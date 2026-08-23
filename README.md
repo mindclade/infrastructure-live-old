@@ -80,6 +80,12 @@ new `main` commit requires a new plan. Active applies are non-cancellable. An ol
 selected only by a current-`main` dispatch with `source_rollback=true`, a full strict-ancestor
 `source_rollback_sha`, a valid change/incident reference, and the normal scope approval.
 
+Merging the guard does not retrofit a workflow run that is already queued, pending, or waiting
+for environment approval. Before treating this as an operational invariant, explicitly reject or
+cancel every pre-guard protected run, record those run IDs in the change evidence, and observe a
+new guarded current-head run reach its intended approval boundary. Never approve an older waiting
+run merely because the guarded workflow has since merged.
+
 ## Cross-repository preflight
 
 Before any plan, validate the paired repositories explicitly:
