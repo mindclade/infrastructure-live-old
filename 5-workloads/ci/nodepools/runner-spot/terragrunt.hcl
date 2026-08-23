@@ -6,9 +6,11 @@
 #
 # The paired GitOps presubmit fixture selects this pool's distinct workload class and tolerates both
 # the module-managed Spot taint and the presubmit taint below, but remains blocked at zero capacity.
-# Do not apply or activate it until retry semantics distinguish eviction from test failure,
-# quota/cost is approved, and connected eviction evidence is retained. Release, signing, canary,
-# build, and qualification lanes stay on the on-demand `../runner` pool.
+# Before a controlled qualification apply, publish the selected module, retain the protected plan,
+# approve quota/cost, confirm retry semantics distinguish eviction from test failure, and document
+# the on-demand rollback. After the pool exists, retain connected placement, scale-from-zero,
+# eviction/retry, drain, and rollback evidence. Activate the GitOps consumer only after independent
+# review. Release, signing, canary, build, and qualification lanes stay on `../runner`.
 
 include "root" {
   path   = find_in_parent_folders("root.hcl")

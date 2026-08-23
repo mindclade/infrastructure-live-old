@@ -26,9 +26,9 @@ EXPECTED = {
 EXPECTED_SPOT_BLOCKERS = (
     "module-v0.4.0-published",
     "protected-plan-retained",
+    "quota-and-cost-approved",
     "spot-pool-applied",
     "connected-placement-and-scale-from-zero-qualified",
-    "quota-and-cost-approved",
     "eviction-and-retry-qualified",
     "drain-qualified",
     "on-demand-rollback-qualified",

@@ -40,10 +40,12 @@ dormant 24-runner presubmit target. It uses
 selects that label and tolerates exactly both taints, while retaining `minRunners: 0`,
 `maxRunners: 0`, and blocked activation.
 
-Do not apply the Spot pool or activate presubmit until the module release and protected plan exist,
-job routing distinguishes eviction from test failure, and quota, cost, eviction, drain, scale from
-zero, and on-demand rollback evidence are qualified. Release/signing lanes remain on the on-demand
-pool. Run the cross-repository validation against the exact paired commits before either PR merges.
+Before applying the Spot pool, publish the selected module, retain the protected plan, approve quota
+and cost, confirm job routing distinguishes eviction from test failure, and document the on-demand
+rollback. Apply the pool only in a controlled qualification window. After the pool exists, collect
+connected placement, scale-from-zero, eviction/retry, drain, and on-demand rollback evidence. Only
+then activate the GitOps presubmit consumer. Release/signing lanes remain on the on-demand pool. Run
+the cross-repository validation against the exact paired commits before either PR merges.
 
 ## Workstation image source authority
 

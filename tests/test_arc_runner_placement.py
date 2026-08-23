@@ -70,6 +70,24 @@ class ArcRunnerPlacementTest(unittest.TestCase):
             )
         )
 
+    def test_spot_documentation_preserves_qualification_order(self) -> None:
+        root = ROOT / "5-workloads/ci/README.md"
+        documentation = root.read_text(encoding="utf-8")
+        self.assertLess(
+            documentation.index("Before applying the Spot pool"),
+            documentation.index("Apply the pool only in a controlled qualification window"),
+        )
+        self.assertLess(
+            documentation.index(
+                "Apply the pool only in a controlled qualification window"
+            ),
+            documentation.index("After the pool exists"),
+        )
+        self.assertLess(
+            documentation.index("After the pool exists"),
+            documentation.index("then activate the GitOps presubmit consumer"),
+        )
+
     @staticmethod
     def write_gitops_fixture(root: Path) -> None:
         for release in VALIDATE.RUNNER_RELEASES:

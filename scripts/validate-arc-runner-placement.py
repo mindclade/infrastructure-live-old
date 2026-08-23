@@ -166,6 +166,10 @@ def validate_infrastructure(root: Path = ROOT) -> list[str]:
             "scheduling.mindclade.dev/spot=true:NoSchedule",
             "scheduling.mindclade.dev/arc-presubmit=true:NoSchedule",
             "zero-floor, eight-node source contract",
+            "Before applying the Spot pool",
+            "Apply the pool only in a controlled qualification window",
+            "After the pool exists",
+            "then activate the GitOps presubmit consumer",
             "Release/signing lanes remain",
         ):
             if required_text not in documentation:
