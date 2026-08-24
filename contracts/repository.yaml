@@ -67,7 +67,9 @@ required_paths:
     - 5-workloads/staging
     - 5-workloads/production
     - scripts/validate-arc-runner-placement.py
+    - scripts/validate-protected-run.py
     - tests/test_arc_runner_placement.py
+    - tests/test_protected_run.py
     - 5-workloads/ci/nodepools/runner-spot
     - root.hcl
 forbidden_paths:
