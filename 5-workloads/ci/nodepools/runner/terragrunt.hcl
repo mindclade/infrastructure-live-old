@@ -4,13 +4,12 @@
 
 # Dedicated capacity for ARC runner pods.
 #
-# THE DEFECT THIS CLOSES. `../../arc-gke` creates the cluster and its system node pool and
-# nothing else, so every runner scale set in `gitops/arc/values/` — which carries a
-# `nodeSelector` and no toleration — schedules onto the system pool, beside the ARC controller
-# that decides which jobs run. Runner pods execute untrusted pull-request code. A container
-# escape or a runner that simply exhausts the node then takes out the controller and every
-# other runner with it, and the blast radius is the whole artifact-authority cluster rather
-# than one job.
+# ISOLATION CONTRACT. `../../arc-gke` creates the cluster and its system node pool, while the
+# paired GitOps canary, build, and qualification scale sets select this pool and tolerate its
+# taint. Runner pods execute untrusted pull-request code; without both halves they could land
+# beside the ARC controller that decides which jobs run. A container escape or a runner that
+# simply exhausts that node could then take out the controller and every other runner, expanding
+# the blast radius from one job to the whole artifact-authority cluster.
 #
 # The label and taint below are the half of the contract this repository owns. The paired GitOps
 # source selects that label and carries the exact toleration; `validate-arc-runner-placement.py`

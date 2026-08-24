@@ -8,7 +8,7 @@ Connected evidence expires after at most 90 days.
 | Capability | Owner | Source | Activation | Evidence | Remaining blockers |
 | --- | --- | --- | --- | --- | ---: |
 | `arc-on-demand-runners` | platform | complete | blocked | not retained | 4 |
-| `arc-presubmit-spot` | platform | proposed | blocked | not retained | 4 |
+| `arc-presubmit-spot` | platform | complete | blocked | not retained | 8 |
 | `bazel-remote-cache` | developer-platform | complete | blocked | not retained | 4 |
 | `bazel-remote-execution` | developer-platform | complete | blocked | not retained | 5 |
 | `nix-attic-cache` | developer-platform | proposed | blocked | not retained | 4 |

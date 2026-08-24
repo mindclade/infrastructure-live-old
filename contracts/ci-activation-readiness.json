@@ -17,10 +17,10 @@
     {
       "id": "arc-presubmit-spot",
       "owner": "platform",
-      "sourceState": "proposed",
+      "sourceState": "complete",
       "activationState": "blocked",
       "sourcePaths": ["5-workloads/ci/nodepools/runner-spot", "scripts/validate-arc-runner-placement.py"],
-      "blockers": ["gitops-presubmit-scale-set-reviewed", "quota-and-cost-approved", "eviction-and-retry-qualified", "on-demand-rollback-qualified"],
+      "blockers": ["module-v0.4.0-published", "protected-plan-retained", "quota-and-cost-approved", "spot-pool-applied", "connected-placement-and-scale-from-zero-qualified", "eviction-and-retry-qualified", "drain-qualified", "on-demand-rollback-qualified"],
       "qualifiedAt": null,
       "evidenceExpiresAt": null,
       "evidenceSha256": null,
